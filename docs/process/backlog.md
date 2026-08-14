@@ -36,6 +36,9 @@ and any future tracker migration.
 - Status: open
 - Priority: P1
 - PERT: `CONTENT_INGEST`
+- Implementation: `--content-file PATH|-`, exact-byte ingestion, mutual
+  exclusion, and binary round-trip exist. Keep the Issue open until explicit
+  unsafe-file-kind fixtures prove every acceptance boundary before mutation.
 
 ### Dogfood observation
 
@@ -103,9 +106,13 @@ this error-prone step.
 
 ## SG-BL-003 — Implement `log` and `linklog` as seal history, not Git history
 
-- Status: open
+- Status: completed; GitHub Issue #3 closed on 2026-08-14
 - Priority: P1, highest inspection priority
 - PERT: `HISTORY_INSPECTION`
+- Implementation: complete in the native history slice with parent
+  ownership/cycle validation, upstream filtering, read-only tests, and safe
+  presentation. Remote CI passed for
+  `46d9ea2cc496a3807f600e8b4a58c2e95891d163` before tracker closure.
 
 ### Dogfood observation
 
@@ -137,9 +144,14 @@ commands made the receipt longer and made an omitted generation easy to miss.
 
 ## SG-BL-004 — Semantic `diff` between exact seal generations
 
-- Status: open
+- Status: completed; GitHub Issue #4 closed on 2026-08-14
 - Priority: P1
 - PERT: `HISTORY_INSPECTION`
+- Implementation: complete for current-parent and exact same-REF generation
+  comparison, including content identity, attachments, links, root/draft,
+  parent, canonical-order invariance, and read-only behavior. Tracker closure
+  followed passing remote CI for
+  `46d9ea2cc496a3807f600e8b4a58c2e95891d163`.
 
 ### Dogfood observation
 

@@ -129,6 +129,19 @@ dogfood receipt is
 - corruption tests
 - low-level Git-compatible object inspection validation
 
+## Standalone alpha preparation
+
+Prepare `v0.1.0-alpha.1` as an explicitly experimental standalone-only preview
+after the usability, tag-collision, read-only `fsck`, and recurring-dogfood
+blockers in [`release-checklist.md`](release-checklist.md) are satisfied. The
+first artifact scope is Linux amd64 and excludes the unimplemented
+`git-sealgraph` executable. Preparation does not authorize a tag or GitHub
+Release; publication requires a separately approved exact-SHA gate.
+
+The alpha does not reach the plan's `GIT` or `READY` milestones. Cross-command
+JSON, link-message ergonomics, attachments, and Git sidecar may remain open as
+listed in the checklist.
+
 ## Phase 5 — Git sidecar
 
 - add stable go-git dependency

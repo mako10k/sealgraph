@@ -156,3 +156,4 @@ See:
 - [`docs/cli.md`](docs/cli.md)
 - [`docs/integrations.md`](docs/integrations.md)
 - [`docs/process/dogfooding-plan.md`](docs/process/dogfooding-plan.md)
+- [`docs/process/release-checklist.md`](docs/process/release-checklist.md)
