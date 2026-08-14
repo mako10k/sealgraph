@@ -60,6 +60,12 @@ invocation. Re-adding without `--draft` is the explicit Phase 1 way to move a
 reviewed candidate out of draft; dependencies are retained unless one or more
 `--depend-on` arguments replace the candidate dependency set.
 
+`root` is an attribute of the next seal generation, not a permanent REF type.
+Changing it is an explicit candidate change and never mutates an older seal.
+Changing to root does not silently remove retained dependencies; they must be
+removed explicitly before the root candidate can be sealed. Changing to
+non-root likewise requires at least one explicit dependency before sealing.
+
 ### `sealgraph link`
 
 Changes dependencies without forcing content replacement.
@@ -109,9 +115,15 @@ There is no batch seal.
 Normal non-draft seal validation includes DAG validity and dependency freshness rules defined by requirements.
 
 In native v2, a normal seal requires a HEAD-consistent complete dependency
-closure. A draft may preserve an explicit historical dependency. There is no
-generic `--force` or ignore-validation option. Root seals have no dependencies;
-all non-root seals, including drafts, require at least one.
+closure containing no draft seal. A draft may preserve an explicit historical
+dependency and may depend on draft or non-draft generations. There is no generic
+`--force` or ignore-validation option. Root seals have no dependencies; all
+non-root seals, including drafts, require at least one.
+
+Standalone mutation commands are serialized by one repository-wide writer
+guard. A successful target REF CAS publishes the seal. If the candidate differs
+from the exact version used for sealing, it is retained and the command reports
+that the seal was published but candidate cleanup did not occur.
 
 ### Inspection
 

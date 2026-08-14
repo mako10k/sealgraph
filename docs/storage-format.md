@@ -53,6 +53,15 @@ malformed, truncated, trailing, or hash-mismatched objects. Existing corruption
 is never overwritten automatically. Seal payloads remain blob objects; Git
 commit/tag/branch semantics are not introduced.
 
+This is a low-level SHA-256 ODB conformance boundary, not a Git repository
+contract. Supported interoperability uses an explicitly configured Git SHA-256
+object context to hash or read loose blobs. `.sealgraph/config` is not Git
+repository configuration; `.sealgraph` need not be openable as a Git directory.
+The native object directory must not be installed as an alternate of a SHA-1
+repository, and Git GC/prune/repack/porcelain operations must not be directed at
+it. Refusal by an incompatible Git object-format context is the safe result;
+object translation or guessed identity is forbidden.
+
 ## 3. Canonical seal payload
 
 Native v2 uses `sealgraph-canonical-json-v2`: compact UTF-8 JSON with no
@@ -76,6 +85,12 @@ Every member is required. `parent` is JSON `null` only for the first seal. The
 schema is exactly `sealgraph/seal/v2`. Native IDs are JSON strings containing
 exactly 64 lower-case hex characters; `sha256:` and per-ID algorithm members are
 not accepted or persisted.
+
+The `ref` member is the seal's sole owner REF and participates in its identity.
+A non-null `parent` must decode as a canonical seal with the same owner REF.
+REF heads and REF-scoped tags must likewise target a seal owned by their path's
+REF. Only dependency links cross REF boundaries, and each link preserves both
+the target REF and the concrete seal owned by that REF.
 
 Strings are valid UTF-8 without Unicode normalization. JSON escaping follows
 v1: short escapes for backspace, tab, LF, form feed, and CR; other U+0000 through
@@ -157,13 +172,22 @@ IDs, and the same attachment/link representation as seals. Candidate dependency
 inputs are resolved to concrete full seal IDs immediately. Candidate base
 records the observed REF head for CAS sealing.
 
+Every standalone mutation after initialization holds one process-lifetime
+repository writer guard rooted in the runtime-only `locks/` directory.
+Candidate clearing compares the candidate's exact persisted bytes with the
+version loaded for sealing and never removes a different version. The guard and
+candidate comparison are runtime transaction state, not canonical seal fields.
+
 ## 9. Seal admissibility
 
+- Root is a per-seal-generation, identity-bearing attribute, not a permanent
+  logical REF classification. A root/non-root transition is allowed only in a
+  new seal and does not mutate prior generations or implicitly edit links.
 - An explicitly declared root has no dependencies.
 - Every non-root, including a draft, has at least one dependency.
 - A draft may retain a concrete non-HEAD dependency.
 - A normal non-draft seal requires complete reachable dependency closure HEAD
-  consistency.
+  consistency and rejects any reachable draft seal.
 - Every v2 link participates in freshness, impact, and the Merkle DAG.
 - There is no generic validation bypass.
 

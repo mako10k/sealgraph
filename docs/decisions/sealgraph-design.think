@@ -57,6 +57,10 @@ step S9:
 step S10:
   decision D4 based_on P4, EV2:
     "native v1 は sealgraph-canonical-json-v1 payload を Git-compatible blob envelope に格納し、その SHA-256 ObjectID を seal ID とする"
+    annotation status:
+      "superseded"
+    annotation rationale:
+      "実験的 native v2 の full-hex canonical ID decision D6 により置き換えられた"
 
 problem P5:
   "normal seal と draft/historical seal の dependency admissibility をどこで分けるか"
@@ -67,7 +71,10 @@ step S11:
 
 step S12:
   decision D5 based_on P5, PR5:
-    "normal non-draft seal は dependency closure 全体の HEAD consistency を要求し、draft のみ explicit historical link を保持して seal できる"
+    |
+      normal non-draft seal は dependency closure 全体の HEAD consistency と
+      non-draft を要求し、draft のみ explicit historical または draft link を
+      保持して seal できる
 
 pending PD3:
   "Git sidecar が Git blob/tree/commit のどの単位を content source として first-class に扱うかを確定する"
@@ -89,3 +96,45 @@ step S15:
       native v2 は full-hex canonical ID、4文字以上の unique prefix、
       REF-scoped immutable tag を採用し、format 1 compatibility は持たない。
       link kind は defer し、dependency edge には hash 対象 message を許可する
+
+problem P7:
+  "root を logical REF の固定分類と seal generation の属性のどちらにするか"
+
+step S16:
+  premise PR7:
+    |
+      seal はその時点の immutable candidate snapshot であり、root と links は
+      canonical payload に含まれる identity-bearing attributes である
+
+step S17:
+  evidence EV4:
+    |
+      root flag は各 seal payload に保存され、変更すれば新しい seal ID となり、
+      old generation の属性は immutable history に残る
+
+step S18:
+  decision D7 based_on P7, PR7, EV4:
+    |
+      root は seal-generation property とする。同一 REF の後続 generation は root と
+      non-root の間を明示的に変更できるが、過去 seal と links を自動変更しない
+
+problem P8:
+  "standalone mutation の同時実行をどの publication contract で安全にするか"
+
+step S19:
+  premise PR8:
+    |
+      REF CAS だけでは seal が読んだ candidate より新しい edit の削除と、
+      dependency validation 後の upstream advance を防げない
+
+step S20:
+  evidence EV5:
+    |
+      repository-wide process-lifetime writer guard なら一つの mutation order と
+      target REF CAS publication point を保ったまま one-REF seal invariant を維持できる
+
+step S21:
+  decision D8 based_on P8, PR8, EV5:
+    |
+      cooperative standalone mutations を repository-wide に直列化し、target REF CAS
+      成功を publication point、unchanged candidate comparison を cleanup precondition とする

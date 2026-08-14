@@ -68,6 +68,23 @@ diff is identity-based and does not print arbitrary blob bytes.
 - reject format 1 rather than add a compatibility reader or automatic migration
 - regenerate tracked dogfood state and seal ADR 0006 after validation
 
+## External-spec consistency gate — in progress
+
+Before another product slice or recurring dogfood is treated as routine:
+
+- [x] linearize seal publication and serialize cooperative standalone writers;
+- [x] prevent a sealed candidate version from deleting a newer candidate edit;
+- [x] reject draft seals anywhere in a normal dependency closure;
+- add an explicit candidate inspection/unlink/discard lifecycle;
+- make exact binary content inspection safe by default;
+- [x] document native seal REF ownership and the standalone Git low-level
+  conformance boundary.
+
+The accepted publication and draft-closure contracts are recorded in
+[ADR 0007](../adr/0007-linearized-publication-and-draft-closure.md). The review
+analysis and remaining work are recorded in
+[`external-spec-review-2026-08-14.md`](external-spec-review-2026-08-14.md).
+
 ## Phase 3 — attachments
 
 - attachment blob import

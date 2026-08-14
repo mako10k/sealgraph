@@ -48,6 +48,14 @@ A seal MUST commit to:
 - seal message,
 - normalized seal event metadata required by the storage format.
 
+A seal belongs to exactly one logical REF. Its owner REF is identity-bearing
+canonical state. A seal MUST NOT be reused as the HEAD, parent, or tag target of
+another REF. Parent history stays within one REF.
+
+A dependency link MAY cross a REF boundary because it names both the target REF
+and one concrete seal owned by that REF. The edge does not transfer or alias the
+target seal into the dependent REF.
+
 One `seal` invocation MUST create at most one new seal for exactly one REF.
 
 There MUST NOT be a `seal --all` or equivalent batch-approval operation in the core product.
@@ -79,11 +87,18 @@ dynamic link, a movable branch, or a separate approval claim.
 
 ### 2.5 Root
 
-A root REF explicitly declares a provenance boundary.
+A root seal generation explicitly declares a provenance boundary for that
+immutable generation. Root is an identity-bearing seal attribute, not a
+permanent type of the logical REF.
 
 Root MUST NOT be inferred merely from an empty dependency list.
 
 Root does not mean “true”, “trusted”, or “approved by an external authority”.
+
+Successive generations of the same REF MAY explicitly change between root and
+non-root. Such a change creates a new seal identity and MUST remain visible in
+history/diff; it never changes the root state of an older seal. Changing the
+root attribute MUST NOT add or remove dependency links automatically.
 
 A non-root sealed candidate normally requires at least one upstream dependency.
 
@@ -113,11 +128,17 @@ This naturally propagates the need for explicit downstream review/reseal.
 
 ## 4. Seal admissibility
 
-Default non-draft sealing SHOULD reject a candidate whose dependency closure is not HEAD-consistent.
+A normal non-draft seal MUST reject a candidate whose complete reachable
+dependency closure is not HEAD-consistent or contains a draft seal.
 
 This rule exists to force unresolved upstream review to progress explicitly from upstream to downstream.
 
 Explicit draft/historical workflows MAY seal against older generations, but the resulting non-HEAD relation MUST remain observable and MUST NOT be reported as fresh.
+
+A draft candidate MAY depend on current or historical draft/non-draft seals.
+Draft is distinct from stale and MUST NOT be propagated, relinked, or resealed
+automatically. To depend on provisional provenance, the operator explicitly
+keeps the dependent candidate draft.
 
 The exact CLI override model is to be finalized before v1; do not introduce a generic “ignore validation” escape hatch.
 
@@ -149,6 +170,11 @@ sealgraph add DESIGN-001 \
 `link` remains necessary for relinking without content changes.
 
 Working candidate state is not a seal and is not authoritative history.
+
+Standalone mutations MUST use repository-wide writer coordination. Cooperative
+writers execute serially. A seal publishes at the successful expected-old CAS
+update of its one target REF and MUST NOT clear a candidate version other than
+the one it sealed.
 
 ## 7. Required inspection commands
 
@@ -191,6 +217,24 @@ It MUST NOT:
 - suggest or activate Git sidecar automatically.
 
 Standalone canonical reads MUST use `.sealgraph` only.
+
+### 9.1 Standalone Git low-level compatibility
+
+Standalone Git compatibility is limited to object identity/envelope
+conformance and safe read-only low-level forensic interoperability. Native
+objects MUST retain the documented Git SHA-256 loose-blob envelope and identity
+so an explicitly configured Git SHA-256 low-level object API can read them
+without identity disagreement, silent translation, or mutation.
+
+This compatibility MUST NOT make `.sealgraph` a Git repository or import Git
+commit, branch, merge, checkout, reflog, garbage-collection, maintenance, or
+porcelain semantics. A sealgraph adapter or conformance tool used in an
+incompatible object-format context MUST reject it rather than guess or
+translate. In particular, the native SHA-256 object directory is not an
+alternate object directory for a SHA-1 repository.
+
+Standalone product code continues to avoid `.git`. Explicit temporary Git
+conformance tests do not change that lifecycle boundary.
 
 ## 10. Git sidecar
 

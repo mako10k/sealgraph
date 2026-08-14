@@ -38,6 +38,11 @@ github.com/go-git/go-git/v5
 
 Pin an exact stable version when added.
 
+Standalone Git compatibility does not require this dependency. Native
+conformance is limited to an explicit Git SHA-256 low-level loose-object test;
+it does not open `.sealgraph` as a Git repository or attach its object directory
+to an outer SHA-1 repository.
+
 The first SDK adoption point is the Git-sidecar `GitObjectReader`, where pack,
 alternate, repository object-format, and prefix lookup support justify a mature
 library. Native `.sealgraph/objects` keeps its small explicit loose-blob
@@ -45,6 +50,12 @@ implementation and proves compatibility with bidirectional Git CLI conformance
 tests. Current go-git SHA-256 support requires its documented SHA-256 build
 mode; that build contract must be fixed and tested when the sidecar dependency
 is introduced.
+
+Before that product seam is implemented, an ADR must decide supported Git
+object formats, typed external identities, whether content is materialized or
+referenced, and which blob/tree/commit semantics are first-class. The current
+native `ObjectID` must not be generalized speculatively only to make room for an
+unselected sidecar design.
 
 ## 2. llmthink
 
@@ -56,10 +67,17 @@ Existing llmthink conventions use human-readable `.think` documents and a struct
 docs/decisions/sealgraph-design.think
 ```
 
+The 2026-08-14 external-spec review and mitigation analysis is modeled at:
+
+```text
+docs/decisions/2026-08-14-external-spec-review.think
+```
+
 Suggested optional workflow:
 
 ```sh
 llmthink dsl audit docs/decisions/sealgraph-design.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-external-spec-review.think --pretty
 ```
 
 When a major architecture choice changes:

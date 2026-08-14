@@ -2,8 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +41,22 @@ func sealRoot(t *testing.T, repo *Repository, ref, content, message string) Seal
 	sealed, err := repo.Seal(ctx, ref, message)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return sealed
+}
+
+func sealDraftRoot(t *testing.T, repo *Repository) SealResult {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "ROOT", Content: []byte("provisional root"), Root: true, Draft: true}); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := repo.Seal(ctx, "ROOT", "provisional root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sealed.Payload.Draft {
+		t.Fatal("root seal is not draft")
 	}
 	return sealed
 }
@@ -172,6 +193,246 @@ func TestNormalSealChecksCompleteDependencyClosure(t *testing.T) {
 	}
 	if _, err := repo.Seal(ctx, "LEAF", "leaf"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
 		t.Fatalf("closure-stale seal error = %v, want HEAD consistency rejection", err)
+	}
+}
+
+func TestNormalSealRejectsDraftAnywhereInDependencyClosure(t *testing.T) {
+	t.Run("direct draft", func(t *testing.T) {
+		repo := openTestRepository(t)
+		ctx := context.Background()
+		draftRoot := sealDraftRoot(t, repo)
+
+		if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("child"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Seal(ctx, "CHILD", "normal child"); err == nil || !strings.Contains(err.Error(), "non-draft dependency closure") || !strings.Contains(err.Error(), "ROOT@") {
+			t.Fatalf("normal seal error = %v, want direct draft rejection", err)
+		}
+
+		if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("child"), Draft: true}); err != nil {
+			t.Fatal(err)
+		}
+		child, err := repo.Seal(ctx, "CHILD", "provisional child")
+		if err != nil {
+			t.Fatalf("draft child depending on draft root: %v", err)
+		}
+		if !child.Payload.Draft || !child.Payload.Links[0].TargetSeal.Equal(draftRoot.ID) {
+			t.Fatalf("draft child = %+v", child.Payload)
+		}
+	})
+
+	t.Run("transitive draft", func(t *testing.T) {
+		repo := openTestRepository(t)
+		ctx := context.Background()
+		draftRoot := sealDraftRoot(t, repo)
+		middleContent, err := repo.objects.WriteBlob(ctx, []byte("synthetic middle"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		middle := writeTestSealPayload(t, repo, domain.SealPayload{
+			Schema: domain.SealSchema, REF: "MIDDLE", Content: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: middleContent},
+			Attachments: []domain.Attachment{}, Links: []domain.Link{{TargetREF: "ROOT", TargetSeal: draftRoot.ID}},
+			Message: "synthetic legacy normal seal", CreatedAt: "2026-08-14T00:00:01Z",
+		})
+		if err := repo.refs.Update(ctx, "MIDDLE", nil, &middle); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Add(ctx, AddOptions{REF: "LEAF", Content: []byte("leaf"), Dependencies: []Dependency{{REF: "MIDDLE"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Seal(ctx, "LEAF", "normal leaf"); err == nil || !strings.Contains(err.Error(), "ROOT@") || !strings.Contains(err.Error(), "is draft") {
+			t.Fatalf("normal seal error = %v, want transitive draft rejection", err)
+		}
+	})
+}
+
+func TestWriterGuardSerializesSealAndPreservesLaterCandidate(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	sealRoot(t, repo, "ROOT", "root", "root")
+	if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("sealed version"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	workDir := filepath.Dir(repo.dir)
+	clockEntered := make(chan struct{})
+	releaseClock := make(chan struct{})
+	var clockOnce sync.Once
+	sealingRepo, err := OpenStandalone(workDir, func() time.Time {
+		clockOnce.Do(func() {
+			close(clockEntered)
+			<-releaseClock
+		})
+		return fixedTime
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	editingRepo, err := OpenStandalone(workDir, func() time.Time { return fixedTime })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type sealOutcome struct {
+		result SealResult
+		err    error
+	}
+	sealDone := make(chan sealOutcome, 1)
+	go func() {
+		result, err := sealingRepo.Seal(ctx, "CHILD", "seal first version")
+		sealDone <- sealOutcome{result: result, err: err}
+	}()
+	select {
+	case <-clockEntered:
+	case <-time.After(2 * time.Second):
+		close(releaseClock)
+		t.Fatal("seal did not reach the guarded publication path")
+	}
+
+	type addOutcome struct {
+		candidate domain.Candidate
+		err       error
+	}
+	addDone := make(chan addOutcome, 1)
+	go func() {
+		candidate, err := editingRepo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("later candidate")})
+		addDone <- addOutcome{candidate: candidate, err: err}
+	}()
+	select {
+	case outcome := <-addDone:
+		close(releaseClock)
+		t.Fatalf("later add completed while seal held the writer guard: %+v", outcome)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseClock)
+
+	sealed := <-sealDone
+	if sealed.err != nil {
+		t.Fatal(sealed.err)
+	}
+	added := <-addDone
+	if added.err != nil {
+		t.Fatal(added.err)
+	}
+	if added.candidate.Base == nil || !added.candidate.Base.Equal(sealed.result.ID) {
+		t.Fatalf("later candidate base = %v, want published seal %s", added.candidate.Base, sealed.result.ID)
+	}
+	object, err := repo.objects.ReadObject(ctx, added.candidate.Content.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(object.Data) != "later candidate" {
+		t.Fatalf("later candidate content = %q", object.Data)
+	}
+	snapshot, err := repo.candidates.LoadSnapshot("CHILD")
+	if err != nil {
+		t.Fatalf("later candidate was lost: %v", err)
+	}
+	if !snapshot.Candidate.Content.ID.Equal(added.candidate.Content.ID) {
+		t.Fatalf("persisted candidate = %+v, want %+v", snapshot.Candidate, added.candidate)
+	}
+}
+
+func TestCandidateCleanupRefusesChangedVersion(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "ROOT", Content: []byte("one"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	original, err := repo.candidates.LoadSnapshot("ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := original.Candidate
+	changed.Draft = true
+	if err := repo.candidates.Save(changed); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.candidates.RemoveIfUnchanged("ROOT", original.Bytes); !errors.Is(err, ErrCandidateChanged) {
+		t.Fatalf("cleanup error = %v, want candidate changed", err)
+	}
+	remaining, err := repo.candidates.Load("ROOT")
+	if err != nil || !remaining.Draft {
+		t.Fatalf("changed candidate was not retained: %+v, %v", remaining, err)
+	}
+}
+
+func TestWriterGuardSerializesAcrossProcesses(t *testing.T) {
+	if os.Getenv("SEALGRAPH_WRITER_GUARD_HELPER") == "1" {
+		runWriterGuardHelper(t)
+		return
+	}
+	lockDir := filepath.Join(t.TempDir(), "locks")
+	if err := os.Mkdir(lockDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ready := filepath.Join(t.TempDir(), "ready")
+	release := filepath.Join(t.TempDir(), "release")
+	command := exec.Command(os.Args[0], "-test.run=^TestWriterGuardSerializesAcrossProcesses$")
+	command.Env = append(os.Environ(),
+		"SEALGRAPH_WRITER_GUARD_HELPER=1",
+		"SEALGRAPH_WRITER_GUARD_DIR="+lockDir,
+		"SEALGRAPH_WRITER_GUARD_READY="+ready,
+		"SEALGRAPH_WRITER_GUARD_RELEASE="+release,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = command.Process.Kill() }()
+	waitForTestPath(t, ready)
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if unlock, err := acquireProcessWriter(waitCtx, lockDir); !errors.Is(err, context.DeadlineExceeded) {
+		if err == nil {
+			_ = unlock()
+		}
+		t.Fatalf("second process lock error = %v, want context deadline", err)
+	}
+	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatalf("writer guard helper: %v", err)
+	}
+	unlock, err := acquireProcessWriter(context.Background(), lockDir)
+	if err != nil {
+		t.Fatalf("lock was not released by helper process: %v", err)
+	}
+	if err := unlock(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runWriterGuardHelper(t *testing.T) {
+	unlock, err := acquireProcessWriter(context.Background(), os.Getenv("SEALGRAPH_WRITER_GUARD_DIR"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := unlock(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := os.WriteFile(os.Getenv("SEALGRAPH_WRITER_GUARD_READY"), []byte("ready"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestPath(t, os.Getenv("SEALGRAPH_WRITER_GUARD_RELEASE"))
+}
+
+func waitForTestPath(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", path)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

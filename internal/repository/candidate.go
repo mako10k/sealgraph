@@ -16,44 +16,57 @@ import (
 	"github.com/mako10k/sealgraph/internal/store"
 )
 
-var ErrCandidateNotFound = errors.New("candidate not found")
+var (
+	ErrCandidateNotFound = errors.New("candidate not found")
+	ErrCandidateChanged  = errors.New("candidate changed after it was loaded")
+)
 
 type candidateStore struct{ root string }
 
+type candidateSnapshot struct {
+	Candidate domain.Candidate
+	Bytes     []byte
+}
+
 func (s candidateStore) Load(ref string) (domain.Candidate, error) {
+	snapshot, err := s.LoadSnapshot(ref)
+	return snapshot.Candidate, err
+}
+
+func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 	if err := domain.ValidateREF(ref); err != nil {
-		return domain.Candidate{}, err
+		return candidateSnapshot{}, err
 	}
 	if err := s.checkPrefixConflict(ref); err != nil {
-		return domain.Candidate{}, err
+		return candidateSnapshot{}, err
 	}
 	data, err := os.ReadFile(s.path(ref))
 	if errors.Is(err, os.ErrNotExist) {
-		return domain.Candidate{}, fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
+		return candidateSnapshot{}, fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
 	}
 	if err != nil {
 		if pathIsDirectory(s.path(ref)) || isNotDirectoryError(err) {
-			return domain.Candidate{}, fmt.Errorf("%w: candidate %s collides with a hierarchical candidate", store.ErrPrefixConflict, ref)
+			return candidateSnapshot{}, fmt.Errorf("%w: candidate %s collides with a hierarchical candidate", store.ErrPrefixConflict, ref)
 		}
-		return domain.Candidate{}, fmt.Errorf("read candidate %s: %w", ref, err)
+		return candidateSnapshot{}, fmt.Errorf("read candidate %s: %w", ref, err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var candidate domain.Candidate
 	if err := decoder.Decode(&candidate); err != nil {
-		return domain.Candidate{}, fmt.Errorf("candidate %s is corrupt: %w; recreate it explicitly with add", ref, err)
+		return candidateSnapshot{}, fmt.Errorf("candidate %s is corrupt: %w; recreate it explicitly with add", ref, err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return domain.Candidate{}, fmt.Errorf("candidate %s has trailing data; recreate it explicitly with add", ref)
+		return candidateSnapshot{}, fmt.Errorf("candidate %s has trailing data; recreate it explicitly with add", ref)
 	}
 	if candidate.REF != ref {
-		return domain.Candidate{}, fmt.Errorf("candidate path %s contains REF %s; recreate it explicitly", ref, candidate.REF)
+		return candidateSnapshot{}, fmt.Errorf("candidate path %s contains REF %s; recreate it explicitly", ref, candidate.REF)
 	}
 	if err := domain.ValidateCandidate(candidate); err != nil {
-		return domain.Candidate{}, fmt.Errorf("candidate %s is invalid: %w", ref, err)
+		return candidateSnapshot{}, fmt.Errorf("candidate %s is invalid: %w", ref, err)
 	}
-	return candidate, nil
+	return candidateSnapshot{Candidate: candidate, Bytes: data}, nil
 }
 
 func (s candidateStore) Save(candidate domain.Candidate) error {
@@ -106,9 +119,22 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 	return nil
 }
 
-func (s candidateStore) Remove(ref string) error {
+func (s candidateStore) RemoveIfUnchanged(ref string, expected []byte) error {
+	if err := domain.ValidateREF(ref); err != nil {
+		return err
+	}
 	path := s.path(ref)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	current, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: candidate %s disappeared", ErrCandidateChanged, ref)
+	}
+	if err != nil {
+		return fmt.Errorf("re-read sealed candidate %s: %w", ref, err)
+	}
+	if !bytes.Equal(current, expected) {
+		return fmt.Errorf("%w: candidate %s no longer matches the sealed version", ErrCandidateChanged, ref)
+	}
+	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("remove sealed candidate %s: %w", ref, err)
 	}
 	for parent := filepath.Dir(path); parent != s.root; parent = filepath.Dir(parent) {

@@ -222,3 +222,22 @@ architecture, ADR 0006, and the native-v2 storage contract. It must exercise
 REF-scoped tags, one unique-prefix selector, and per-edge messages while still
 persisting only full concrete IDs. It completes `NATIVE_V2_SLICE`; it does not
 claim the later recurring `DOGFOOD_R2` milestone or authorize Git sidecar work.
+
+## 8. Future decision-document causality
+
+The native-v2 round is retrospective bootstrap evidence: the sealed
+requirements and architecture generations already contain the ADR 0006
+conclusion. It proves exact document storage, concrete links, tags, and
+inspection behavior; it does not prove the causal order in which the decision
+was formed.
+
+Future ADR dogfood should preserve the decision sequence explicitly:
+
+1. seal pre-decision premises and evidence;
+2. seal the ADR against those exact upstream generations;
+3. update and supersede normative documents with a concrete link to the ADR
+   generation;
+4. inspect the resulting stale and explicit downstream repair path.
+
+Do not rewrite an old seal or receipt to make a retrospective graph look
+causal.

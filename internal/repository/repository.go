@@ -26,6 +26,7 @@ type Repository struct {
 	refs       *native.RefStore
 	tags       *native.TagStore
 	candidates candidateStore
+	writer     writerGuard
 	clock      Clock
 }
 
@@ -43,6 +44,7 @@ func OpenStandalone(workDir string, clock Clock) (*Repository, error) {
 		refs:       native.NewRefStore(dir),
 		tags:       native.NewTagStore(dir),
 		candidates: candidateStore{root: filepath.Join(dir, "index")},
+		writer:     newWriterGuard(filepath.Join(dir, "locks")),
 		clock:      clock,
 	}, nil
 }
@@ -62,6 +64,12 @@ type AddOptions struct {
 }
 
 func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
+	return withMutation(ctx, r.writer, "add candidate", func() (domain.Candidate, error) {
+		return r.add(ctx, options)
+	})
+}
+
+func (r *Repository) add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
 	if err := domain.ValidateREF(options.REF); err != nil {
 		return domain.Candidate{}, err
 	}
@@ -90,6 +98,12 @@ func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candid
 }
 
 func (r *Repository) Link(ctx context.Context, ref string, dependencies []Dependency) (domain.Candidate, error) {
+	return withMutation(ctx, r.writer, "link candidate", func() (domain.Candidate, error) {
+		return r.link(ctx, ref, dependencies)
+	})
+}
+
+func (r *Repository) link(ctx context.Context, ref string, dependencies []Dependency) (domain.Candidate, error) {
 	if len(dependencies) == 0 {
 		return domain.Candidate{}, errors.New("at least one --depend-on target is required")
 	}
@@ -197,19 +211,26 @@ type SealResult struct {
 }
 
 func (r *Repository) Seal(ctx context.Context, ref, message string) (SealResult, error) {
+	return withMutation(ctx, r.writer, "seal REF", func() (SealResult, error) {
+		return r.seal(ctx, ref, message)
+	})
+}
+
+func (r *Repository) seal(ctx context.Context, ref, message string) (SealResult, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return SealResult{}, err
 	}
 	if message == "" {
 		return SealResult{}, errors.New("seal message is required; pass -m MESSAGE")
 	}
-	candidate, err := r.candidates.Load(ref)
+	snapshot, err := r.candidates.LoadSnapshot(ref)
 	if err != nil {
 		if errors.Is(err, ErrCandidateNotFound) {
 			return SealResult{}, fmt.Errorf("REF %s has no working candidate; run 'sealgraph add' or 'sealgraph link' first", ref)
 		}
 		return SealResult{}, err
 	}
+	candidate := snapshot.Candidate
 	current, currentErr := r.refs.Resolve(ctx, ref)
 	if candidate.Base == nil {
 		if currentErr == nil {
@@ -266,11 +287,12 @@ func (r *Repository) Seal(ctx context.Context, ref, message string) (SealResult,
 	if err := r.refs.Update(ctx, ref, candidate.Base, &sealID); err != nil {
 		return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
 	}
-	if err := r.candidates.Remove(ref); err != nil {
-		return SealResult{}, fmt.Errorf("REF %s advanced to seal %s, but its candidate could not be cleared: %w", ref, sealID, err)
-	}
 	payload, _ = domain.NormalizeSeal(payload)
-	return SealResult{ID: sealID, Payload: payload}, nil
+	result := SealResult{ID: sealID, Payload: payload}
+	if err := r.candidates.RemoveIfUnchanged(ref, snapshot.Bytes); err != nil {
+		return result, fmt.Errorf("REF %s was published at seal %s, but its candidate was retained because cleanup could not prove it was unchanged: %w; inspect the candidate explicitly", ref, sealID, err)
+	}
+	return result, nil
 }
 
 func (r *Repository) requireHeadConsistentClosure(ctx context.Context, links []domain.Link) error {
@@ -312,6 +334,9 @@ func (r *Repository) requireHeadConsistentClosure(ctx context.Context, links []d
 			}
 			if seal.REF != link.TargetREF {
 				return fmt.Errorf("dependency seal %s belongs to %s, not %s", link.TargetSeal, seal.REF, link.TargetREF)
+			}
+			if seal.Draft {
+				return fmt.Errorf("normal seal requires a non-draft dependency closure, but %s@%s is draft; keep the candidate draft or supersede %s with a non-draft seal and relink explicitly", link.TargetREF, link.TargetSeal, link.TargetREF)
 			}
 			state[key] = visiting
 			path = append(path, graph.SealIdentity{REF: link.TargetREF, Seal: link.TargetSeal})
@@ -616,6 +641,12 @@ func (r *Repository) ResolveSealID(ctx context.Context, ref, revision string) (d
 }
 
 func (r *Repository) CreateTag(ctx context.Context, ref, revision, name string) (domain.ObjectID, error) {
+	return withMutation(ctx, r.writer, "create tag", func() (domain.ObjectID, error) {
+		return r.createTag(ctx, ref, revision, name)
+	})
+}
+
+func (r *Repository) createTag(ctx context.Context, ref, revision, name string) (domain.ObjectID, error) {
 	id, err := r.ResolveSealID(ctx, ref, revision)
 	if err != nil {
 		return domain.ObjectID{}, err

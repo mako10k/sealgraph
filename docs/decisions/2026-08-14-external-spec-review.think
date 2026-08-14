@@ -1,0 +1,323 @@
+framework SealgraphExternalSpecReview:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain SealgraphReview:
+  description |
+    native v2 外部仕様レビューで見つかった非対称・不整合・欠落を、
+    確定事項と採否待ちの対策候補に分けて検討する
+
+problem P1:
+  "standalone における Git 互換性をどこまで約束するか"
+
+step S1:
+  premise PR1:
+    |
+      standalone の Git 互換性は sealgraph command lifecycle を壊さず、
+      Git low-level object API から安全に参照できることを目的とする
+
+step S2:
+  premise PR2:
+    |
+      Git の commit、branch、merge、checkout、maintenance の哲学や
+      repository lifecycle は standalone へ継承しない
+
+step S3:
+  evidence EV1:
+    |
+      native v2 は Git SHA-256 blob envelope と loose-object path を採用し、
+      Git と sealgraph の双方向 read と object ID 一致を conformance test で確認済みである
+
+step S4:
+  decision D1 based_on P1, PR1, PR2, EV1:
+    |
+      standalone の Git 互換性を SHA-256 loose blob の read-only low-level
+      conformance と forensic usability に限定する。
+      .sealgraph 自体を Git repository として開くこと、SHA-1 ODB の alternate
+      として接続すること、Git GC や porcelain を適用することは契約外とする
+
+problem P2:
+  "seal の REF 所有境界と将来の越境拡張性をどう両立するか"
+
+step S5:
+  premise PR3:
+    |
+      現在の seal は一つの REF に固有であり、別 REF の HEAD、parent、tag target
+      として再利用または再所属させてはならない
+
+step S6:
+  premise PR4:
+    |
+      dependency link は target REF と concrete seal ID の組として REF 境界を越えるが、
+      target seal 自身の所有 REF は変えない
+
+step S7:
+  evidence EV2:
+    |
+      canonical payload は owner REF を hash 対象に含み、selector、tag、history、graph
+      の各 reader は対象 seal の REF ownership を検証している
+
+step S8:
+  decision D2 based_on P2, PR3, PR4, EV2:
+    |
+      現行の public contract は seal を REF-bound identity とする。
+      内部境界では bare ObjectID と scoped SealIdentity を区別し、将来の越境参照は
+      tag と同様の明示的な scope と解決結果を持つ resolver として追加可能にする。
+      speculative な persisted field は native v2 に追加しない
+
+step S9:
+  pending PD1:
+    |
+      将来 REF 境界を越える alias、transfer、federated lookup の具体要件が生じた時点で、
+      ownership、stale、tag、selector の意味を別途決定する
+
+problem P3:
+  "seal publication で candidate update loss と incoherent HEAD validation をどう防ぐか"
+
+step S10:
+  premise PR5:
+    |
+      sealgraph command 同士の同時実行で、正常終了した candidate edit が黙って失われたり、
+      normal seal が publish 時点ですでに stale になったりしてはならない
+
+step S11:
+  evidence EV3:
+    |
+      現実装は candidate を revision CAS なしで置換し、seal が読んだ版を再確認せず削除する。
+      dependency REF heads も個別に順次読み、target REF の CAS だけを publication に用いる
+
+step S12:
+  viewpoint VP1:
+    axis pre_1_0_result_simplicity
+
+step S13:
+  decision D3 based_on P3, PR5, EV3, VP1:
+    |
+      repository-wide writer coordination を全 mutation に適用し、
+      target REF の CAS rename を seal publication の linearization point とする。
+      candidate は読んだ版と同一である場合だけ削除し、object write 後の publish failure は
+      dangling immutable object として明示的に報告する
+    annotation caveat:
+      |
+        この保証は同じ protocol に従う cooperative sealgraph writers に対するものである。
+        outer Git や手作業による同時 filesystem mutation は integrity/concurrency error であり、
+        任意の外部 writer に対する完全な排他は主張しない
+
+step S14:
+  decision D4 based_on P3, PR5, EV3, VP1:
+    |
+      代替案として candidate revision CAS と、dependency closure の REF locks を
+      deterministic order で取得して再検証する
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "pre-1.0 は単純で強い repository-wide writer coordination を採用する"
+
+step S15:
+  comparison CMP1 on P3 viewpoint VP1 relation preferred_over D3, D4:
+    |
+      pre-1.0 の結果と failure model を単純にする点では、細粒度 lock protocol より
+      repository-wide writer coordination を優先する
+
+problem P4:
+  "draft の provisional 性を dependency closure へ伝播させるか"
+
+step S17:
+  premise PR6:
+    |
+      normal seal が draft ancestry だけに依存しながら CLEAN と表示されると、
+      provisional provenance が current REF 単体の inspection から消える
+
+step S18:
+  evidence EV4:
+    |
+      現在の admissibility は HEAD consistency だけを検査し、reachable seal の draft flag
+      を normal seal の拒否条件にしていない
+
+step S19:
+  viewpoint VP2:
+    axis provisional_visibility
+
+step S20:
+  decision D5 based_on P4, PR6, EV4, VP2:
+    |
+      normal non-draft seal の complete reachable closure に draft seal を
+      許さない。draft candidate 自身は current または historical な draft/normal upstream
+      を保持できる
+
+step S21:
+  decision D6 based_on P4, PR6, EV4, VP2:
+    |
+      代替案として draft を局所ラベルと定義し、normal descendants と CLEAN が
+      draft ancestry を含み得ることを operator contract に明記する
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "provisional provenance を normal CLEAN head から隠さない closure policy を採用する"
+
+step S22:
+  comparison CMP2 on P4 viewpoint VP2 relation preferred_over D5, D6:
+    "provisional という現在の意味を下流で隠さないため、closure prohibition を優先する"
+
+problem P5:
+  "immutable seal の前に candidate を完全に確認し、明示的に回復できるか"
+
+step S24:
+  premise PR7:
+    |
+      自動修復を禁止するなら、operator が candidate 全体を inspection し、HEAD と比較し、
+      dependency を外し、壊れたまたは stale-base の candidate を明示的に破棄できる必要がある
+
+step S25:
+  evidence EV5:
+    |
+      unlink は文書化済みだが未実装であり、candidate show/diff/discard に相当する
+      public lifecycle はまだ存在しない
+
+step S26:
+  decision D7 based_on P5, PR7, EV5:
+    |
+      recurring dogfood 前の対策候補として candidate inspection、candidate-to-HEAD diff、
+      unlink、明示的 discard を一つの one-REF lifecycle として設計する。
+      stale-base candidate を自動 relink または reseal しない
+
+step S27:
+  pending PD4:
+    "candidate lifecycle の最小 CLI syntax と destructive-operation confirmation を決める"
+
+problem P6:
+  "exact binary content と human inspection を安全に両立するか"
+
+step S28:
+  premise PR8:
+    |
+      exact bytes を content として許す以上、default human output は control bytes、
+      metadata-like lines、無制限の payload をそのまま端末へ流してはならない
+
+step S29:
+  evidence EV6:
+    |
+      current show は content bytes を metadata lines の間へ raw 出力し、message も
+      escaped representation に統一していない
+
+step S30:
+  decision D8 based_on P6, PR8, EV6:
+    |
+      default show は identity、size、安全な escaped preview を表示し、raw content は
+      metadata と混在しない明示的な bytes-only mode に分離する。
+      machine-readable output は versioned schema と binary encoding を持つ
+
+step S31:
+  pending PD5:
+    "preview 上限、raw option 名、JSON における binary encoding を確定する"
+
+problem P7:
+  "root を REF lifetime の属性とするか seal generation の属性とするか"
+
+step S32:
+  premise PR9:
+    |
+      root は現在 canonical seal payload の identity-bearing field であり、世代間 diff で
+      provenance boundary の変更を明示できる
+
+step S33:
+  evidence EV7:
+    |
+      root を REF 固定属性にすると別の canonical registry または history-derived restriction
+      が必要になるが、現在の add は generation ごとに root flag を設定する
+
+step S34:
+  viewpoint VP3:
+    axis canonical_state_simplicity
+
+step S35:
+  decision D9 based_on P7, PR9, EV7, VP3:
+    |
+      root を seal-generation property と明記し、変更を hash、diff、review
+      の対象にする。root REF という表現は root seal generation へ改める
+
+step S36:
+  decision D10 based_on P7, PR9, EV7, VP3:
+    "代替案として logical REF の全 lifetime で root/non-root を固定する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      |
+        root は各 immutable seal generation の属性として扱うという operator decision により、
+        REF lifetime 固定案は採用しない
+
+step S37:
+  comparison CMP3 on P7 viewpoint VP3 relation preferred_over D9, D10:
+    |
+      追加 registry を作らず immutable history に boundary change を残せるため、
+      generation property を優先する
+
+problem P8:
+  "seal hash の integrity と approval authority を混同させないために何を明記するか"
+
+step S39:
+  premise PR10:
+    |
+      native v2 には actor identity、signature、trusted clock がなく、created_at は
+      identity-bearing metadata だが真正な時刻の証明ではない
+
+step S40:
+  evidence EV8:
+    |
+      root と tag には非 trust、非 approval の境界があるが、seal 自身の authority non-claim
+      は同じ明瞭さで書かれていない
+
+step S41:
+  decision D11 based_on P8, PR10, EV8:
+    |
+      対策候補として native v2 seal は repository writer による unauthenticated assertion
+      であり、hash は bytes の integrity を証明するが actor、authority、time authenticity
+      を証明しないと明記する。signature 実装は別要件まで defer する
+
+problem P9:
+  "ADR dogfood を causal provenance と retrospective bootstrap にどう分けるか"
+
+step S42:
+  premise PR11:
+    |
+      decision を反映済みの normative document を ADR の upstream premise として後から
+      seal した graph は、decision formation の因果順序を証明しない
+
+step S43:
+  evidence EV9:
+    |
+      native v2 dogfood は ADR 0006 の結論を含む requirements と architecture を
+      ADR 0006 の direct upstream として seal した
+
+step S44:
+  decision D12 based_on P9, PR11, EV9:
+    |
+      現在の round を retrospective bootstrap と明記し、今後は pre-decision premise、
+      ADR、ADR を反映した normative document supersession の順で seal する
+
+problem P10:
+  "Git sidecar 実装前にどの identity contract を別途決める必要があるか"
+
+step S45:
+  premise PR12:
+    |
+      standalone の Git ODB conformance は、Git SHA-1/SHA-256 の content identity、
+      blob/tree/commit の meaning、sidecar persistence contract を自動的には決めない
+
+step S46:
+  evidence EV10:
+    |
+      native ObjectID は SHA-256 full hex に固定され、ADR 0006 は future backend の
+      複数 object format をその backend の明示的 decision へ defer している
+
+step S47:
+  decision D13 based_on P10, PR12, EV10:
+    |
+      standalone conformance のために go-git runtime dependency を導入しない。
+      Git sidecar product seam の実装前に supported object formats、typed identity、
+      materialize versus external-reference、blob/tree/commit semantics を ADR で決める
+
+step S48:
+  pending PD7:
+    "Git sidecar identity ADR は Phase 5 の開始 gate とし、今回は確定しない"
