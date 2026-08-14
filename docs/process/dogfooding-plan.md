@@ -1,10 +1,12 @@
 # Sealgraph dogfooding plan
 
-Status: R0 and R1 passed on 2026-08-14. The tracked project repository now
+Status: R0, R1, and the native-v2 decision-document round passed on 2026-08-14. The tracked project repository now
 contains only approved canonical standalone `.sealgraph` state; runtime-only
 paths remain ignored. See
 [`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md)
 and [`dogfooding-receipts/2026-08-14-r1.md`](dogfooding-receipts/2026-08-14-r1.md).
+The breaking format-2 regeneration and ADR dogfood are recorded in
+[`dogfooding-receipts/2026-08-14-native-v2.md`](dogfooding-receipts/2026-08-14-native-v2.md).
 
 ## 1. Objective
 
@@ -211,3 +213,12 @@ separate gate. Promote the workflow from R0 to R1 only after reviewing the R0
 receipt; promote from R1 to recurring use only after at least one controlled
 upstream supersession and sequential downstream repair has been independently
 read back.
+
+## 7. Native v2 decision-document round
+
+ADR 0006 acceptance authorizes a breaking regeneration from an empty format-2
+repository. This round seals exact document bytes for requirements,
+architecture, ADR 0006, and the native-v2 storage contract. It must exercise
+REF-scoped tags, one unique-prefix selector, and per-edge messages while still
+persisting only full concrete IDs. It completes `NATIVE_V2_SLICE`; it does not
+claim the later recurring `DOGFOOD_R2` milestone or authorize Git sidecar work.

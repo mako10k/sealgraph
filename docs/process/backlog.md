@@ -19,6 +19,8 @@ external Issues.
 | SG-BL-007 | [#7](https://github.com/mako10k/sealgraph/issues/7) |
 | SG-BL-008 | [#8](https://github.com/mako10k/sealgraph/issues/8) |
 | SG-BL-009 | [#9](https://github.com/mako10k/sealgraph/issues/9) |
+| SG-BL-010 | [#10](https://github.com/mako10k/sealgraph/issues/10) |
+| SG-BL-011 | [#11](https://github.com/mako10k/sealgraph/issues/11) |
 
 Priority meanings:
 
@@ -319,15 +321,66 @@ complete repository inventory yet.
   fail with exact object/REF context.
 - `fsck` does not repair, delete, repack, or rewrite canonical state.
 
+## SG-BL-010 — Resolve REF-scoped tag loose-path namespace collisions
+
+- Status: open
+- Priority: P2, resolve before tags become routine
+- PERT: `TAG_CONTRACT`
+
+### Dogfood observation
+
+The approved `.sealgraph/refs/tags/<REF>/<ENCODED_TAGNAME>` mapping has a
+file/directory conflict when a prefix-REF tag leaf equals the next component of
+a child REF. `design` tag `api` and tags scoped to `design/api` cannot coexist.
+Native v2 rejects either creation order without repair, but tag availability
+therefore depends on hierarchical namespace use.
+
+### Acceptance
+
+- Decide explicitly whether to retain the limitation or adopt a deliberately
+  breaking collision-free format before 1.0.
+- Preserve path-form REFs, immutable REF-scoped tags, injective TAGNAME
+  encoding, and future Git-sidecar forensic usability.
+- Do not add dual lookup, hidden fallback storage, or automatic migration only
+  for experimental compatibility.
+- Test both creation orders and make any retained error name the conflicting
+  scopes and next explicit action.
+
+## SG-BL-011 — Make distinct dependency messages atomic and ergonomic
+
+- Status: open
+- Priority: P2
+- PERT: `OPERATOR_CONTRACT`
+
+### Dogfood observation
+
+ADR 0006 needed two dependencies with different edge rationales. One
+`link ... -m MESSAGE` invocation applies the same message to every dependency,
+so dogfood used two candidate updates. This is semantically safe but verbose
+and not atomic as a two-edge candidate edit.
+
+### Acceptance
+
+- Either define an unambiguous atomic dependency/message-pair syntax or retain
+  the repeated-command contract with documented rationale.
+- Keep one domain-independent dependency semantic; do not add ADR-specific
+  kinds or a free-form kind taxonomy without a separate accepted need.
+- Resolve every selector before candidate mutation, preserve one link per
+  target REF, and keep deterministic canonical order.
+- Continue to distinguish link-message changes from target repoints and from
+  the whole-seal event message.
+
 ## Proposed execution order
 
 Before Git sidecar:
 
 1. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
 2. `HISTORY_INSPECTION`: SG-BL-003 and SG-BL-004.
-3. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007, using the final history
-   and diff data shapes.
-4. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
+3. `TAG_CONTRACT`: SG-BL-010 resolves the remaining experimental tag mapping
+   boundary without compatibility scaffolding.
+4. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the
+   final history and diff data shapes.
+5. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
 
 SG-BL-009 remains in the existing release gate. Git sidecar follows the
 recurring dogfood gate so it can reuse one established inspection vocabulary
