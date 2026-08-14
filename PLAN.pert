@@ -34,6 +34,15 @@ milestone DOGFOOD_R1:
   title "Tracked project dogfood passes"
   state reached
 
+milestone HISTORY_READY:
+  title "Seal history and semantic diff contracts work"
+
+milestone USABLE:
+  title "Dogfood usability and inspection contracts work"
+
+milestone DOGFOOD_R2:
+  title "Recurring tracked dogfood passes"
+
 milestone GIT:
   title "Git sidecar works"
 
@@ -70,7 +79,23 @@ task DOGFOOD_TRACKED RUNTIME -> DOGFOOD_R1:
   duration 1p
   status done
 
-task GIT_SIDECAR DOGFOOD_R1 -> GIT:
+task CONTENT_INGEST DOGFOOD_R1 -> USABLE:
+  title "Add exact file input and deterministic manifests (SG-BL-001/002)"
+  duration 3p
+
+task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
+  title "Add log, linklog, and semantic diff (SG-BL-003/004)"
+  duration 4p
+
+task OPERATOR_CONTRACT HISTORY_READY -> USABLE:
+  title "Clarify semantics and add versioned output (SG-BL-005/006/007)"
+  duration 3p
+
+task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
+  title "Exercise recurring tracked workflow (SG-BL-008)"
+  duration 1p
+
+task GIT_SIDECAR DOGFOOD_R2 -> GIT:
   title "Implement git-sealgraph reader and sidecar status"
   duration 4p
 
