@@ -170,6 +170,96 @@ func TestNormalSealChecksCompleteDependencyClosure(t *testing.T) {
 	}
 }
 
+func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1", "root v1")
+	if _, err := repo.Add(ctx, AddOptions{REF: "MIDDLE", Content: []byte("middle"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
+		t.Fatal(err)
+	}
+	middleV1, err := repo.Seal(ctx, "MIDDLE", "middle v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "LEAF", Content: []byte("leaf"), Dependencies: []Dependency{{REF: "MIDDLE"}}}); err != nil {
+		t.Fatal(err)
+	}
+	leafV1, err := repo.Seal(ctx, "LEAF", "leaf v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2", "root v2")
+
+	middleStatus, err := repo.Status(ctx, "MIDDLE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(middleStatus[0].Labels(), "STALE_DIRECT") || contains(middleStatus[0].Labels(), "STALE_TRANSITIVE") {
+		t.Fatalf("middle labels = %v, want direct stale only", middleStatus[0].Labels())
+	}
+	leafStatus, err := repo.Status(ctx, "LEAF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(leafStatus[0].Labels(), "STALE_DIRECT") || !contains(leafStatus[0].Labels(), "STALE_TRANSITIVE") {
+		t.Fatalf("leaf labels = %v, want transitive stale only", leafStatus[0].Labels())
+	}
+	path := leafStatus[0].StaleTransitive[0]
+	if len(path.Nodes) != 2 || path.Nodes[0].REF != "LEAF" || path.Nodes[1].REF != "MIDDLE" || !path.Link.TargetSeal.Equal(rootV1.ID) || !path.CurrentHead.Equal(rootV2.ID) {
+		t.Fatalf("leaf stale path = %+v", path)
+	}
+
+	stale, err := repo.Stale(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stale) != 2 || stale[0].REF != "LEAF" || stale[1].REF != "MIDDLE" {
+		t.Fatalf("stale refs = %+v, want LEAF and MIDDLE", stale)
+	}
+	sourceHead, impacts, err := repo.Impact(ctx, "ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sourceHead.Equal(rootV2.ID) || len(impacts) != 2 || impacts[0].REF != "LEAF" || impacts[0].Direct || impacts[1].REF != "MIDDLE" || !impacts[1].Direct {
+		t.Fatalf("source=%s impacts=%+v", sourceHead, impacts)
+	}
+
+	if _, err := repo.Link(ctx, "MIDDLE", []Dependency{{REF: "ROOT"}}); err != nil {
+		t.Fatal(err)
+	}
+	middleV2, err := repo.Seal(ctx, "MIDDLE", "middle reviewed against root v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if middleV2.ID.Equal(middleV1.ID) {
+		t.Fatal("middle relink did not change seal identity")
+	}
+	leafStatus, err = repo.Status(ctx, "LEAF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(leafStatus[0].Labels(), "STALE_DIRECT") || !contains(leafStatus[0].Labels(), "STALE_TRANSITIVE") {
+		t.Fatalf("leaf after middle repair labels = %v, want direct and transitive stale until explicit leaf repair", leafStatus[0].Labels())
+	}
+	if _, err := repo.Link(ctx, "LEAF", []Dependency{{REF: "MIDDLE"}}); err != nil {
+		t.Fatal(err)
+	}
+	leafV2, err := repo.Seal(ctx, "LEAF", "leaf reviewed against middle v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leafV2.ID.Equal(leafV1.ID) {
+		t.Fatal("leaf relink did not change seal identity")
+	}
+	leafStatus, err = repo.Status(ctx, "LEAF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if labels := leafStatus[0].Labels(); len(labels) != 1 || labels[0] != "CLEAN" {
+		t.Fatalf("leaf after explicit repair labels = %v, want CLEAN", labels)
+	}
+}
+
 func TestShowExplicitHistoricalSeal(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()

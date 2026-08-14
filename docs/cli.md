@@ -87,6 +87,29 @@ sealgraph stale
 sealgraph fsck
 ```
 
+Phase 2 implements the first graph inspection slice:
+
+- `status [REF]` derives both direct and transitive stale state for current
+  heads. A current head may report both when its direct target has advanced and
+  that exact historical target seal also contains older stale provenance.
+- `stale` prints only current heads with `STALE_DIRECT` or
+  `STALE_TRANSITIVE`; it prints `CLEAN` when none exist.
+- `impact REF` starts from a current logical REF and reports every distinct
+  path from a current downstream head to a seal link naming that REF. Paths are
+  shown downstream-to-upstream and preserve the concrete historical seal IDs
+  actually stored in the closure. Historical `REF@SEAL` impact sources are not
+  part of this slice.
+- `graph` prints current logical REF heads and their concrete direct links. A
+  direct target is marked `HEAD` or `HISTORICAL head=<current-id>`.
+
+Graph inspection validates reachable seal ownership and rejects an immutable
+seal-ID cycle as an integrity error. It does not repair, relink, or reseal
+anything. These commands are read-only and do not persist stale or impact
+results.
+
+The Phase 2 human-readable text is for operator inspection. It is not yet a
+versioned machine-readable output contract.
+
 ## 2. Status vocabulary
 
 At minimum, output should be able to distinguish:
@@ -98,6 +121,9 @@ At minimum, output should be able to distinguish:
 - STALE_TRANSITIVE
 
 These are orthogonal where appropriate. For example a REF can have an unsealed candidate and a stale current seal.
+
+`STALE_DIRECT` and `STALE_TRANSITIVE` are also orthogonal. A downstream head
+may have both during an explicit upstream-to-downstream repair sequence.
 
 ## 3. Historical dependencies
 

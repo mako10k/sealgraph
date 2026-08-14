@@ -270,7 +270,12 @@ func (r *Repository) Seal(ctx context.Context, ref, message string) (SealResult,
 }
 
 func (r *Repository) requireHeadConsistentClosure(ctx context.Context, links []domain.Link) error {
-	visited := make(map[string]bool)
+	const (
+		visiting = 1
+		complete = 2
+	)
+	state := make(map[string]int)
+	var path []graph.SealIdentity
 	var visit func([]domain.Link) error
 	visit = func(current []domain.Link) error {
 		for _, link := range current {
@@ -281,10 +286,22 @@ func (r *Repository) requireHeadConsistentClosure(ctx context.Context, links []d
 			if !head.Equal(link.TargetSeal) {
 				return fmt.Errorf("normal seal requires HEAD-consistent dependency closure: %s targets %s but HEAD is %s; relink it or mark the candidate draft", link.TargetREF, link.TargetSeal, head)
 			}
-			if visited[link.TargetSeal.String()] {
+			key := link.TargetSeal.String()
+			if state[key] == visiting {
+				cycleStart := 0
+				for i, identity := range path {
+					if identity.Seal.Equal(link.TargetSeal) {
+						cycleStart = i
+						break
+					}
+				}
+				cycle := append([]graph.SealIdentity(nil), path[cycleStart:]...)
+				cycle = append(cycle, graph.SealIdentity{REF: link.TargetREF, Seal: link.TargetSeal})
+				return fmt.Errorf("normal seal dependency closure is invalid: %w; inspect the immutable objects and REF heads explicitly", &graph.CycleError{Path: cycle})
+			}
+			if state[key] == complete {
 				continue
 			}
-			visited[link.TargetSeal.String()] = true
 			seal, err := r.LoadSeal(ctx, link.TargetSeal)
 			if err != nil {
 				return fmt.Errorf("traverse dependency %s@%s: %w", link.TargetREF, link.TargetSeal, err)
@@ -292,9 +309,13 @@ func (r *Repository) requireHeadConsistentClosure(ctx context.Context, links []d
 			if seal.REF != link.TargetREF {
 				return fmt.Errorf("dependency seal %s belongs to %s, not %s", link.TargetSeal, seal.REF, link.TargetREF)
 			}
+			state[key] = visiting
+			path = append(path, graph.SealIdentity{REF: link.TargetREF, Seal: link.TargetSeal})
 			if err := visit(seal.Links); err != nil {
 				return err
 			}
+			path = path[:len(path)-1]
+			state[key] = complete
 		}
 		return nil
 	}
@@ -351,11 +372,12 @@ func (r *Repository) Show(ctx context.Context, ref string, explicit *domain.Obje
 }
 
 type RefStatus struct {
-	REF         string
-	Head        *domain.ObjectID
-	Unsealed    bool
-	Draft       bool
-	StaleDirect []graph.DirectStaleLink
+	REF             string
+	Head            *domain.ObjectID
+	Unsealed        bool
+	Draft           bool
+	StaleDirect     []graph.DirectStaleLink
+	StaleTransitive []graph.StalePath
 }
 
 func (s RefStatus) Labels() []string {
@@ -368,6 +390,9 @@ func (s RefStatus) Labels() []string {
 	}
 	if len(s.StaleDirect) > 0 {
 		labels = append(labels, "STALE_DIRECT")
+	}
+	if len(s.StaleTransitive) > 0 {
+		labels = append(labels, "STALE_TRANSITIVE")
 	}
 	if len(labels) == 0 {
 		labels = append(labels, "CLEAN")
@@ -426,16 +451,116 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 				return nil, fmt.Errorf("REF %s points to a seal for %s", ref, payload.REF)
 			}
 			status.Draft = status.Draft || payload.Draft
-			status.StaleDirect, err = graph.DirectStale(ctx, payload, r.refs)
-			if err != nil {
-				return nil, err
+			inspection, inspectErr := graph.Inspect(
+				ctx,
+				graph.SealIdentity{REF: ref, Seal: head},
+				payload,
+				r.refs,
+				r.LoadSeal,
+			)
+			if inspectErr != nil {
+				return nil, fmt.Errorf("inspect provenance graph for %s: %w; inspect the immutable objects and REF heads explicitly", ref, inspectErr)
 			}
+			status.StaleDirect = inspection.Direct
+			status.StaleTransitive = inspection.Transitive
 		} else if !errors.Is(err, store.ErrRefNotFound) {
 			return nil, err
 		}
 		result = append(result, status)
 	}
 	return result, nil
+}
+
+// Stale returns only current REF statuses with derived direct or transitive
+// staleness. Candidate-only UNSEALED state is intentionally excluded.
+func (r *Repository) Stale(ctx context.Context) ([]RefStatus, error) {
+	statuses, err := r.Status(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]RefStatus, 0, len(statuses))
+	for _, status := range statuses {
+		if len(status.StaleDirect) > 0 || len(status.StaleTransitive) > 0 {
+			result = append(result, status)
+		}
+	}
+	return result, nil
+}
+
+type GraphLink struct {
+	Link        domain.Link
+	CurrentHead domain.ObjectID
+}
+
+type GraphNode struct {
+	Status RefStatus
+	Links  []GraphLink
+}
+
+// Graph returns current REF nodes and their concrete direct links. Historical
+// seals remain reachable through the link IDs but are not promoted to REF
+// heads by this read operation.
+func (r *Repository) Graph(ctx context.Context) ([]GraphNode, error) {
+	statuses, err := r.Status(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]GraphNode, 0, len(statuses))
+	for _, status := range statuses {
+		node := GraphNode{Status: status}
+		if status.Head != nil {
+			payload, err := r.LoadSeal(ctx, *status.Head)
+			if err != nil {
+				return nil, fmt.Errorf("load current seal for graph node %s: %w", status.REF, err)
+			}
+			for _, link := range payload.Links {
+				head, err := r.refs.Resolve(ctx, link.TargetREF)
+				if err != nil {
+					return nil, fmt.Errorf("resolve graph link %s: %w", link.TargetREF, err)
+				}
+				node.Links = append(node.Links, GraphLink{Link: link, CurrentHead: head})
+			}
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
+}
+
+// Impact derives all current downstream REFs whose exact immutable dependency
+// closure names sourceREF. It returns the source's current head separately.
+func (r *Repository) Impact(ctx context.Context, sourceREF string) (domain.ObjectID, []graph.Impact, error) {
+	if err := domain.ValidateREF(sourceREF); err != nil {
+		return domain.ObjectID{}, nil, err
+	}
+	sourceHead, err := r.refs.Resolve(ctx, sourceREF)
+	if err != nil {
+		return domain.ObjectID{}, nil, fmt.Errorf("resolve impact source %s: %w", sourceREF, err)
+	}
+	refs, err := r.refs.List(ctx)
+	if err != nil {
+		return domain.ObjectID{}, nil, err
+	}
+	current := make([]graph.SealIdentity, 0, len(refs))
+	for _, ref := range refs {
+		head, err := r.refs.Resolve(ctx, ref)
+		if err != nil {
+			return domain.ObjectID{}, nil, err
+		}
+		payload, err := r.LoadSeal(ctx, head)
+		if err != nil {
+			return domain.ObjectID{}, nil, fmt.Errorf("load current seal for %s: %w", ref, err)
+		}
+		identity := graph.SealIdentity{REF: ref, Seal: head}
+		if _, err := graph.Inspect(ctx, identity, payload, r.refs, r.LoadSeal); err != nil {
+			return domain.ObjectID{}, nil, fmt.Errorf("inspect provenance graph for %s: %w; inspect the immutable objects and REF heads explicitly", ref, err)
+		}
+		current = append(current, identity)
+	}
+	impacts, err := graph.ReverseImpact(ctx, sourceREF, current, r.LoadSeal)
+	if err != nil {
+		return domain.ObjectID{}, nil, fmt.Errorf("derive reverse impact for %s: %w", sourceREF, err)
+	}
+	return sourceHead, impacts, nil
 }
 
 func ParseSelector(text string) (string, *domain.ObjectID, error) {

@@ -108,6 +108,54 @@ func TestLinkCommandAcceptsExplicitHistoricalSeal(t *testing.T) {
 	}
 }
 
+func TestGraphStaleAndImpactCommands(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	run := func(args ...string) string {
+		t.Helper()
+		out.Reset()
+		errOut.Reset()
+		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
+			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
+		}
+		return out.String()
+	}
+	run("init")
+	run("add", "ROOT", "--root", "--content", "root v1")
+	run("seal", "ROOT", "-m", "root v1")
+	run("add", "MIDDLE", "--content", "middle", "--depend-on", "ROOT")
+	run("seal", "MIDDLE", "-m", "middle v1")
+	run("add", "LEAF", "--content", "leaf", "--depend-on", "MIDDLE")
+	run("seal", "LEAF", "-m", "leaf v1")
+	run("add", "ROOT", "--root", "--content", "root v2")
+	run("seal", "ROOT", "-m", "root v2")
+
+	status := run("status", "LEAF")
+	if !strings.Contains(status, "LEAF STALE_TRANSITIVE") || !strings.Contains(status, "transitive path=LEAF@sha256:") || !strings.Contains(status, " -> MIDDLE@sha256:") || !strings.Contains(status, " -> ROOT@sha256:") {
+		t.Fatalf("transitive status output = %q", status)
+	}
+	stale := run("stale")
+	if !strings.Contains(stale, "MIDDLE STALE_DIRECT") || !strings.Contains(stale, "LEAF STALE_TRANSITIVE") || strings.Contains(stale, "ROOT CLEAN") {
+		t.Fatalf("stale output = %q", stale)
+	}
+	impact := run("impact", "ROOT")
+	if !strings.Contains(impact, "SOURCE ROOT@sha256:") || !strings.Contains(impact, "DIRECT MIDDLE@sha256:") || !strings.Contains(impact, "TRANSITIVE LEAF@sha256:") {
+		t.Fatalf("impact output = %q", impact)
+	}
+	graph := run("graph")
+	if !strings.Contains(graph, "REF MIDDLE@sha256:") || !strings.Contains(graph, "STALE_DIRECT") || !strings.Contains(graph, "depend-on ROOT@sha256:") || !strings.Contains(graph, "HISTORICAL head=sha256:") {
+		t.Fatalf("graph output = %q", graph)
+	}
+
+	run("add", "team/@name", "--root", "--content", "independent root")
+	run("seal", "team/@name", "-m", "valid at-sign REF")
+	atImpact := run("impact", "team/@name")
+	if !strings.Contains(atImpact, "SOURCE team/@name@sha256:") || !strings.Contains(atImpact, "NO_IMPACT") {
+		t.Fatalf("at-sign REF impact output = %q", atImpact)
+	}
+}
+
 func TestGitPluginHasSeparateHelpSurface(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer

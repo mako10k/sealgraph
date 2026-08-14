@@ -24,6 +24,7 @@ milestone DOGFOOD_R0:
 
 milestone GRAPH:
   title "Stale and impact graph works"
+  state reached
 
 milestone DOGFOOD_R1:
   title "Tracked project dogfood passes"
@@ -52,6 +53,7 @@ task DOGFOOD_HERMETIC NATIVE -> DOGFOOD_R0:
 task GRAPH_ENGINE DOGFOOD_R0 -> GRAPH:
   title "Implement DAG validation, stale propagation, and impact"
   duration 4p
+  status done
 
 task DOGFOOD_TRACKED GRAPH -> DOGFOOD_R1:
   title "Add explicitly approved tracked project provenance"

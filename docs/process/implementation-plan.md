@@ -43,6 +43,10 @@ Do not create the project-root `.sealgraph/` in R0.
 - graph/stale/status
 - linklog/log
 
+The tracked R1 dogfood predecessor is the focused graph slice through
+`graph`/`stale`/`status`/`impact`. `linklog` and `log` remain later Phase 2
+inspection work and do not block the initial tracked manifest exercise.
+
 ## Phase 3 — attachments and diff
 
 - attachment blob import

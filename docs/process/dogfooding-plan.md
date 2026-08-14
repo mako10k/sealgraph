@@ -1,7 +1,8 @@
 # Sealgraph dogfooding plan
 
-Status: R0 passed on 2026-08-14. R1 remains gated and has not been authorized.
-No repository-local `.sealgraph/` was created by R0. See
+Status: R0 passed on 2026-08-14. R1 was explicitly authorized on 2026-08-14
+and starts only after the Phase 2 graph predecessor passes. No repository-local
+`.sealgraph/` was created by R0. See
 [`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md).
 
 ## 1. Objective
@@ -145,19 +146,29 @@ R1 starts only after:
 3. the operator explicitly approves creating this repository's `.sealgraph/`;
 4. the exact initial REF set and content manifest are reviewed.
 
-Proposed initial REF hierarchy:
+Approved initial REF hierarchy for R1:
 
 ```text
-sealgraph/spec/requirements
-sealgraph/spec/storage-v1
-sealgraph/implementation/native-phase1
-sealgraph/validation/go-core
+sealgraph/spec/requirements                 root
+sealgraph/design/architecture               depends on requirements
+sealgraph/spec/storage-v1                   depends on requirements and architecture
+sealgraph/implementation/native-phase1      depends on storage-v1
+sealgraph/validation/go-core                depends on native-phase1
 ```
 
-Content should be a small manifest containing the relevant path, Git commit
-SHA, and file digest. Phase 1 has no file-import command, so do not silently
-pretend a path name commits file bytes; the manifest must say exactly what it
-commits to.
+Each content value is a small UTF-8 manifest containing the frozen predecessor
+Git commit SHA plus every included path and its SHA-256 digest. The
+architecture manifest covers `docs/architecture.md`, `docs/cli.md`,
+`docs/integrations.md`, all current ADRs, and the llmthink design document. The
+storage manifest covers `docs/storage-format.md` and ADR 0005. The
+implementation manifest commits to a sorted aggregate digest of the Go source
+files. The validation manifest records the exact Go validation commands and
+their successful result. The R1 receipt records the exact bytes supplied to
+each `add` command.
+
+This is a manifest claim: Phase 2 still has no file-import command, so a path
+name alone is never presented as though sealgraph read or stored that file's
+bytes.
 
 Run standalone `sealgraph init` in the project root. Its behavior must be the
 same with or without `.git`; do not invoke `git sealgraph`. Track only canonical

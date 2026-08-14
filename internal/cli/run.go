@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mako10k/sealgraph/internal/graph"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
@@ -70,6 +71,12 @@ func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) in
 		return runShow(ctx, workDir, args[1:], stdout, stderr)
 	case "status":
 		return runStatus(ctx, workDir, args[1:], stdout, stderr)
+	case "stale":
+		return runStale(ctx, workDir, args[1:], stdout, stderr)
+	case "impact":
+		return runImpact(ctx, workDir, args[1:], stdout, stderr)
+	case "graph":
+		return runGraph(ctx, workDir, args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "unknown command %q", args[0])
 	}
@@ -229,6 +236,98 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 		fmt.Fprintln(stdout, "CLEAN")
 		return 0
 	}
+	printStatuses(stdout, statuses)
+	return 0
+}
+
+func runStale(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		return usageError(stderr, "stale accepts no arguments")
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "stale", err)
+	}
+	statuses, err := repo.Stale(ctx)
+	if err != nil {
+		return commandError(stderr, "stale", err)
+	}
+	if len(statuses) == 0 {
+		fmt.Fprintln(stdout, "CLEAN")
+		return 0
+	}
+	printStatuses(stdout, statuses)
+	return 0
+}
+
+func runImpact(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		return usageError(stderr, "impact requires exactly one current REF")
+	}
+	ref, explicit, err := repository.ParseSelector(args[0])
+	if err != nil {
+		return usageError(stderr, "invalid impact REF: %v", err)
+	}
+	if explicit != nil {
+		return usageError(stderr, "impact accepts a logical REF, not a historical REF@SEAL selector")
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "impact", err)
+	}
+	head, impacts, err := repo.Impact(ctx, ref)
+	if err != nil {
+		return commandError(stderr, "impact", err)
+	}
+	fmt.Fprintf(stdout, "SOURCE %s@%s\n", ref, head)
+	if len(impacts) == 0 {
+		fmt.Fprintln(stdout, "NO_IMPACT")
+		return 0
+	}
+	for _, impact := range impacts {
+		kind := "TRANSITIVE"
+		if impact.Direct {
+			kind = "DIRECT"
+		}
+		fmt.Fprintf(stdout, "%s %s@%s path=%s\n", kind, impact.REF, impact.Head, formatSealPath(impact.Path))
+	}
+	return 0
+}
+
+func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		return usageError(stderr, "graph accepts no arguments")
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "graph", err)
+	}
+	nodes, err := repo.Graph(ctx)
+	if err != nil {
+		return commandError(stderr, "graph", err)
+	}
+	if len(nodes) == 0 {
+		fmt.Fprintln(stdout, "EMPTY")
+		return 0
+	}
+	for _, node := range nodes {
+		head := "-"
+		if node.Status.Head != nil {
+			head = node.Status.Head.String()
+		}
+		fmt.Fprintf(stdout, "REF %s@%s %s\n", node.Status.REF, head, strings.Join(node.Status.Labels(), ","))
+		for _, link := range node.Links {
+			state := "HEAD"
+			if !link.Link.TargetSeal.Equal(link.CurrentHead) {
+				state = "HISTORICAL head=" + link.CurrentHead.String()
+			}
+			fmt.Fprintf(stdout, "  %s %s@%s %s\n", link.Link.Relation, link.Link.TargetREF, link.Link.TargetSeal, state)
+		}
+	}
+	return 0
+}
+
+func printStatuses(stdout io.Writer, statuses []repository.RefStatus) {
 	for _, status := range statuses {
 		fmt.Fprintf(stdout, "%s %s", status.REF, strings.Join(status.Labels(), ","))
 		if status.Head != nil {
@@ -238,8 +337,37 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 		for _, stale := range status.StaleDirect {
 			fmt.Fprintf(stdout, "  %s sealed=%s head=%s\n", stale.Link.TargetREF, stale.Link.TargetSeal, stale.CurrentHead)
 		}
+		for _, stale := range status.StaleTransitive {
+			path := append([]repositoryPathIdentity(nil), makePathIdentities(stale.Nodes)...)
+			path = append(path, repositoryPathIdentity{REF: stale.Link.TargetREF, Seal: stale.Link.TargetSeal.String()})
+			fmt.Fprintf(stdout, "  transitive path=%s head=%s@%s\n", formatRepositoryPath(path), stale.Link.TargetREF, stale.CurrentHead)
+		}
 	}
-	return 0
+}
+
+type repositoryPathIdentity struct {
+	REF  string
+	Seal string
+}
+
+func makePathIdentities(nodes []graph.SealIdentity) []repositoryPathIdentity {
+	result := make([]repositoryPathIdentity, len(nodes))
+	for i, node := range nodes {
+		result[i] = repositoryPathIdentity{REF: node.REF, Seal: node.Seal.String()}
+	}
+	return result
+}
+
+func formatRepositoryPath(path []repositoryPathIdentity) string {
+	parts := make([]string, len(path))
+	for i, identity := range path {
+		parts[i] = identity.REF + "@" + identity.Seal
+	}
+	return strings.Join(parts, " -> ")
+}
+
+func formatSealPath(path []graph.SealIdentity) string {
+	return formatRepositoryPath(makePathIdentities(path))
 }
 
 func parseDependencies(values []string) ([]repository.Dependency, error) {
@@ -293,6 +421,9 @@ Usage:
   sealgraph seal REF -m MESSAGE
   sealgraph show REF[@SEAL]
   sealgraph status [REF]
+  sealgraph stale
+  sealgraph impact REF
+  sealgraph graph
 
 Each seal operation advances exactly one logical REF.
 `)
