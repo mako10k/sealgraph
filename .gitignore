@@ -1,0 +1,22 @@
+# build
+/bin/
+/dist/
+*.test
+coverage.out
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# sealgraph runtime-only state when this repository dogfoods sealgraph
+.sealgraph/index
+.sealgraph/cache/
+.sealgraph/locks/
+.sealgraph/logs/
+
+# llmthink runtime state
+.llmthink/
+
+# local temp
+.tmp/

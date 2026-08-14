@@ -1,0 +1,42 @@
+package store
+
+import (
+	"context"
+	"errors"
+
+	"github.com/mako10k/sealgraph/internal/domain"
+)
+
+var (
+	ErrObjectNotFound = errors.New("object not found")
+	ErrRefNotFound    = errors.New("REF not found")
+	ErrCASMismatch    = errors.New("REF compare-and-swap mismatch")
+	ErrPrefixConflict = errors.New("REF namespace prefix conflict")
+)
+
+// Object is the common read result used by native and Git-backed readers.
+type Object struct {
+	ID   domain.ObjectID
+	Type string
+	Data []byte
+}
+
+// ObjectReader is the critical common read boundary.
+// Native standalone and Git-sidecar implementations must converge here.
+type ObjectReader interface {
+	ReadObject(ctx context.Context, id domain.ObjectID) (Object, error)
+}
+
+// ObjectWriter is intentionally separate because Git-sidecar content may be
+// read-only from sealgraph's perspective.
+type ObjectWriter interface {
+	WriteBlob(ctx context.Context, data []byte) (domain.ObjectID, error)
+}
+
+// RefStore manages sealgraph logical REF heads.
+// It is not a Git branch abstraction.
+type RefStore interface {
+	Resolve(ctx context.Context, ref string) (domain.ObjectID, error)
+	Update(ctx context.Context, ref string, oldID, newID *domain.ObjectID) error
+	List(ctx context.Context) ([]string, error)
+}

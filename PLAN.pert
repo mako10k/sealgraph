@@ -1,0 +1,64 @@
+project SEALGRAPH:
+  version 2
+  title "Sealgraph initial implementation"
+  as_of 2026-08-14
+  duration_unit point
+  velocity 1p/1d
+  finish READY
+
+milestone START:
+  title "Architecture scaffold exists"
+  state reached
+
+milestone FORMAT:
+  title "Canonical format locked"
+  state reached
+
+milestone NATIVE:
+  title "Native vertical slice works"
+  state reached
+
+milestone DOGFOOD_R0:
+  title "Hermetic native dogfood passes"
+
+milestone GRAPH:
+  title "Stale and impact graph works"
+
+milestone DOGFOOD_R1:
+  title "Tracked project dogfood passes"
+
+milestone GIT:
+  title "Git sidecar works"
+
+milestone READY:
+  title "Initial usable release"
+
+task FORMAT_SPEC START -> FORMAT:
+  title "Lock canonical payload, REF grammar, and object IDs"
+  duration 2p
+  status done
+
+task NATIVE_SLICE FORMAT -> NATIVE:
+  title "Implement standalone init/add/link/seal/show/status"
+  duration 5p
+  status done
+
+task DOGFOOD_HERMETIC NATIVE -> DOGFOOD_R0:
+  title "Exercise Phase 1 in a temporary repository"
+  duration 1p
+
+task GRAPH_ENGINE DOGFOOD_R0 -> GRAPH:
+  title "Implement DAG validation, stale propagation, and impact"
+  duration 4p
+
+task DOGFOOD_TRACKED GRAPH -> DOGFOOD_R1:
+  title "Add explicitly approved tracked project provenance"
+  duration 1p
+
+task GIT_SIDECAR DOGFOOD_R1 -> GIT:
+  title "Implement git-sealgraph reader and sidecar status"
+  duration 4p
+
+task RELEASE_GATE GIT -> READY:
+  title "Add fsck, integration tests, docs, and release checks"
+  duration 3p

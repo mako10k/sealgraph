@@ -1,0 +1,73 @@
+framework SealgraphDesign:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain Sealgraph:
+  description "sealgraph 初期アーキテクチャの主要判断"
+
+problem P1:
+  "根拠世代を固定し、上流変更の影響を監査できる CLI をどう設計するか"
+
+step S1:
+  premise PR1:
+    "seal は内容だけでなく、その時点で採用した直接上流 seal の識別子を固定する必要がある"
+
+step S2:
+  premise PR2:
+    "上流の supersede 後も既存 seal と link は immutable な履歴として残す"
+
+step S3:
+  evidence EV1:
+    "直接上流 seal hash を下流 seal の正規化 payload に含めれば、上流依存を Merkle DAG として推移的に固定できる"
+
+step S4:
+  decision D1 based_on P1, PR1, PR2, EV1:
+    "seal を immutable provenance node とし、stale は current REF heads と seal DAG から導出する"
+
+problem P2:
+  "standalone と Git sidecar の実装をどう共通化するか"
+
+step S5:
+  premise PR3:
+    "standalone は Git repository 内でも Git を検出せず独立して動くべきである"
+
+step S6:
+  premise PR4:
+    "Git sidecar では Git の blob/history/merge state を再利用したい"
+
+step S7:
+  decision D2 based_on P2, PR3, PR4:
+    "共通 ObjectReader 境界を置き、standalone は .sealgraph、sidecar は .git を content source として読む"
+
+problem P3:
+  "Git integration の CLI 名をどう分離するか"
+
+step S8:
+  decision D3 based_on P3:
+    "Git integration は git-sealgraph executable により git sealgraph として提供する"
+
+problem P4:
+  "native v1 seal payload と object identity をどの byte contract で固定するか"
+
+step S9:
+  evidence EV2:
+    "固定 member order の compact UTF-8 JSON と Git blob envelope の SHA-256 を組み合わせれば、payload の意味と low-level object compatibility を分離して固定できる"
+
+step S10:
+  decision D4 based_on P4, EV2:
+    "native v1 は sealgraph-canonical-json-v1 payload を Git-compatible blob envelope に格納し、その SHA-256 ObjectID を seal ID とする"
+
+problem P5:
+  "normal seal と draft/historical seal の dependency admissibility をどこで分けるか"
+
+step S11:
+  premise PR5:
+    "normal seal が direct link だけを検査すると、上流 HEAD seal 自体が stale な closure を fresh と誤認しうる"
+
+step S12:
+  decision D5 based_on P5, PR5:
+    "normal non-draft seal は dependency closure 全体の HEAD consistency を要求し、draft のみ explicit historical link を保持して seal できる"
+
+pending PD3:
+  "Git sidecar が Git blob/tree/commit のどの単位を content source として first-class に扱うかを確定する"

@@ -1,0 +1,32 @@
+# Documentation index
+
+The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is only its map.
+
+## Normative
+
+- [`requirements.md`](requirements.md) — product requirements and invariants.
+- [`storage-format.md`](storage-format.md) — canonical repository and hash model.
+- [`cli.md`](cli.md) — CLI contract and command semantics.
+
+## Architecture
+
+- [`architecture.md`](architecture.md) — package/backend boundaries.
+- [`integrations.md`](integrations.md) — Git sidecar, llmthink, secdat, perttool.
+
+## Decisions
+
+- [`adr/0001-provenance-seal-model.md`](adr/0001-provenance-seal-model.md)
+- [`adr/0002-standalone-default.md`](adr/0002-standalone-default.md)
+- [`adr/0003-git-compatible-low-level-storage.md`](adr/0003-git-compatible-low-level-storage.md)
+- [`adr/0004-git-plugin-sidecar.md`](adr/0004-git-plugin-sidecar.md)
+- [`adr/0005-native-v1-canonical-storage.md`](adr/0005-native-v1-canonical-storage.md)
+
+## Agent-auditable design
+
+- [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
+
+## Planning
+
+- [`process/implementation-plan.md`](process/implementation-plan.md)
+- [`process/dogfooding-plan.md`](process/dogfooding-plan.md)
+- [`../PLAN.pert`](../PLAN.pert)

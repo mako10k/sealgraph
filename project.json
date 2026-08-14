@@ -1,0 +1,22 @@
+{
+  "project": "sealgraph",
+  "status": "phase-1-native-vertical-slice",
+  "language": "go",
+  "go": "1.26",
+  "entrypoints": [
+    "cmd/sealgraph",
+    "cmd/git-sealgraph"
+  ],
+  "normative_docs": [
+    "docs/requirements.md",
+    "docs/storage-format.md",
+    "docs/cli.md",
+    "docs/adr/"
+  ],
+  "optional_integrations": [
+    "llmthink",
+    "secdat",
+    "perttool",
+    "git-sidecar"
+  ]
+}
