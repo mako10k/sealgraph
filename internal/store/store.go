@@ -8,10 +8,13 @@ import (
 )
 
 var (
-	ErrObjectNotFound = errors.New("object not found")
-	ErrRefNotFound    = errors.New("REF not found")
-	ErrCASMismatch    = errors.New("REF compare-and-swap mismatch")
-	ErrPrefixConflict = errors.New("REF namespace prefix conflict")
+	ErrObjectNotFound        = errors.New("object not found")
+	ErrAmbiguousObjectPrefix = errors.New("ambiguous object prefix")
+	ErrRefNotFound           = errors.New("REF not found")
+	ErrTagNotFound           = errors.New("tag not found")
+	ErrTagConflict           = errors.New("immutable tag conflict")
+	ErrCASMismatch           = errors.New("REF compare-and-swap mismatch")
+	ErrPrefixConflict        = errors.New("REF namespace prefix conflict")
 )
 
 // Object is the common read result used by native and Git-backed readers.
@@ -39,4 +42,17 @@ type RefStore interface {
 	Resolve(ctx context.Context, ref string) (domain.ObjectID, error)
 	Update(ctx context.Context, ref string, oldID, newID *domain.ObjectID) error
 	List(ctx context.Context) ([]string, error)
+}
+
+type Tag struct {
+	Name string
+	Seal domain.ObjectID
+}
+
+// TagStore manages immutable, REF-scoped aliases for exact seals. It is not a
+// Git tag or movable ref abstraction.
+type TagStore interface {
+	Resolve(ctx context.Context, ref, name string) (domain.ObjectID, error)
+	Create(ctx context.Context, ref, name string, id domain.ObjectID) error
+	List(ctx context.Context, ref string) ([]Tag, error)
 }

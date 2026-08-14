@@ -31,7 +31,7 @@ func (refs memoryRefs) List(context.Context) ([]string, error) {
 }
 
 func graphID(char byte) domain.ObjectID {
-	return domain.ObjectID{Algorithm: domain.NativeAlgorithm, Hex: strings.Repeat(string(char), 64)}
+	return domain.ObjectID{Hex: strings.Repeat(string(char), 64)}
 }
 
 func graphSeal(ref string, links ...domain.Link) domain.SealPayload {
@@ -39,7 +39,7 @@ func graphSeal(ref string, links ...domain.Link) domain.SealPayload {
 }
 
 func graphLink(ref string, id domain.ObjectID) domain.Link {
-	return domain.Link{Relation: domain.DependOn, TargetREF: ref, TargetSeal: id}
+	return domain.Link{TargetREF: ref, TargetSeal: id}
 }
 
 func TestInspectDerivesDirectAndTransitiveStale(t *testing.T) {

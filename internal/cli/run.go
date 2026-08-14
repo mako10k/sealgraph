@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -22,7 +23,7 @@ func RunStandalone(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "sealgraph: determine current directory: %v\n", err)
 		return 3
 	}
-	return runStandaloneAt(workDir, args, stdout, stderr)
+	return runStandaloneAtWithInput(workDir, args, os.Stdin, stdout, stderr)
 }
 
 func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
@@ -39,6 +40,10 @@ func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
 }
 
 func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) int {
+	return runStandaloneAtWithInput(workDir, args, strings.NewReader(""), stdout, stderr)
+}
+
+func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 || isHelp(args[0]) {
 		printStandaloneHelp(stdout)
 		return 0
@@ -64,9 +69,11 @@ func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) in
 		}
 		return 0
 	case "add":
-		return runAdd(ctx, workDir, args[1:], stdout, stderr)
+		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr)
 	case "link":
 		return runLink(ctx, workDir, args[1:], stdout, stderr)
+	case "tag":
+		return runTag(ctx, workDir, args[1:], stdout, stderr)
 	case "seal":
 		return runSeal(ctx, workDir, args[1:], stdout, stderr)
 	case "show":
@@ -90,7 +97,7 @@ func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) in
 	}
 }
 
-func runAdd(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		return usageError(stderr, "add requires exactly one REF")
 	}
@@ -98,8 +105,10 @@ func runAdd(ctx context.Context, workDir string, args []string, stdout, stderr i
 	flags := flag.NewFlagSet("add", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	var content trackedString
+	var contentFile trackedString
 	var depends stringList
 	flags.Var(&content, "content", "exact content bytes supplied as a command argument")
+	flags.Var(&contentFile, "content-file", "read exact content bytes from a regular file, or '-' for stdin")
 	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
 	root := flags.Bool("root", false, "declare a provenance root")
 	draft := flags.Bool("draft", false, "mark the candidate draft")
@@ -109,10 +118,18 @@ func runAdd(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if flags.NArg() != 0 {
 		return usageError(stderr, "add accepts exactly one REF; unexpected argument %q", flags.Arg(0))
 	}
-	if !content.set {
-		return usageError(stderr, "add requires --content")
+	if content.set == contentFile.set {
+		return usageError(stderr, "add requires exactly one of --content or --content-file")
 	}
-	dependencies, err := parseDependencies(depends)
+	contentBytes := []byte(content.value)
+	if contentFile.set {
+		var err error
+		contentBytes, err = readContentInput(workDir, contentFile.value, stdin)
+		if err != nil {
+			return usageError(stderr, "invalid --content-file: %v", err)
+		}
+	}
+	dependencies, err := parseDependencies(depends, "")
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -120,12 +137,41 @@ func runAdd(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
-	candidate, err := repo.Add(ctx, repository.AddOptions{REF: ref, Content: []byte(content.value), Dependencies: dependencies, Root: *root, Draft: *draft})
+	candidate, err := repo.Add(ctx, repository.AddOptions{REF: ref, Content: contentBytes, Dependencies: dependencies, Root: *root, Draft: *draft})
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
 	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
 	return 0
+}
+
+func readContentInput(workDir, source string, stdin io.Reader) ([]byte, error) {
+	if source == "-" {
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("read stdin: %w", err)
+		}
+		return data, nil
+	}
+	if source == "" {
+		return nil, fmt.Errorf("path is empty")
+	}
+	path := source
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(workDir, path)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %q: %w", source, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%q is not a regular non-symlink file", source)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %q: %w", source, err)
+	}
+	return data, nil
 }
 
 func runLink(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -137,6 +183,8 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	flags.SetOutput(stderr)
 	var depends stringList
 	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
+	var message trackedString
+	flags.Var(&message, "m", "optional rationale for each dependency in this invocation")
 	if err := flags.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -146,7 +194,7 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if len(depends) == 0 {
 		return usageError(stderr, "link requires at least one --depend-on")
 	}
-	dependencies, err := parseDependencies(depends)
+	dependencies, err := parseDependencies(depends, message.value)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -159,6 +207,39 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return commandError(stderr, "link", err)
 	}
 	fmt.Fprintf(stdout, "CANDIDATE %s dependencies=%d\n", candidate.REF, len(candidate.Links))
+	return 0
+}
+
+func runTag(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 && len(args) != 2 {
+		return usageError(stderr, "tag requires REF [TAGNAME] or REF@SEAL_OR_TAG TAGNAME")
+	}
+	ref, revision, err := repository.ParseSelector(args[0])
+	if err != nil {
+		return usageError(stderr, "invalid tag selector: %v", err)
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "tag", err)
+	}
+	if len(args) == 1 {
+		if revision != "" {
+			return usageError(stderr, "tag listing requires a logical REF without @TOKEN")
+		}
+		tags, err := repo.ListTags(ctx, ref)
+		if err != nil {
+			return commandError(stderr, "tag", err)
+		}
+		for _, tag := range tags {
+			fmt.Fprintf(stdout, "%s %s\n", tag.Name, tag.Seal)
+		}
+		return 0
+	}
+	id, err := repo.CreateTag(ctx, ref, revision, args[1])
+	if err != nil {
+		return commandError(stderr, "tag", err)
+	}
+	fmt.Fprintf(stdout, "TAGGED %s@%s %s\n", ref, args[1], id)
 	return 0
 }
 
@@ -199,7 +280,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if len(args) != 1 {
 		return usageError(stderr, "show requires exactly one REF or REF@SEAL")
 	}
-	ref, explicit, err := repository.ParseSelector(args[0])
+	ref, revision, err := repository.ParseSelector(args[0])
 	if err != nil {
 		return usageError(stderr, "invalid selector: %v", err)
 	}
@@ -207,7 +288,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "show", err)
 	}
-	result, err := repo.Show(ctx, ref, explicit)
+	result, err := repo.Show(ctx, ref, revision)
 	if err != nil {
 		return commandError(stderr, "show", err)
 	}
@@ -219,7 +300,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	}
 	fmt.Fprintf(stdout, "CONTENT %s\n%s\nMESSAGE %s\nROOT %t\nDRAFT %t\nCREATED_AT %s\nDEPENDENCIES %d\n", result.Payload.Content.ID, result.Content, result.Payload.Message, result.Payload.Root, result.Payload.Draft, result.Payload.CreatedAt, len(result.Payload.Links))
 	for _, link := range result.Payload.Links {
-		fmt.Fprintf(stdout, "  %s %s@%s\n", link.Relation, link.TargetREF, link.TargetSeal)
+		fmt.Fprintf(stdout, "  depend-on %s@%s message=%q\n", link.TargetREF, link.TargetSeal, link.Message)
 	}
 	return 0
 }
@@ -228,11 +309,11 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if len(args) != 1 {
 		return usageError(stderr, "log requires exactly one current logical REF")
 	}
-	ref, explicit, err := repository.ParseSelector(args[0])
+	ref, revision, err := repository.ParseSelector(args[0])
 	if err != nil {
 		return usageError(stderr, "invalid log REF: %v", err)
 	}
-	if explicit != nil {
+	if revision != "" {
 		return usageError(stderr, "log starts from a current logical REF, not REF@SEAL; use show for one historical generation")
 	}
 	repo, err := repository.OpenStandalone(workDir, nil)
@@ -251,11 +332,11 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	if len(args) == 0 {
 		return usageError(stderr, "linklog requires exactly one current logical REF")
 	}
-	ref, explicit, err := repository.ParseSelector(args[0])
+	ref, revision, err := repository.ParseSelector(args[0])
 	if err != nil {
 		return usageError(stderr, "invalid linklog REF: %v", err)
 	}
-	if explicit != nil {
+	if revision != "" {
 		return usageError(stderr, "linklog starts from a current logical REF, not REF@SEAL")
 	}
 	flags := flag.NewFlagSet("linklog", flag.ContinueOnError)
@@ -284,42 +365,50 @@ func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return usageError(stderr, "diff requires one current REF or two explicit REF@SEAL generations")
 	}
 	var ref string
-	var fromID, toID *domain.ObjectID
+	var fromRevision, toRevision string
 	if len(args) == 1 {
-		parsedREF, explicit, err := repository.ParseSelector(args[0])
+		parsedREF, revision, err := repository.ParseSelector(args[0])
 		if err != nil {
 			return usageError(stderr, "invalid diff REF: %v", err)
 		}
-		if explicit != nil {
+		if revision != "" {
 			return usageError(stderr, "one-argument diff requires a current logical REF without @SEAL; provide two explicit selectors to compare historical generations")
 		}
 		ref = parsedREF
 	} else {
-		fromREF, parsedFromID, err := repository.ParseSelector(args[0])
+		fromREF, parsedFromRevision, err := repository.ParseSelector(args[0])
 		if err != nil {
 			return usageError(stderr, "invalid older diff selector: %v", err)
 		}
-		toREF, parsedToID, err := repository.ParseSelector(args[1])
+		toREF, parsedToRevision, err := repository.ParseSelector(args[1])
 		if err != nil {
 			return usageError(stderr, "invalid newer diff selector: %v", err)
 		}
-		if parsedFromID == nil || parsedToID == nil {
+		if parsedFromRevision == "" || parsedToRevision == "" {
 			return usageError(stderr, "two-argument diff requires two explicit REF@SEAL selectors; current HEAD shorthand is only available as 'diff REF'")
 		}
 		if fromREF != toREF {
 			return usageError(stderr, "diff compares generations of one logical REF; got %s and %s", fromREF, toREF)
 		}
-		ref, fromID, toID = fromREF, parsedFromID, parsedToID
+		ref, fromRevision, toRevision = fromREF, parsedFromRevision, parsedToRevision
 	}
 	repo, err := repository.OpenStandalone(workDir, nil)
 	if err != nil {
 		return commandError(stderr, "diff", err)
 	}
 	var result history.SealDiff
-	if fromID == nil {
+	if fromRevision == "" {
 		result, err = repo.DiffCurrent(ctx, ref)
 	} else {
-		result, err = repo.DiffExact(ctx, ref, *fromID, *toID)
+		fromID, resolveErr := repo.ResolveSealID(ctx, ref, fromRevision)
+		if resolveErr != nil {
+			return commandError(stderr, "diff", resolveErr)
+		}
+		toID, resolveErr := repo.ResolveSealID(ctx, ref, toRevision)
+		if resolveErr != nil {
+			return commandError(stderr, "diff", resolveErr)
+		}
+		result, err = repo.DiffExact(ctx, ref, fromID, toID)
 	}
 	if err != nil {
 		return commandError(stderr, "diff", err)
@@ -340,7 +429,7 @@ func printLog(stdout io.Writer, ref string, entries []history.Entry) {
 		fmt.Fprintf(stdout, "  CONTENT %s\n", formatContentRef(entry.Payload.Content))
 		fmt.Fprintf(stdout, "  DEPENDENCIES %d\n", len(entry.Payload.Links))
 		for _, link := range entry.Payload.Links {
-			fmt.Fprintf(stdout, "    %s %s@%s\n", link.Relation, link.TargetREF, link.TargetSeal)
+			fmt.Fprintf(stdout, "    depend-on %s@%s message=%q\n", link.TargetREF, link.TargetSeal, link.Message)
 		}
 	}
 }
@@ -402,11 +491,13 @@ func printSealDiff(stdout io.Writer, diff history.SealDiff) {
 func printLinkChange(stdout io.Writer, prefix string, change history.LinkChange) {
 	switch change.Kind {
 	case history.LinkAdd:
-		fmt.Fprintf(stdout, "%sADD %s %s new=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.AfterSeal))
+		fmt.Fprintf(stdout, "%sADD %s new=%s message=%q\n", prefix, change.TargetREF, formatOptionalObjectID(change.AfterSeal), change.AfterMessage)
 	case history.LinkRemove:
-		fmt.Fprintf(stdout, "%sREMOVE %s %s old=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.BeforeSeal))
+		fmt.Fprintf(stdout, "%sREMOVE %s old=%s message=%q\n", prefix, change.TargetREF, formatOptionalObjectID(change.BeforeSeal), change.BeforeMessage)
 	case history.LinkRepoint:
-		fmt.Fprintf(stdout, "%sREPOINT %s %s old=%s new=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.BeforeSeal), formatOptionalObjectID(change.AfterSeal))
+		fmt.Fprintf(stdout, "%sREPOINT %s old=%s new=%s\n", prefix, change.TargetREF, formatOptionalObjectID(change.BeforeSeal), formatOptionalObjectID(change.AfterSeal))
+	case history.LinkMessage:
+		fmt.Fprintf(stdout, "%sMESSAGE_CHANGE %s old=%q new=%q\n", prefix, change.TargetREF, change.BeforeMessage, change.AfterMessage)
 	}
 }
 
@@ -496,11 +587,11 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	if len(args) != 1 {
 		return usageError(stderr, "impact requires exactly one current REF")
 	}
-	ref, explicit, err := repository.ParseSelector(args[0])
+	ref, revision, err := repository.ParseSelector(args[0])
 	if err != nil {
 		return usageError(stderr, "invalid impact REF: %v", err)
 	}
-	if explicit != nil {
+	if revision != "" {
 		return usageError(stderr, "impact accepts a logical REF, not a historical REF@SEAL selector")
 	}
 	repo, err := repository.OpenStandalone(workDir, nil)
@@ -553,7 +644,7 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 			if !link.Link.TargetSeal.Equal(link.CurrentHead) {
 				state = "HISTORICAL head=" + link.CurrentHead.String()
 			}
-			fmt.Fprintf(stdout, "  %s %s@%s %s\n", link.Link.Relation, link.Link.TargetREF, link.Link.TargetSeal, state)
+			fmt.Fprintf(stdout, "  depend-on %s@%s %s message=%q\n", link.Link.TargetREF, link.Link.TargetSeal, state, link.Link.Message)
 		}
 	}
 	return 0
@@ -602,17 +693,17 @@ func formatSealPath(path []graph.SealIdentity) string {
 	return formatRepositoryPath(makePathIdentities(path))
 }
 
-func parseDependencies(values []string) ([]repository.Dependency, error) {
+func parseDependencies(values []string, message string) ([]repository.Dependency, error) {
 	if values == nil {
 		return nil, nil
 	}
 	dependencies := make([]repository.Dependency, 0, len(values))
 	for _, value := range values {
-		ref, seal, err := repository.ParseSelector(value)
+		ref, revision, err := repository.ParseSelector(value)
 		if err != nil {
 			return nil, fmt.Errorf("invalid --depend-on %q: %w", value, err)
 		}
-		dependencies = append(dependencies, repository.Dependency{REF: ref, Seal: seal})
+		dependencies = append(dependencies, repository.Dependency{REF: ref, Revision: revision, Message: message})
 	}
 	return dependencies, nil
 }
@@ -648,8 +739,10 @@ func printStandaloneHelp(w io.Writer) {
 
 Usage:
   sealgraph init
-  sealgraph add REF --content CONTENT [--root] [--draft] [--depend-on REF[@SEAL]]...
-  sealgraph link REF --depend-on REF[@SEAL]...
+  sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--root] [--draft] [--depend-on REF[@SEAL_OR_TAG]]...
+  sealgraph link REF --depend-on REF[@SEAL_OR_TAG]... [-m LINK_MESSAGE]
+  sealgraph tag REF [TAGNAME]
+  sealgraph tag REF@SEAL_OR_TAG TAGNAME
   sealgraph seal REF -m MESSAGE
   sealgraph show REF[@SEAL]
   sealgraph log REF

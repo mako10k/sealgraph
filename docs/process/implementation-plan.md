@@ -57,6 +57,17 @@ inspection work and do not block the initial tracked manifest exercise.
 This slice adds no persisted fields and no Git history/reflog semantics. Content
 diff is identity-based and does not print arbitrary blob bytes.
 
+## Experimental native v2 and decision dogfood
+
+- replace algorithm-tagged native IDs with full 64-character hex IDs
+- resolve user selectors through repository-wide unique prefixes or REF-scoped
+  immutable tags
+- keep Git-compatible SHA-256 loose blob objects
+- remove the redundant persisted link kind and add optional hash-committed link
+  rationale
+- reject format 1 rather than add a compatibility reader or automatic migration
+- regenerate tracked dogfood state and seal ADR 0006 after validation
+
 ## Phase 3 — attachments
 
 - attachment blob import

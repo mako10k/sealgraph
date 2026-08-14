@@ -71,3 +71,21 @@ step S12:
 
 pending PD3:
   "Git sidecar が Git blob/tree/commit のどの単位を content source として first-class に扱うかを確定する"
+
+problem P6:
+  "実験段階の native ID と human alias を単純化しつつ Git ODB 互換性を保てるか"
+
+step S13:
+  premise PR6:
+    "native repository の object format は config で SHA-256 に固定されるため、各 ID の algorithm tag は重複情報である"
+
+step S14:
+  evidence EV3:
+    "Git は full hex object name と repository 内で一意な prefix、full object ID を持つ loose ref file を利用する"
+
+step S15:
+  decision D6 based_on P6, PR6, EV3:
+    |
+      native v2 は full-hex canonical ID、4文字以上の unique prefix、
+      REF-scoped immutable tag を採用し、format 1 compatibility は持たない。
+      link kind は defer し、dependency edge には hash 対象 message を許可する

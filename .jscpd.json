@@ -1,0 +1,10 @@
+{
+  "minTokens": 80,
+  "minLines": 10,
+  "maxSize": "1mb",
+  "mode": "mild",
+  "format": ["go"],
+  "ignorePattern": ["bin/**", "dist/**", ".sealgraph/**"],
+  "reporters": ["console"],
+  "threshold": 0.1
+}

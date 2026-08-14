@@ -47,7 +47,7 @@ func (s *RefStore) Resolve(ctx context.Context, ref string) (domain.ObjectID, er
 		return domain.ObjectID{}, fmt.Errorf("read REF %s: %w", ref, err)
 	}
 	if len(data) == 0 || data[len(data)-1] != '\n' || bytesCount(data, '\n') != 1 {
-		return domain.ObjectID{}, fmt.Errorf("REF %s file is corrupt; expected one tagged object ID followed by LF", ref)
+		return domain.ObjectID{}, fmt.Errorf("REF %s file is corrupt; expected one full object ID followed by LF", ref)
 	}
 	id, err := domain.ParseObjectID(string(data[:len(data)-1]))
 	if err != nil {

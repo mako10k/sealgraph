@@ -24,6 +24,7 @@ type Repository struct {
 	dir        string
 	objects    *native.ObjectStore
 	refs       *native.RefStore
+	tags       *native.TagStore
 	candidates candidateStore
 	clock      Clock
 }
@@ -40,14 +41,16 @@ func OpenStandalone(workDir string, clock Clock) (*Repository, error) {
 		dir:        dir,
 		objects:    native.NewObjectStore(dir),
 		refs:       native.NewRefStore(dir),
+		tags:       native.NewTagStore(dir),
 		candidates: candidateStore{root: filepath.Join(dir, "index")},
 		clock:      clock,
 	}, nil
 }
 
 type Dependency struct {
-	REF  string
-	Seal *domain.ObjectID
+	REF      string
+	Revision string
+	Message  string
 }
 
 type AddOptions struct {
@@ -156,17 +159,18 @@ func (r *Repository) resolveDependencies(ctx context.Context, dependencies []Dep
 			return nil, fmt.Errorf("invalid dependency REF %q: %w", dependency.REF, err)
 		}
 		var id domain.ObjectID
-		if dependency.Seal == nil {
+		if dependency.Revision == "" {
 			resolved, err := r.refs.Resolve(ctx, dependency.REF)
 			if err != nil {
 				return nil, fmt.Errorf("resolve dependency %s HEAD: %w; seal that REF first or select an existing REF", dependency.REF, err)
 			}
 			id = resolved
 		} else {
-			id = *dependency.Seal
-			if err := id.ValidateNative(); err != nil {
-				return nil, fmt.Errorf("dependency %s has invalid seal ID: %w", dependency.REF, err)
+			resolved, err := r.ResolveSealID(ctx, dependency.REF, dependency.Revision)
+			if err != nil {
+				return nil, fmt.Errorf("resolve dependency %s@%s: %w", dependency.REF, dependency.Revision, err)
 			}
+			id = resolved
 			if _, err := r.refs.Resolve(ctx, dependency.REF); err != nil {
 				return nil, fmt.Errorf("explicit historical dependency %s has no readable current HEAD: %w; restore the REF or select another dependency", dependency.REF, err)
 			}
@@ -178,7 +182,7 @@ func (r *Repository) resolveDependencies(ctx context.Context, dependencies []Dep
 		if seal.REF != dependency.REF {
 			return nil, fmt.Errorf("seal %s belongs to REF %s, not requested dependency %s", id, seal.REF, dependency.REF)
 		}
-		links = append(links, domain.Link{Relation: domain.DependOn, TargetREF: dependency.REF, TargetSeal: id})
+		links = append(links, domain.Link{TargetREF: dependency.REF, TargetSeal: id, Message: dependency.Message})
 	}
 	normalized, err := domain.NormalizeLinks(links)
 	if err != nil {
@@ -343,19 +347,13 @@ type ShowResult struct {
 	Content []byte
 }
 
-func (r *Repository) Show(ctx context.Context, ref string, explicit *domain.ObjectID) (ShowResult, error) {
+func (r *Repository) Show(ctx context.Context, ref, revision string) (ShowResult, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return ShowResult{}, err
 	}
-	id := domain.ObjectID{}
-	if explicit == nil {
-		resolved, err := r.refs.Resolve(ctx, ref)
-		if err != nil {
-			return ShowResult{}, fmt.Errorf("resolve REF %s: %w", ref, err)
-		}
-		id = resolved
-	} else {
-		id = *explicit
+	id, err := r.ResolveSealID(ctx, ref, revision)
+	if err != nil {
+		return ShowResult{}, err
 	}
 	payload, err := r.LoadSeal(ctx, id)
 	if err != nil {
@@ -563,18 +561,84 @@ func (r *Repository) Impact(ctx context.Context, sourceREF string) (domain.Objec
 	return sourceHead, impacts, nil
 }
 
-func ParseSelector(text string) (string, *domain.ObjectID, error) {
-	if index := strings.LastIndexByte(text, '@'); index > 0 && index < len(text)-1 {
-		if id, err := domain.ParseObjectID(text[index+1:]); err == nil {
-			ref := text[:index]
-			if err := domain.ValidateREF(ref); err != nil {
-				return "", nil, err
-			}
-			return ref, &id, nil
+func ParseSelector(text string) (string, string, error) {
+	if index := strings.LastIndexByte(text, '@'); index >= 0 {
+		if index == 0 || index == len(text)-1 {
+			return "", "", fmt.Errorf("selector %q must be REF@TOKEN", text)
 		}
+		ref, revision := text[:index], text[index+1:]
+		if err := domain.ValidateREF(ref); err != nil {
+			return "", "", err
+		}
+		if !domain.IsObjectPrefix(revision) {
+			if err := domain.ValidateTagName(revision); err != nil {
+				return "", "", fmt.Errorf("invalid selector token: %w", err)
+			}
+		}
+		return ref, revision, nil
 	}
 	if err := domain.ValidateREF(text); err != nil {
-		return "", nil, err
+		return "", "", err
 	}
-	return text, nil, nil
+	return text, "", nil
+}
+
+// ResolveSealID resolves current HEAD, a unique object prefix, or a REF-scoped
+// immutable tag and validates that the result is a canonical seal owned by ref.
+func (r *Repository) ResolveSealID(ctx context.Context, ref, revision string) (domain.ObjectID, error) {
+	if err := domain.ValidateREF(ref); err != nil {
+		return domain.ObjectID{}, err
+	}
+	var id domain.ObjectID
+	var err error
+	switch {
+	case revision == "":
+		id, err = r.refs.Resolve(ctx, ref)
+	case domain.IsObjectPrefix(revision):
+		id, err = r.objects.ResolvePrefix(ctx, revision)
+	default:
+		if validateErr := domain.ValidateTagName(revision); validateErr != nil {
+			return domain.ObjectID{}, validateErr
+		}
+		id, err = r.tags.Resolve(ctx, ref, revision)
+	}
+	if err != nil {
+		return domain.ObjectID{}, fmt.Errorf("resolve %s selector %q: %w", ref, revision, err)
+	}
+	payload, err := r.LoadSeal(ctx, id)
+	if err != nil {
+		return domain.ObjectID{}, fmt.Errorf("resolved object %s is not a canonical seal: %w", id, err)
+	}
+	if payload.REF != ref {
+		return domain.ObjectID{}, fmt.Errorf("seal %s belongs to REF %s, not %s", id, payload.REF, ref)
+	}
+	return id, nil
+}
+
+func (r *Repository) CreateTag(ctx context.Context, ref, revision, name string) (domain.ObjectID, error) {
+	id, err := r.ResolveSealID(ctx, ref, revision)
+	if err != nil {
+		return domain.ObjectID{}, err
+	}
+	if err := r.tags.Create(ctx, ref, name, id); err != nil {
+		return domain.ObjectID{}, err
+	}
+	return id, nil
+}
+
+func (r *Repository) ListTags(ctx context.Context, ref string) ([]store.Tag, error) {
+	if _, err := r.refs.Resolve(ctx, ref); err != nil {
+		return nil, fmt.Errorf("resolve tag scope %s: %w", ref, err)
+	}
+	tags, err := r.tags.List(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	for _, tag := range tags {
+		payload, err := r.LoadSeal(ctx, tag.Seal)
+		if err != nil || payload.REF != ref {
+			return nil, fmt.Errorf("tag %s@%s does not target a readable seal owned by its REF", ref, tag.Name)
+		}
+	}
+	return tags, nil
 }

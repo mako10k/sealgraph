@@ -40,7 +40,7 @@ Do not silently resolve a material specification conflict. Record it in an ADR o
 - Attachments are immutable blobs included by identity in the seal.
 - Standalone canonical storage uses `.sealgraph/` only.
 - Standalone object storage should remain low-level Git-compatible where practical, but Git repository semantics are NOT part of the standalone contract.
-- Avoid canonical pack files / packed refs in v1. Keep immutable loose objects and one mutable ref per file so an outer Git repository can merge `.sealgraph/` predictably.
+- Avoid canonical pack files / packed refs. Keep immutable loose objects and one mutable ref per file so an outer Git repository can merge `.sealgraph/` predictably.
 - `merge`, `rebase`, `checkout`, `branch`, and `cherry-pick` are not sealgraph core concepts.
 - Git-sidecar conflict tooling may offer three-way inspection/resolution assistance, but MUST NOT fabricate semantic approval or silently create seals.
 
@@ -67,7 +67,12 @@ Run before completing a code change:
 gofmt -w .
 go vet ./...
 go test ./...
+npm ci
+npm run clone-check
 ```
+
+The pinned jscpd dependency is development tooling only. It MUST NOT become a
+sealgraph runtime dependency.
 
 If Git integration is changed, also add/run focused integration tests with temporary repositories.
 

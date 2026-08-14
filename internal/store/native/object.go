@@ -29,7 +29,7 @@ func NewObjectStore(repositoryDir string) *ObjectStore {
 func ObjectID(data []byte) domain.ObjectID {
 	envelope := envelope(data)
 	digest := sha256.Sum256(envelope)
-	return domain.ObjectID{Algorithm: domain.NativeAlgorithm, Hex: fmt.Sprintf("%x", digest)}
+	return domain.ObjectID{Hex: fmt.Sprintf("%x", digest)}
 }
 
 func (s *ObjectStore) WriteBlob(ctx context.Context, data []byte) (domain.ObjectID, error) {
@@ -123,13 +123,72 @@ func (s *ObjectStore) ReadObject(ctx context.Context, id domain.ObjectID) (store
 	digest := sha256.Sum256(uncompressed)
 	actual := fmt.Sprintf("%x", digest)
 	if actual != id.Hex {
-		return store.Object{}, fmt.Errorf("object %s hash mismatch: content hashes to sha256:%s; restore the expected immutable object explicitly", id, actual)
+		return store.Object{}, fmt.Errorf("object %s hash mismatch: content hashes to %s; restore the expected immutable object explicitly", id, actual)
 	}
 	typeName, data, err := parseEnvelope(uncompressed)
 	if err != nil {
 		return store.Object{}, fmt.Errorf("object %s is corrupt: %w", id, err)
 	}
 	return store.Object{ID: id, Type: typeName, Data: data}, nil
+}
+
+// ResolvePrefix resolves a 4-to-64-character lower-case hex object name across
+// the native loose ODB. It resolves names only; callers must still read and
+// validate the matched object's semantic type.
+func (s *ObjectStore) ResolvePrefix(ctx context.Context, prefix string) (domain.ObjectID, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.ObjectID{}, err
+	}
+	if !domain.IsObjectPrefix(prefix) {
+		return domain.ObjectID{}, fmt.Errorf("object prefix %q must be 4 to 64 lower-case hexadecimal characters", prefix)
+	}
+	entries, err := os.ReadDir(s.objectsDir)
+	if err != nil {
+		return domain.ObjectID{}, fmt.Errorf("read object store: %w", err)
+	}
+	var match string
+	for _, fanout := range entries {
+		if err := ctx.Err(); err != nil {
+			return domain.ObjectID{}, err
+		}
+		name := fanout.Name()
+		if len(name) != 2 || !isLowerHex(name) || !strings.HasPrefix(name, prefix[:min(len(prefix), 2)]) {
+			continue
+		}
+		if fanout.Type()&os.ModeSymlink != 0 || !fanout.IsDir() {
+			return domain.ObjectID{}, fmt.Errorf("object fanout %s is not a real directory", name)
+		}
+		files, err := os.ReadDir(filepath.Join(s.objectsDir, name))
+		if err != nil {
+			return domain.ObjectID{}, fmt.Errorf("read object fanout %s: %w", name, err)
+		}
+		for _, file := range files {
+			full := name + file.Name()
+			if len(full) != 64 || !isLowerHex(full) || !strings.HasPrefix(full, prefix) {
+				continue
+			}
+			if file.Type()&os.ModeSymlink != 0 || !file.Type().IsRegular() {
+				return domain.ObjectID{}, fmt.Errorf("object path %s is not a regular file", full)
+			}
+			if match != "" && match != full {
+				return domain.ObjectID{}, fmt.Errorf("%w %q; use more hexadecimal characters", store.ErrAmbiguousObjectPrefix, prefix)
+			}
+			match = full
+		}
+	}
+	if match == "" {
+		return domain.ObjectID{}, fmt.Errorf("%w: prefix %s", store.ErrObjectNotFound, prefix)
+	}
+	return domain.ObjectID{Hex: match}, nil
+}
+
+func isLowerHex(text string) bool {
+	for _, c := range text {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ObjectStore) objectPath(id domain.ObjectID) string {

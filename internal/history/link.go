@@ -12,16 +12,18 @@ const (
 	LinkAdd     LinkChangeKind = "ADD"
 	LinkRemove  LinkChangeKind = "REMOVE"
 	LinkRepoint LinkChangeKind = "REPOINT"
+	LinkMessage LinkChangeKind = "MESSAGE_CHANGE"
 )
 
 // LinkChange is a semantic dependency change from an older seal state to a
 // newer seal state. Before and After are concrete seal identities.
 type LinkChange struct {
-	Kind       LinkChangeKind
-	Relation   string
-	TargetREF  string
-	BeforeSeal *domain.ObjectID
-	AfterSeal  *domain.ObjectID
+	Kind          LinkChangeKind
+	TargetREF     string
+	BeforeSeal    *domain.ObjectID
+	AfterSeal     *domain.ObjectID
+	BeforeMessage string
+	AfterMessage  string
 }
 
 // LinkLogEntry records the link transition from an entry's parent to that
@@ -32,23 +34,20 @@ type LinkLogEntry struct {
 	Changes []LinkChange
 }
 
-// DiffLinks derives add, remove, and repoint events in deterministic
-// relation/target-REF order.
+// DiffLinks derives add, remove, repoint, and message events in deterministic
+// target-REF order.
 func DiffLinks(before, after []domain.Link) []LinkChange {
-	type linkKey struct {
-		relation  string
-		targetREF string
-	}
+	type linkKey string
 	beforeByKey := make(map[linkKey]domain.Link, len(before))
 	afterByKey := make(map[linkKey]domain.Link, len(after))
 	keys := make(map[linkKey]bool, len(before)+len(after))
 	for _, link := range before {
-		key := linkKey{relation: link.Relation, targetREF: link.TargetREF}
+		key := linkKey(link.TargetREF)
 		beforeByKey[key] = link
 		keys[key] = true
 	}
 	for _, link := range after {
-		key := linkKey{relation: link.Relation, targetREF: link.TargetREF}
+		key := linkKey(link.TargetREF)
 		afterByKey[key] = link
 		keys[key] = true
 	}
@@ -56,12 +55,7 @@ func DiffLinks(before, after []domain.Link) []LinkChange {
 	for key := range keys {
 		ordered = append(ordered, key)
 	}
-	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].relation != ordered[j].relation {
-			return ordered[i].relation < ordered[j].relation
-		}
-		return ordered[i].targetREF < ordered[j].targetREF
-	})
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
 
 	var changes []LinkChange
 	for _, key := range ordered {
@@ -70,13 +64,18 @@ func DiffLinks(before, after []domain.Link) []LinkChange {
 		switch {
 		case !hadBefore && hasAfter:
 			afterID := newLink.TargetSeal
-			changes = append(changes, LinkChange{Kind: LinkAdd, Relation: key.relation, TargetREF: key.targetREF, AfterSeal: &afterID})
+			changes = append(changes, LinkChange{Kind: LinkAdd, TargetREF: string(key), AfterSeal: &afterID, AfterMessage: newLink.Message})
 		case hadBefore && !hasAfter:
 			beforeID := oldLink.TargetSeal
-			changes = append(changes, LinkChange{Kind: LinkRemove, Relation: key.relation, TargetREF: key.targetREF, BeforeSeal: &beforeID})
-		case !oldLink.TargetSeal.Equal(newLink.TargetSeal):
-			beforeID, afterID := oldLink.TargetSeal, newLink.TargetSeal
-			changes = append(changes, LinkChange{Kind: LinkRepoint, Relation: key.relation, TargetREF: key.targetREF, BeforeSeal: &beforeID, AfterSeal: &afterID})
+			changes = append(changes, LinkChange{Kind: LinkRemove, TargetREF: string(key), BeforeSeal: &beforeID, BeforeMessage: oldLink.Message})
+		default:
+			if !oldLink.TargetSeal.Equal(newLink.TargetSeal) {
+				beforeID, afterID := oldLink.TargetSeal, newLink.TargetSeal
+				changes = append(changes, LinkChange{Kind: LinkRepoint, TargetREF: string(key), BeforeSeal: &beforeID, AfterSeal: &afterID})
+			}
+			if oldLink.Message != newLink.Message {
+				changes = append(changes, LinkChange{Kind: LinkMessage, TargetREF: string(key), BeforeMessage: oldLink.Message, AfterMessage: newLink.Message})
+			}
 		}
 	}
 	return changes

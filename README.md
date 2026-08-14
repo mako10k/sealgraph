@@ -14,7 +14,7 @@ The native standalone slices implement repository creation and sealing,
 direct/transitive graph inspection, immutable seal history, link history, and
 semantic generation diff. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
-is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0005.
+is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0006.
 
 ## Two product surfaces
 
@@ -29,6 +29,9 @@ sealgraph add DESIGN-001 \
   --content 'JWT authentication design' \
   --depend-on REQ-001
 sealgraph seal DESIGN-001 -m 'Design reviewed against current requirement'
+
+sealgraph tag DESIGN-001 reviewed
+sealgraph show DESIGN-001@reviewed
 ```
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
@@ -90,6 +93,7 @@ The design is Merkle-DAG-like: a downstream seal includes direct upstream seal i
 sealgraph init
 sealgraph add
 sealgraph link
+sealgraph tag
 sealgraph seal
 sealgraph show
 sealgraph log
@@ -126,7 +130,12 @@ Requires Go 1.26+.
 ```sh
 go test ./...
 go vet ./...
+npm ci
+npm run clone-check
 ```
+
+The pinned jscpd check is development/CI tooling only; it is not a sealgraph
+runtime dependency.
 
 See:
 

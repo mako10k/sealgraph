@@ -98,7 +98,7 @@ func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) 
 
 	if _, err := repo.Add(ctx, AddOptions{
 		REF: "review/historical", Content: []byte("historical review"), Draft: true,
-		Dependencies: []Dependency{{REF: "requirements/ROOT-001", Seal: &rootV1.ID}},
+		Dependencies: []Dependency{{REF: "requirements/ROOT-001", Revision: rootV1.ID.String()}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestNormalHistoricalSealIsRejectedAndRelinkChangesIdentity(t *testing.T) {
 	}
 	rootV2 := sealRoot(t, repo, "ROOT", "two", "v2")
 
-	if _, err := repo.Add(ctx, AddOptions{REF: "NORMAL-HISTORY", Content: []byte("x"), Dependencies: []Dependency{{REF: "ROOT", Seal: &rootV1.ID}}}); err != nil {
+	if _, err := repo.Add(ctx, AddOptions{REF: "NORMAL-HISTORY", Content: []byte("x"), Dependencies: []Dependency{{REF: "ROOT", Revision: rootV1.ID.String()}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.Seal(ctx, "NORMAL-HISTORY", "not draft"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
@@ -270,12 +270,58 @@ func TestShowExplicitHistoricalSeal(t *testing.T) {
 	ctx := context.Background()
 	v1 := sealRoot(t, repo, "requirements/ROOT", "v1 bytes", "v1")
 	sealRoot(t, repo, "requirements/ROOT", "v2 bytes", "v2")
-	shown, err := repo.Show(ctx, "requirements/ROOT", &v1.ID)
+	shown, err := repo.Show(ctx, "requirements/ROOT", v1.ID.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(shown.Content) != "v1 bytes" || !shown.ID.Equal(v1.ID) {
 		t.Fatalf("historical show = %+v content=%q", shown, shown.Content)
+	}
+}
+
+func TestUniquePrefixScopedTagAndLinkMessageResolveToConcreteSeal(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	rootV1 := sealRoot(t, repo, "requirements/ROOT", "v1", "v1")
+	if _, err := repo.CreateTag(ctx, "requirements/ROOT", rootV1.ID.Hex[:12], "baseline/1.0"); err != nil {
+		t.Fatal(err)
+	}
+	rootV2 := sealRoot(t, repo, "requirements/ROOT", "v2", "v2")
+	if _, err := repo.CreateTag(ctx, "requirements/ROOT", "", "current"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, revision := range []string{rootV1.ID.Hex[:12], "baseline/1.0"} {
+		resolved, err := repo.ResolveSealID(ctx, "requirements/ROOT", revision)
+		if err != nil || !resolved.Equal(rootV1.ID) {
+			t.Fatalf("resolve %q = %s, %v, want %s", revision, resolved, err, rootV1.ID)
+		}
+	}
+	resolvedCurrent, err := repo.ResolveSealID(ctx, "requirements/ROOT", "current")
+	if err != nil || !resolvedCurrent.Equal(rootV2.ID) {
+		t.Fatalf("current tag = %s, %v, want %s", resolvedCurrent, err, rootV2.ID)
+	}
+
+	if _, err := repo.Add(ctx, AddOptions{
+		REF: "design/api", Content: []byte("design"), Draft: true,
+		Dependencies: []Dependency{{REF: "requirements/ROOT", Revision: "baseline/1.0", Message: "Reviewed against the baseline requirement"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	design, err := repo.Seal(ctx, "design/api", "historical design review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := design.Payload.Links[0]
+	if !link.TargetSeal.Equal(rootV1.ID) || link.Message != "Reviewed against the baseline requirement" {
+		t.Fatalf("persisted link = %+v", link)
+	}
+	if strings.Contains(link.TargetSeal.String(), "baseline") || len(link.TargetSeal.String()) != 64 {
+		t.Fatalf("link did not persist a concrete full ID: %s", link.TargetSeal)
+	}
+	tags, err := repo.ListTags(ctx, "requirements/ROOT")
+	if err != nil || len(tags) != 2 || tags[0].Name != "baseline/1.0" || tags[1].Name != "current" {
+		t.Fatalf("tags = %+v, %v", tags, err)
 	}
 }
 

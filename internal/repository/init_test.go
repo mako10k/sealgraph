@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	if created, err := InitStandalone(insideGit); err != nil || !created {
 		t.Fatalf("inside Git init created=%t err=%v", created, err)
 	}
-	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), "index", "locks"} {
+	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), filepath.Join("refs", "tags"), "index", "locks"} {
 		plainInfo, plainErr := os.Stat(filepath.Join(plain, ".sealgraph", relative))
 		gitInfo, gitErr := os.Stat(filepath.Join(insideGit, ".sealgraph", relative))
 		if plainErr != nil || gitErr != nil || plainInfo.IsDir() != gitInfo.IsDir() {
@@ -49,6 +50,20 @@ func TestInitRejectsUnsafeExistingRepositoryDirectory(t *testing.T) {
 	}
 	if _, err := InitStandalone(dir); err == nil {
 		t.Fatal("init accepted incomplete existing .sealgraph")
+	}
+}
+
+func TestInitRejectsFormatOneWithoutMigration(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := InitStandalone(dir); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(dir, ".sealgraph", "config")
+	if err := os.WriteFile(config, []byte("repository_format = 1\nobject_format = sha256\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InitStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
+		t.Fatalf("format-1 init error = %v", err)
 	}
 }
 

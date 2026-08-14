@@ -10,28 +10,25 @@ import (
 func NormalizeLinks(links []Link) ([]Link, error) {
 	normalized := append([]Link(nil), links...)
 	for _, link := range normalized {
-		if link.Relation != DependOn {
-			return nil, fmt.Errorf("link relation %q is not supported; expected %q", link.Relation, DependOn)
-		}
 		if err := ValidateREF(link.TargetREF); err != nil {
 			return nil, fmt.Errorf("invalid dependency REF %q: %w", link.TargetREF, err)
 		}
 		if err := link.TargetSeal.ValidateNative(); err != nil {
 			return nil, fmt.Errorf("invalid dependency %s seal: %w", link.TargetREF, err)
 		}
+		if !utf8.ValidString(link.Message) {
+			return nil, fmt.Errorf("dependency %s message is not valid UTF-8", link.TargetREF)
+		}
 	}
 	sort.Slice(normalized, func(i, j int) bool {
 		a, b := normalized[i], normalized[j]
-		if a.Relation != b.Relation {
-			return a.Relation < b.Relation
-		}
 		if a.TargetREF != b.TargetREF {
 			return a.TargetREF < b.TargetREF
 		}
-		if a.TargetSeal.Algorithm != b.TargetSeal.Algorithm {
-			return a.TargetSeal.Algorithm < b.TargetSeal.Algorithm
+		if a.TargetSeal.Hex != b.TargetSeal.Hex {
+			return a.TargetSeal.Hex < b.TargetSeal.Hex
 		}
-		return a.TargetSeal.Hex < b.TargetSeal.Hex
+		return a.Message < b.Message
 	})
 	for i := 1; i < len(normalized); i++ {
 		if normalized[i-1].TargetREF == normalized[i].TargetREF {
@@ -67,9 +64,6 @@ func NormalizeAttachments(attachments []Attachment) ([]Attachment, error) {
 		}
 		if a.Blob.Type != b.Blob.Type {
 			return a.Blob.Type < b.Blob.Type
-		}
-		if a.Blob.ID.Algorithm != b.Blob.ID.Algorithm {
-			return a.Blob.ID.Algorithm < b.Blob.ID.Algorithm
 		}
 		return a.Blob.ID.Hex < b.Blob.ID.Hex
 	})

@@ -1,6 +1,7 @@
 # ADR 0005: Native v1 canonical storage contract
 
-Status: accepted
+Status: accepted for native v1; superseded by ADR 0006 for experimental native
+v2. This ADR remains the historical record of the v1 decision.
 
 ## Context
 

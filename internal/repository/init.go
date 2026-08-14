@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-const configBytes = "repository_format = 1\nobject_format = sha256\n"
+const configBytes = "repository_format = 2\nobject_format = sha256\n"
 
 // InitStandalone initializes only workDir/.sealgraph. It never probes Git or
 // searches parent directories.
@@ -35,7 +35,7 @@ func InitStandalone(workDir string) (bool, error) {
 		return false, fmt.Errorf("create initialization staging directory: %w", err)
 	}
 	defer os.RemoveAll(staging)
-	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), "index", "locks"} {
+	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), filepath.Join("refs", "tags"), "index", "locks"} {
 		if err := os.MkdirAll(filepath.Join(staging, relative), 0o755); err != nil {
 			return false, fmt.Errorf("prepare repository layout: %w", err)
 		}
@@ -80,7 +80,7 @@ func validateCanonicalLayout(repositoryDir string) error {
 	if string(config) != configBytes {
 		return fmt.Errorf("unsupported or malformed config")
 	}
-	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals")} {
+	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals"), filepath.Join("refs", "tags")} {
 		if err := validateRealDirectory(filepath.Join(repositoryDir, relative), relative); err != nil {
 			return err
 		}

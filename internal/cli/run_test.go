@@ -9,6 +9,28 @@ import (
 	"testing"
 )
 
+type standaloneHarness struct {
+	t      *testing.T
+	dir    string
+	stdout bytes.Buffer
+	stderr bytes.Buffer
+}
+
+func newStandaloneHarness(t *testing.T) *standaloneHarness {
+	t.Helper()
+	return &standaloneHarness{t: t, dir: t.TempDir()}
+}
+
+func (h *standaloneHarness) run(args ...string) string {
+	h.t.Helper()
+	h.stdout.Reset()
+	h.stderr.Reset()
+	if code := runStandaloneAt(h.dir, args, &h.stdout, &h.stderr); code != 0 {
+		h.t.Fatalf("%v code=%d stderr=%q", args, code, h.stderr.String())
+	}
+	return h.stdout.String()
+}
+
 func TestStandaloneHelpDoesNotMentionGitDetection(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
@@ -44,28 +66,18 @@ func TestSealCommandRejectsMultipleREFs(t *testing.T) {
 }
 
 func TestStandaloneEndToEndCommands(t *testing.T) {
-	dir := t.TempDir()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	run := func(args ...string) string {
-		t.Helper()
-		out.Reset()
-		errOut.Reset()
-		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
-			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
-		}
-		return out.String()
-	}
+	harness := newStandaloneHarness(t)
+	dir, run := harness.dir, harness.run
 	run("init")
 	run("add", "requirements/ROOT", "--root", "--content", "requirement")
 	sealed := run("seal", "requirements/ROOT", "-m", "initial")
-	if !strings.Contains(sealed, "SEALED requirements/ROOT sha256:") {
+	if fields := strings.Fields(sealed); len(fields) != 3 || len(fields[2]) != 64 || strings.Contains(fields[2], ":") {
 		t.Fatalf("seal output = %q", sealed)
 	}
 	run("add", "design/api", "--content", "design", "--depend-on", "requirements/ROOT")
 	run("seal", "design/api", "-m", "reviewed")
 	shown := run("show", "design/api")
-	if !strings.Contains(shown, "CONTENT ") || !strings.Contains(shown, "\ndesign\n") || !strings.Contains(shown, "depend-on requirements/ROOT@sha256:") {
+	if !strings.Contains(shown, "CONTENT ") || !strings.Contains(shown, "\ndesign\n") || !strings.Contains(shown, "depend-on requirements/ROOT@") {
 		t.Fatalf("show output = %q", shown)
 	}
 	status := run("status")
@@ -113,18 +125,8 @@ func TestExplicitInitBootstrapsRuntimeAfterCanonicalCheckout(t *testing.T) {
 }
 
 func TestLinkCommandAcceptsExplicitHistoricalSeal(t *testing.T) {
-	dir := t.TempDir()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	run := func(args ...string) string {
-		t.Helper()
-		out.Reset()
-		errOut.Reset()
-		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
-			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
-		}
-		return out.String()
-	}
+	harness := newStandaloneHarness(t)
+	run := harness.run
 	run("init")
 	run("add", "ROOT", "--root", "--content", "v1")
 	v1Output := run("seal", "ROOT", "-m", "v1")
@@ -144,19 +146,80 @@ func TestLinkCommandAcceptsExplicitHistoricalSeal(t *testing.T) {
 	}
 }
 
-func TestGraphStaleAndImpactCommands(t *testing.T) {
-	dir := t.TempDir()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	run := func(args ...string) string {
-		t.Helper()
-		out.Reset()
-		errOut.Reset()
-		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
-			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
-		}
-		return out.String()
+func TestTagPrefixAndLinkMessageCommands(t *testing.T) {
+	harness := newStandaloneHarness(t)
+	run := harness.run
+	sealID := func(output, ref string) string {
+		return strings.TrimSpace(strings.TrimPrefix(output, "SEALED "+ref+" "))
 	}
+
+	run("init")
+	run("add", "ROOT", "--root", "--content", "v1")
+	rootV1 := sealID(run("seal", "ROOT", "-m", "v1"), "ROOT")
+	run("tag", "ROOT@"+rootV1[:12], "baseline/1.0")
+	run("add", "ROOT", "--root", "--content", "v2")
+	run("seal", "ROOT", "-m", "v2")
+	if shown := run("show", "ROOT@baseline/1.0"); !strings.Contains(shown, "SEAL "+rootV1) {
+		t.Fatalf("tag show = %q", shown)
+	}
+	if shown := run("show", "ROOT@"+rootV1[:12]); !strings.Contains(shown, "SEAL "+rootV1) {
+		t.Fatalf("prefix show = %q", shown)
+	}
+	if listed := run("tag", "ROOT"); !strings.Contains(listed, "baseline/1.0 "+rootV1) {
+		t.Fatalf("tag list = %q", listed)
+	}
+	run("add", "DESIGN", "--draft", "--content", "design", "--depend-on", "ROOT")
+	run("link", "DESIGN", "--depend-on", "ROOT@baseline/1.0", "-m", "reviewed baseline")
+	run("seal", "DESIGN", "-m", "historical design")
+	shown := run("show", "DESIGN")
+	if !strings.Contains(shown, "depend-on ROOT@"+rootV1) || !strings.Contains(shown, `message="reviewed baseline"`) {
+		t.Fatalf("link message show = %q", shown)
+	}
+}
+
+func TestAddContentFileAndStdinPreserveExactBytes(t *testing.T) {
+	fileDir := t.TempDir()
+	stdinDir := t.TempDir()
+	content := []byte{'a', 0, 'b', '\r', '\n'}
+	if err := os.WriteFile(filepath.Join(fileDir, "content.bin"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var fileOut, fileErr bytes.Buffer
+	if code := runStandaloneAt(fileDir, []string{"init"}, &fileOut, &fileErr); code != 0 {
+		t.Fatal(fileErr.String())
+	}
+	fileOut.Reset()
+	if code := runStandaloneAt(fileDir, []string{"add", "ROOT", "--root", "--content-file", "content.bin"}, &fileOut, &fileErr); code != 0 {
+		t.Fatalf("file add code=%d stderr=%q", code, fileErr.String())
+	}
+	fileID := strings.TrimPrefix(strings.Fields(fileOut.String())[2], "content=")
+
+	var stdinOut, stdinErr bytes.Buffer
+	if code := runStandaloneAt(stdinDir, []string{"init"}, &stdinOut, &stdinErr); code != 0 {
+		t.Fatal(stdinErr.String())
+	}
+	stdinOut.Reset()
+	if code := runStandaloneAtWithInput(stdinDir, []string{"add", "ROOT", "--root", "--content-file", "-"}, bytes.NewReader(content), &stdinOut, &stdinErr); code != 0 {
+		t.Fatalf("stdin add code=%d stderr=%q", code, stdinErr.String())
+	}
+	stdinID := strings.TrimPrefix(strings.Fields(stdinOut.String())[2], "content=")
+	if fileID != stdinID {
+		t.Fatalf("file content ID = %s, stdin content ID = %s", fileID, stdinID)
+	}
+
+	stdinOut.Reset()
+	stdinErr.Reset()
+	if code := runStandaloneAtWithInput(stdinDir, []string{"add", "BAD", "--content", "x", "--content-file", "-"}, strings.NewReader("x"), &stdinOut, &stdinErr); code != 2 {
+		t.Fatalf("conflicting content flags code=%d stderr=%q", code, stdinErr.String())
+	}
+	if _, err := os.Stat(filepath.Join(stdinDir, ".sealgraph", "index", "BAD")); !os.IsNotExist(err) {
+		t.Fatalf("conflicting flags created candidate: %v", err)
+	}
+}
+
+func TestGraphStaleAndImpactCommands(t *testing.T) {
+	harness := newStandaloneHarness(t)
+	run := harness.run
 	run("init")
 	run("add", "ROOT", "--root", "--content", "root v1")
 	run("seal", "ROOT", "-m", "root v1")
@@ -168,7 +231,7 @@ func TestGraphStaleAndImpactCommands(t *testing.T) {
 	run("seal", "ROOT", "-m", "root v2")
 
 	status := run("status", "LEAF")
-	if !strings.Contains(status, "LEAF STALE_TRANSITIVE") || !strings.Contains(status, "transitive path=LEAF@sha256:") || !strings.Contains(status, " -> MIDDLE@sha256:") || !strings.Contains(status, " -> ROOT@sha256:") {
+	if !strings.Contains(status, "LEAF STALE_TRANSITIVE") || !strings.Contains(status, "transitive path=LEAF@") || !strings.Contains(status, " -> MIDDLE@") || !strings.Contains(status, " -> ROOT@") {
 		t.Fatalf("transitive status output = %q", status)
 	}
 	stale := run("stale")
@@ -176,35 +239,25 @@ func TestGraphStaleAndImpactCommands(t *testing.T) {
 		t.Fatalf("stale output = %q", stale)
 	}
 	impact := run("impact", "ROOT")
-	if !strings.Contains(impact, "SOURCE ROOT@sha256:") || !strings.Contains(impact, "DIRECT MIDDLE@sha256:") || !strings.Contains(impact, "TRANSITIVE LEAF@sha256:") {
+	if !strings.Contains(impact, "SOURCE ROOT@") || !strings.Contains(impact, "DIRECT MIDDLE@") || !strings.Contains(impact, "TRANSITIVE LEAF@") {
 		t.Fatalf("impact output = %q", impact)
 	}
 	graph := run("graph")
-	if !strings.Contains(graph, "REF MIDDLE@sha256:") || !strings.Contains(graph, "STALE_DIRECT") || !strings.Contains(graph, "depend-on ROOT@sha256:") || !strings.Contains(graph, "HISTORICAL head=sha256:") {
+	if !strings.Contains(graph, "REF MIDDLE@") || !strings.Contains(graph, "STALE_DIRECT") || !strings.Contains(graph, "depend-on ROOT@") || !strings.Contains(graph, "HISTORICAL head=") {
 		t.Fatalf("graph output = %q", graph)
 	}
 
-	run("add", "team/@name", "--root", "--content", "independent root")
-	run("seal", "team/@name", "-m", "valid at-sign REF")
-	atImpact := run("impact", "team/@name")
-	if !strings.Contains(atImpact, "SOURCE team/@name@sha256:") || !strings.Contains(atImpact, "NO_IMPACT") {
-		t.Fatalf("at-sign REF impact output = %q", atImpact)
+	run("add", "team/name", "--root", "--content", "independent root")
+	run("seal", "team/name", "-m", "hierarchical REF")
+	teamImpact := run("impact", "team/name")
+	if !strings.Contains(teamImpact, "SOURCE team/name@") || !strings.Contains(teamImpact, "NO_IMPACT") {
+		t.Fatalf("hierarchical REF impact output = %q", teamImpact)
 	}
 }
 
 func TestLogLinkLogAndSemanticDiffCommandsAreReadOnly(t *testing.T) {
-	dir := t.TempDir()
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	run := func(args ...string) string {
-		t.Helper()
-		out.Reset()
-		errOut.Reset()
-		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
-			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
-		}
-		return out.String()
-	}
+	harness := newStandaloneHarness(t)
+	dir, run := harness.dir, harness.run
 	sealID := func(output, ref string) string {
 		t.Helper()
 		return strings.TrimSpace(strings.TrimPrefix(output, "SEALED "+ref+" "))
@@ -230,12 +283,12 @@ func TestLogLinkLogAndSemanticDiffCommandsAreReadOnly(t *testing.T) {
 	}
 
 	linkOutput := run("linklog", "design/api", "--upstream", "ROOT")
-	if !strings.Contains(linkOutput, "UPSTREAM ROOT") || !strings.Contains(linkOutput, "LINK_REPOINT depend-on ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(linkOutput, "LINK_ADD depend-on ROOT new="+rootV1) {
+	if !strings.Contains(linkOutput, "UPSTREAM ROOT") || !strings.Contains(linkOutput, "LINK_REPOINT ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(linkOutput, "LINK_ADD ROOT new="+rootV1) {
 		t.Fatalf("linklog output = %q", linkOutput)
 	}
 
 	diffOutput := run("diff", "design/api")
-	if !strings.Contains(diffOutput, "FROM "+designV1) || !strings.Contains(diffOutput, "TO "+designV2) || !strings.Contains(diffOutput, "CONTENT UNCHANGED") || !strings.Contains(diffOutput, "LINK_REPOINT depend-on ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(diffOutput, `MESSAGE CHANGED old="reviewed root v1" new="reviewed root v2"`) {
+	if !strings.Contains(diffOutput, "FROM "+designV1) || !strings.Contains(diffOutput, "TO "+designV2) || !strings.Contains(diffOutput, "CONTENT UNCHANGED") || !strings.Contains(diffOutput, "LINK_REPOINT ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(diffOutput, `MESSAGE CHANGED old="reviewed root v1" new="reviewed root v2"`) {
 		t.Fatalf("diff output = %q", diffOutput)
 	}
 	explicitOutput := run("diff", "design/api@"+designV1, "design/api@"+designV2)
@@ -252,10 +305,10 @@ func TestLogLinkLogAndSemanticDiffCommandsAreReadOnly(t *testing.T) {
 		t.Fatalf("read-only inspection changed repository files:\nbefore=%v\nafter=%v", before, after)
 	}
 
-	out.Reset()
-	errOut.Reset()
-	if code := runStandaloneAt(dir, []string{"diff", "ROOT@" + rootV1, "design/api@" + designV2}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "one logical REF") {
-		t.Fatalf("cross-REF diff code=%d stderr=%q", code, errOut.String())
+	harness.stdout.Reset()
+	harness.stderr.Reset()
+	if code := runStandaloneAt(dir, []string{"diff", "ROOT@" + rootV1, "design/api@" + designV2}, &harness.stdout, &harness.stderr); code != 2 || !strings.Contains(harness.stderr.String(), "one logical REF") {
+		t.Fatalf("cross-REF diff code=%d stderr=%q", code, harness.stderr.String())
 	}
 }
 

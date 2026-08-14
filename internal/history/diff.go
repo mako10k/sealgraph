@@ -76,7 +76,7 @@ func copyObjectID(id *domain.ObjectID) *domain.ObjectID {
 }
 
 // DiffSeals compares all material canonical fields between two generations of
-// the same logical REF. Schema equality follows from canonical v1 decoding.
+// the same logical REF. Schema equality follows from canonical v2 decoding.
 func DiffSeals(fromID domain.ObjectID, from domain.SealPayload, toID domain.ObjectID, to domain.SealPayload) (SealDiff, error) {
 	if from.REF != to.REF {
 		return SealDiff{}, fmt.Errorf("cannot compare seal generations from different REFs: %s and %s", from.REF, to.REF)

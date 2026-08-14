@@ -10,11 +10,11 @@ import (
 )
 
 func testID(char byte) domain.ObjectID {
-	return domain.ObjectID{Algorithm: domain.NativeAlgorithm, Hex: strings.Repeat(string(char), 64)}
+	return domain.ObjectID{Hex: strings.Repeat(string(char), 64)}
 }
 
 func testLink(ref string, id domain.ObjectID) domain.Link {
-	return domain.Link{Relation: domain.DependOn, TargetREF: ref, TargetSeal: id}
+	return domain.Link{TargetREF: ref, TargetSeal: id}
 }
 
 func TestWalkReturnsNewestFirstAndRejectsForeignParent(t *testing.T) {

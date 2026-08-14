@@ -1,10 +1,9 @@
 # Storage format
 
-Status: native v1 byte contract frozen by ADR 0005.
+Status: native v2 byte contract frozen by ADR 0006. Native v1 is intentionally
+unsupported during the pre-1.0 experimental phase.
 
 ## 1. Layout
-
-Target standalone layout:
 
 ```text
 .sealgraph/
@@ -13,8 +12,11 @@ Target standalone layout:
 │   └── aa/
 │       └── bbbbb...
 ├── refs/
-│   └── seals/
-│       └── <REF>
+│   ├── seals/
+│   │   └── <REF>
+│   └── tags/
+│       └── <REF>/
+│           └── <ENCODED_TAGNAME>
 ├── index/
 │   └── <candidate representation>
 ├── logs/       # optional/local/rebuildable, not canonical
@@ -22,273 +24,154 @@ Target standalone layout:
 └── locks/      # runtime only
 ```
 
-Canonical state is primarily:
+Canonical state is immutable objects, current seal refs, and immutable
+REF-scoped tags. Candidate/index state is mutable but unsealed. Caches, logs,
+and locks are not canonical provenance.
 
-- immutable objects,
-- current seal refs.
+An outer VCS checkout may contain only `config`, `objects`, and `refs`. Explicit
+`sealgraph init` may recreate missing empty `index` and `locks` after validating
+canonical layout; read commands never bootstrap implicitly.
 
-Candidate/index state is mutable but unsealed.
+## 2. Native object identity and Git ODB compatibility
 
-Caches/logs/locks are not canonical provenance.
-
-An outer VCS checkout may therefore contain only `config`, `objects`, and
-`refs/seals`. In that state, an explicit `sealgraph init` may create missing
-empty `index` and `locks` directories after validating the canonical layout.
-This is runtime bootstrap, not object/REF repair. Ordinary reads do not mutate
-the checkout to create them.
-
-## 2. Object compatibility goal
-
-Native objects should use a low-level Git-compatible loose-object envelope/layout where doing so does not distort sealgraph semantics.
-
-Compatibility is for:
-
-- shared object read/write primitives,
-- mature libraries,
-- forensic inspection,
-- recovery/debugging.
-
-Compatibility is NOT a promise that high-level Git commands implement sealgraph semantics.
-
-In particular, standalone does not define branch/HEAD/commit/tree meaning for seals.
-
-## 3. Hash algorithms
-
-Native v1 target:
-
-- native object IDs: SHA-256,
-- seal IDs: the native object ID of the canonical seal payload object.
-
-Git-sidecar content references preserve their source Git object identity and algorithm.
-
-Persisted identities MUST be algorithm-tagged in semantic data so SHA-1 and SHA-256 Git repositories can be represented unambiguously.
-
-Example semantic form:
-
-```json
-{
-  "algorithm": "sha256",
-  "hex": "..."
-}
-```
-
-## 4. Canonical seal payload
-
-Illustrative semantic form:
-
-```json
-{
-  "schema": "sealgraph/seal/v1",
-  "ref": "DESIGN-001",
-  "parent": {"algorithm":"sha256","hex":"..."},
-  "content": {
-    "store": "native",
-    "type": "blob",
-    "id": {"algorithm":"sha256","hex":"..."}
-  },
-  "attachments": [
-    {
-      "name": "benchmark.csv",
-      "media_type": "text/csv",
-      "blob": {
-        "store": "native",
-        "type": "blob",
-        "id": {"algorithm":"sha256","hex":"..."}
-      }
-    }
-  ],
-  "links": [
-    {
-      "relation": "depend-on",
-      "target_ref": "REQ-001",
-      "target_seal": {"algorithm":"sha256","hex":"..."}
-    }
-  ],
-  "message": "Reviewed against REQ-001 update",
-  "root": false,
-  "draft": false,
-  "created_at": "2026-08-13T22:00:00Z"
-}
-```
-
-Native v1 uses `sealgraph-canonical-json-v1`, a compact UTF-8 JSON byte
-encoding. It has no insignificant whitespace and no trailing LF. Object members
-appear in exactly this order:
-
-```text
-seal:       schema, ref, parent, content, attachments, links,
-            message, root, draft, created_at
-object id:  algorithm, hex
-content:    store, type, id
-attachment: name, media_type, blob
-link:       relation, target_ref, target_seal
-```
-
-Every member is required. `parent` is JSON `null` for the first seal; no other
-member is nullable. The schema value is exactly `sealgraph/seal/v1`.
-
-Strings must be valid UTF-8. They are emitted without Unicode normalization.
-`"`, `\`, and U+0000 through U+001F are escaped; the short JSON escapes are
-used for backspace, tab, LF, form feed, and CR, and other controls use lower-case
-`\u00xx`. Other Unicode scalar values are emitted as their original UTF-8.
-Numbers do not occur in the v1 seal payload. Booleans are `true` or `false`.
-
-Decoders MUST parse the payload, validate its semantics, re-encode it, and
-require byte-for-byte equality before accepting it as a canonical seal.
-
-## 5. Canonicalization requirements
-
-At minimum:
-
-- UTF-8,
-- deterministic map/key encoding,
-- deterministic boolean/null representation,
-- deterministic timestamp representation,
-- deterministic normalization of links,
-- deterministic normalization of attachments,
-- duplicate-link policy defined explicitly,
-- duplicate-attachment-name policy defined explicitly.
-
-For semantically unordered dependency sets, order MUST NOT change the seal identity.
-
-Canonical ordering:
-
-```text
-links: sort by (relation, target_ref, target_seal.algorithm, target_seal.hex)
-attachments: sort by (name, media_type, blob.store, blob.type,
-                      blob.id.algorithm, blob.id.hex)
-```
-
-All comparisons are bytewise ascending UTF-8 comparisons. V1 permits only one
-`depend-on` link per `target_ref`; a repeated target REF is an error rather than
-an implicit deduplication. Attachment names are unique and a repeated name is
-an error.
-
-Do not normalize user content bytes. Blob identity preserves exact bytes.
-
-`created_at` is part of the canonical payload and therefore the seal identity.
-It is UTC, truncated to a whole second, and encoded exactly as
-`YYYY-MM-DDTHH:MM:SSZ`.
-
-## 6. Native loose object bytes
-
-All native v1 objects are Git-compatible SHA-256 blob objects. Given payload
-bytes `P`, the uncompressed envelope is:
+The config fixes `object_format = sha256`. All native objects are Git-compatible
+SHA-256 loose blob objects. Given payload `P`, the uncompressed bytes are:
 
 ```text
 blob SP <base-10 byte length of P> NUL P
 ```
 
-The tagged ObjectID is:
+The ObjectID is the lower-case SHA-256 hex of those bytes with no algorithm
+prefix. The zlib-compressed envelope is stored at:
 
 ```text
-sha256:<lower-case SHA-256 of the uncompressed envelope>
+.sealgraph/objects/<first 2 hex>/<remaining 62 hex>
 ```
 
-The envelope is zlib-compressed into:
+Readers recompute the digest, validate type/length/compression, and reject
+malformed, truncated, trailing, or hash-mismatched objects. Existing corruption
+is never overwritten automatically. Seal payloads remain blob objects; Git
+commit/tag/branch semantics are not introduced.
+
+## 3. Canonical seal payload
+
+Native v2 uses `sealgraph-canonical-json-v2`: compact UTF-8 JSON with no
+insignificant whitespace or trailing LF. Illustrative semantic form:
+
+```json
+{"schema":"sealgraph/seal/v2","ref":"DESIGN-001","parent":"<64-hex-seal-id>","content":{"store":"native","type":"blob","id":"<64-hex-object-id>"},"attachments":[],"links":[{"target_ref":"REQ-001","target_seal":"<64-hex-seal-id>","message":"Reviewed requirement basis"}],"message":"Reviewed design","root":false,"draft":false,"created_at":"2026-08-14T00:00:00Z"}
+```
+
+Member order is exact:
 
 ```text
-.sealgraph/objects/<digest bytes 0..1>/<remaining digest>
+seal:       schema, ref, parent, content, attachments, links,
+            message, root, draft, created_at
+content:    store, type, id
+attachment: name, media_type, blob
+link:       target_ref, target_seal, message
 ```
 
-Object reads recompute the digest, validate the header and declared byte
-length, and reject malformed, truncated, trailing, or hash-mismatched data.
-An existing mismatched object is corruption and MUST NOT be overwritten as an
-automatic repair.
+Every member is required. `parent` is JSON `null` only for the first seal. The
+schema is exactly `sealgraph/seal/v2`. Native IDs are JSON strings containing
+exactly 64 lower-case hex characters; `sha256:` and per-ID algorithm members are
+not accepted or persisted.
 
-A seal payload is stored through the same blob envelope. Its seal ID is that
-blob ObjectID; the `sealgraph/seal/v1` schema distinguishes its semantic use.
+Strings are valid UTF-8 without Unicode normalization. JSON escaping follows
+v1: short escapes for backspace, tab, LF, form feed, and CR; other U+0000 through
+U+001F controls use lower-case `\u00xx`. Numbers do not occur. Decoders parse,
+validate, re-encode, and require byte equality.
 
-## 7. Merkle provenance
-
-A seal stores direct upstream seal identities only.
+Canonical set order uses bytewise ascending UTF-8 comparison:
 
 ```text
-A seal id = HA
-
-B payload links -> A@HA
-B seal id = HB
-
-C payload links -> B@HB
-C seal id = HC
+links:       (target_ref, target_seal, message)
+attachments: (name, media_type, blob.store, blob.type, blob.id)
 ```
 
-`HC` therefore commits transitively to `HB`, which commits to `HA`.
+There is one dependency link per target REF. Duplicate target REFs and duplicate
+attachment names are errors, never silently deduplicated. V2 has no link kind.
+Link messages may be empty, are valid UTF-8, and are part of seal identity.
 
-Do not flatten all ancestors into every downstream payload.
+Content bytes are exact. `created_at` is identity-bearing UTC whole-second time
+formatted `YYYY-MM-DDTHH:MM:SSZ`.
 
-## 8. Refs
+## 4. Merkle provenance
 
-A sealgraph logical REF is a movable name whose file contains one current seal ID.
+A seal stores only concrete full IDs of direct upstream seals. Prefixes and tags
+resolve before candidate persistence and never appear in a seal. Direct IDs
+commit transitively to the provenance DAG; ancestor lists are not flattened.
 
-Target path:
+## 5. Refs
+
+A logical REF head is stored at `.sealgraph/refs/seals/<REF>` as exactly 64
+lower-case hex characters plus LF. REFs map byte-for-byte and component-for-
+component with no cleaning, escaping, normalization, or case folding.
+
+The constructed `refs/seals/<REF>` follows `git check-ref-format` rules without
+normalization, branch shorthand, or refspec patterns. V2 additionally forbids
+`@`, reserving it as selector delimiter. One-level and hierarchical REFs are
+valid. File/directory prefix conflicts such as `design` and `design/api` are
+rejected in either creation order; intermediate directories are implicit.
+
+Ref updates use a per-REF lock, expected old value, same-directory temporary
+file, and atomic rename. CAS or lock failures are reported without repair.
+
+## 6. Unique object prefixes
+
+User seal tokens may be 4 through 64 lower-case hex characters. Resolution
+matches valid loose object names across the entire ODB. Exactly one match is
+required. The resolved object must be a canonical seal owned by the selected
+REF. Zero, ambiguous, non-seal, and foreign-REF results are errors.
+
+Canonical refs, tags, candidates, links, and command output use full IDs.
+
+## 7. Tags
+
+An immutable lightweight tag scoped by REF is stored at:
 
 ```text
-.sealgraph/refs/seals/<REF>
+.sealgraph/refs/tags/<REF>/<ENCODED_TAGNAME>
 ```
 
-Do not map logical REFs onto Git `refs/heads/*`; they are not Git branches.
+The file contains one full seal ID plus LF and must target a canonical seal
+owned by `<REF>`. Recreating the same tag/target is idempotent; retargeting is an
+error. Tags are aliases only and never persisted inside dependency links.
 
-One REF per file is deliberate to make an outer Git three-way merge produce narrow, meaningful conflicts.
+A raw TAGNAME is non-empty valid UTF-8 without ASCII control/DEL or `@`; `/` is
+allowed. Encoding operates on UTF-8 bytes: ASCII letters, digits, `-`, and `_`
+remain literal; every other byte becomes `%` plus two upper-case hex digits.
+Thus `release/1` becomes `release%2F1` and `v1.0` becomes `v1%2E0`. Raw lower-
+case hex names of length 4 through 64 are reserved for object prefixes.
 
-The native v1 logical REF grammar is defined by validating the
-constructed full refname:
+Because hierarchical REFs and tag leaves share this deliberately simple loose
+path, a tag leaf that equals the next REF path component can conflict with tags
+for a child REF. For example, tag `api` on REF `design` conflicts with the tag
+namespace for REF `design/api`. Either creation order is rejected explicitly;
+no escaping, relocation, or automatic repair is performed.
 
-```text
-git-check-ref-format-compatible("refs/seals/" + REF)
-```
+## 8. Candidate state
 
-Validation is implemented in standalone domain code and does not execute Git or
-inspect `.git`. It applies the documented `git check-ref-format` rules without
-normalization, `--branch` shorthand expansion, or refspec patterns:
+V2 candidate files use schema `sealgraph/candidate/v2`, full-hex JSON string
+IDs, and the same attachment/link representation as seals. Candidate dependency
+inputs are resolved to concrete full seal IDs immediately. Candidate base
+records the observed REF head for CAS sealing.
 
-- `/` separates non-empty hierarchy components;
-- no component begins with `.`, ends with `.lock`, or creates `.`/`..` path
-  traversal;
-- the name has no `..`, ASCII control/DEL, space, `~`, `^`, `:`, `?`, `*`, `[`,
-  backslash, or `@{`;
-- it does not begin or end with `/`, contain `//`, end with `.`, or equal `@`.
-
-One-level logical names are valid because `refs/seals/` supplies the required
-Git ref namespace components. The logical REF maps byte-for-byte and
-component-for-component below `.sealgraph/refs/seals/`; there is no escaping,
-path cleaning, Unicode normalization, or case folding. File/directory prefix
-conflicts such as `design` and `design/api` are rejected in either creation
-order. Intermediate directories are implicit namespace only and do not need a
-separate declaration. Each leaf ref file contains exactly
-`sha256:<64 lower-case hex bytes>` followed by LF.
-
-Ref mutation is compare-and-swap: the caller supplies the expected current
-value (or absence), takes a per-REF exclusive runtime lock, verifies the value,
-writes a same-directory temporary file, and atomically renames it. Lock or CAS
-failure is reported without repair.
-
-## 9. Candidate state
-
-Candidate files under `.sealgraph/index/` are mutable working state, not
-canonical provenance. They store concrete dependency seal IDs; plain
-`--depend-on REF` input is resolved before candidate persistence. Candidate
-state also records the expected base REF head so sealing can refuse a
-concurrent head change.
-
-## 10. Seal admissibility
+## 9. Seal admissibility
 
 - An explicitly declared root has no dependencies.
 - Every non-root, including a draft, has at least one dependency.
 - A draft may retain a concrete non-HEAD dependency.
-- A normal non-draft seal requires every link in its complete reachable
-  dependency closure to match that target REF's current HEAD.
-- There is no v1 generic validation bypass.
+- A normal non-draft seal requires complete reachable dependency closure HEAD
+  consistency.
+- Every v2 link participates in freshness, impact, and the Merkle DAG.
+- There is no generic validation bypass.
 
-Historical links are valid immutable data. Their non-HEAD state is derived from
-current refs and is never stored as `stale` in a seal.
+Stale remains derived from immutable seals and current REF heads and is never
+stored canonically.
 
-## 11. No canonical pack/packed refs in v1
+## 10. Experimental format boundary
 
-The v1 canonical representation should avoid:
-
-- pack/repack-driven file churn,
-- packed ref aggregation,
-- storage rewrites unrelated to semantic changes.
-
-Optimization may later exist as disposable cache or a versioned format change.
+`repository_format = 2` rejects format 1. There is no dual reader, migration,
+or compatibility switch. V2 remains loose-only: no canonical packs, packed
+refs, alternates, or object-format translation maps.

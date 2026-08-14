@@ -1,4 +1,4 @@
-// Package canonical implements the native v1 canonical seal byte contract.
+// Package canonical implements the native v2 canonical seal byte contract.
 package canonical
 
 import (
@@ -69,18 +69,18 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 		if i > 0 {
 			b = append(b, ',')
 		}
-		b = append(b, `{"relation":`...)
-		b, err = appendString(b, link.Relation)
-		if err != nil {
-			return nil, err
-		}
-		b = append(b, `,"target_ref":`...)
+		b = append(b, `{"target_ref":`...)
 		b, err = appendString(b, link.TargetREF)
 		if err != nil {
 			return nil, err
 		}
 		b = append(b, `,"target_seal":`...)
 		b, err = appendObjectID(b, link.TargetSeal)
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, `,"message":`...)
+		b, err = appendString(b, link.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -134,19 +134,10 @@ func DecodeSeal(data []byte) (domain.SealPayload, error) {
 }
 
 func appendObjectID(b []byte, id domain.ObjectID) ([]byte, error) {
-	b = append(b, `{"algorithm":`...)
-	var err error
-	b, err = appendString(b, id.Algorithm)
-	if err != nil {
+	if err := id.ValidateNative(); err != nil {
 		return nil, err
 	}
-	b = append(b, `,"hex":`...)
-	b, err = appendString(b, id.Hex)
-	if err != nil {
-		return nil, err
-	}
-	b = append(b, '}')
-	return b, nil
+	return appendString(b, id.Hex)
 }
 
 func appendContent(b []byte, content domain.ContentRef) ([]byte, error) {

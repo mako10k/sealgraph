@@ -1,0 +1,10 @@
+{
+  "name": "sealgraph-development-tools",
+  "private": true,
+  "scripts": {
+    "clone-check": "jscpd internal cmd --config .jscpd.json"
+  },
+  "devDependencies": {
+    "jscpd": "5.0.12"
+  }
+}

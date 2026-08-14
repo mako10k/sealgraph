@@ -54,6 +54,7 @@ Storage interfaces:
 - ObjectReader
 - ObjectWriter
 - RefStore
+- TagStore
 
 Native and Git-backed implementations belong below this boundary.
 
@@ -101,11 +102,13 @@ Parsing/presentation only. Domain decisions remain in repository/graph packages.
 
 Standalone uses `.sealgraph/objects`.
 
-Target v1 characteristics:
+Native v2 characteristics:
 
 - immutable loose objects,
 - Git-compatible object envelope/layout where practical,
 - SHA-256 native object identity,
+- full-hex canonical IDs with user-input unique-prefix resolution,
+- immutable REF-scoped lightweight tags,
 - no canonical packfiles,
 - no packed refs.
 

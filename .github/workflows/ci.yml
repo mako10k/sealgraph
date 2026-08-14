@@ -15,9 +15,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+      - name: Install development checks
+        run: npm ci
       - name: Format check
         run: test -z "$(gofmt -l .)"
       - name: Vet
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Clone detection
+        run: npm run clone-check

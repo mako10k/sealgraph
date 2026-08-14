@@ -38,6 +38,9 @@ milestone HISTORY_READY:
   title "Seal history and semantic diff contracts work"
   state reached
 
+milestone NATIVE_V2:
+  title "Experimental full-hex IDs, scoped tags, and link rationale work"
+
 milestone USABLE:
   title "Dogfood usability and inspection contracts work"
 
@@ -80,7 +83,11 @@ task DOGFOOD_TRACKED RUNTIME -> DOGFOOD_R1:
   duration 1p
   status done
 
-task CONTENT_INGEST DOGFOOD_R1 -> USABLE:
+task NATIVE_V2_SLICE HISTORY_READY -> NATIVE_V2:
+  title "Implement ADR 0006 and seal its dogfood provenance"
+  duration 4p
+
+task CONTENT_INGEST NATIVE_V2 -> USABLE:
   title "Add exact file input and deterministic manifests (SG-BL-001/002)"
   duration 3p
 
@@ -89,7 +96,7 @@ task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
   duration 4p
   status done
 
-task OPERATOR_CONTRACT HISTORY_READY -> USABLE:
+task OPERATOR_CONTRACT NATIVE_V2 -> USABLE:
   title "Clarify semantics and add versioned output (SG-BL-005/006/007)"
   duration 3p
 

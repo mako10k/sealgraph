@@ -10,7 +10,7 @@ import (
 )
 
 func fixtureID(char byte) domain.ObjectID {
-	return domain.ObjectID{Algorithm: domain.NativeAlgorithm, Hex: strings.Repeat(string(char), 64)}
+	return domain.ObjectID{Hex: strings.Repeat(string(char), 64)}
 }
 
 func fixturePayload() domain.SealPayload {
@@ -20,8 +20,8 @@ func fixturePayload() domain.SealPayload {
 		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('a')},
 		Attachments: []domain.Attachment{},
 		Links: []domain.Link{
-			{Relation: domain.DependOn, TargetREF: "requirements/REQ-B", TargetSeal: fixtureID('c')},
-			{Relation: domain.DependOn, TargetREF: "requirements/REQ-A", TargetSeal: fixtureID('b')},
+			{TargetREF: "requirements/REQ-B", TargetSeal: fixtureID('c'), Message: "later input"},
+			{TargetREF: "requirements/REQ-A", TargetSeal: fixtureID('b'), Message: "review basis"},
 		},
 		Message:   "Reviewed <exactly>\nline two",
 		CreatedAt: "2026-08-14T00:00:00Z",
@@ -34,7 +34,7 @@ func TestCanonicalSealFixtureHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := native.ObjectID(encoded)
-	const expected = "793b6051fd489e1b646af86b4a5f4ce0093623b4a89ed9e965dbe1d7712bf731"
+	const expected = "5405d157bdc6ec7a1a23f7f575c48c6ccbdfbb582a313395b5a4e7eee65d4b42"
 	if id.Hex != expected {
 		t.Fatalf("fixture hash = %s, want %s\npayload=%s", id.Hex, expected, encoded)
 	}
@@ -90,6 +90,16 @@ func TestDirectUpstreamAndMessageAffectSealIdentity(t *testing.T) {
 	}
 	if baseID.Equal(native.ObjectID(messageBytes)) {
 		t.Fatal("changing only message did not change seal identity")
+	}
+
+	linkMessage := fixturePayload()
+	linkMessage.Links[0].Message = "different edge rationale"
+	linkMessageBytes, err := EncodeSeal(linkMessage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseID.Equal(native.ObjectID(linkMessageBytes)) {
+		t.Fatal("changing only a link message did not change seal identity")
 	}
 
 	createdAt := fixturePayload()
@@ -150,7 +160,7 @@ func TestDecoderRejectsNonCanonicalMemberOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v1","ref":`), []byte(`{"ref":`), 1)
+	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v2","ref":`), []byte(`{"ref":`), 1)
 	if bytes.Equal(changed, encoded) {
 		t.Fatal("test setup did not alter bytes")
 	}

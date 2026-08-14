@@ -20,6 +20,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0003-git-compatible-low-level-storage.md`](adr/0003-git-compatible-low-level-storage.md)
 - [`adr/0004-git-plugin-sidecar.md`](adr/0004-git-plugin-sidecar.md)
 - [`adr/0005-native-v1-canonical-storage.md`](adr/0005-native-v1-canonical-storage.md)
+- [`adr/0006-experimental-native-v2-ids-and-tags.md`](adr/0006-experimental-native-v2-ids-and-tags.md)
 
 ## Agent-auditable design
 

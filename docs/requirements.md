@@ -60,9 +60,22 @@ Links form an N:M directed acyclic graph across seals.
 
 A persisted link MUST contain a concrete target seal identity.
 
+Native v2 has one domain-independent dependency edge and no persisted link
+kind. A link MAY carry an edge-specific message explaining why that exact
+upstream generation is a dependency. The link message is part of the seal
+identity and is distinct from the seal event message.
+
 `--depend-on UPSTREAM` is command shorthand that resolves the current HEAD at operation time. The persisted seal MUST NOT contain a dynamic HEAD pointer.
 
 The CLI MUST also support explicit historical generation selection.
+
+Native v2 accepts an exact full seal ID, a repository-wide unique hexadecimal
+prefix of at least four characters, or an immutable REF-scoped tag wherever an
+explicit seal generation is selected. Resolution MUST produce a concrete full
+seal ID before candidate or seal persistence.
+
+A tag is an immutable alias for one seal owned by one REF. It MUST NOT become a
+dynamic link, a movable branch, or a separate approval claim.
 
 ### 2.5 Root
 
@@ -201,8 +214,8 @@ A `.sealgraph` directory tracked by an outer Git repository SHOULD merge predict
 
 - immutable objects should be additive,
 - one logical REF should use one small mutable ref file,
-- canonical v1 storage should avoid pack/repack churn,
-- canonical v1 refs should avoid packed-refs-like aggregation.
+- canonical native storage should avoid pack/repack churn,
+- canonical native refs should avoid packed-refs-like aggregation.
 
 When the same logical REF advances differently on two Git branches, an outer Git merge conflict on that REF file is desirable.
 

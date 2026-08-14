@@ -38,6 +38,14 @@ github.com/go-git/go-git/v5
 
 Pin an exact stable version when added.
 
+The first SDK adoption point is the Git-sidecar `GitObjectReader`, where pack,
+alternate, repository object-format, and prefix lookup support justify a mature
+library. Native `.sealgraph/objects` keeps its small explicit loose-blob
+implementation and proves compatibility with bidirectional Git CLI conformance
+tests. Current go-git SHA-256 support requires its documented SHA-256 build
+mode; that build contract must be fixed and tested when the sidecar dependency
+is introduced.
+
 ## 2. llmthink
 
 Role: design reasoning and semantic audit, not runtime provenance storage.
@@ -126,3 +134,17 @@ sealgraph -> product provenance sealing semantics
 ```
 
 These tools should complement each other without creating circular runtime dependencies.
+
+## 6. Clone detection
+
+jscpd is pinned through `package-lock.json` and runs only as development/CI
+tooling:
+
+```sh
+npm ci
+npm run clone-check
+```
+
+The scan covers Go implementation and tests under `internal/` and `cmd/` using
+the repository `.jscpd.json`. It is not imported by, invoked by, or required at
+runtime by either sealgraph executable.

@@ -1,6 +1,8 @@
 # build
 /bin/
 /dist/
+/node_modules/
+/report/
 *.test
 coverage.out
 

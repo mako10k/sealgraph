@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,52 +9,64 @@ import (
 )
 
 const (
-	NativeAlgorithm = "sha256"
 	NativeStore     = "native"
 	BlobType        = "blob"
-	SealSchema      = "sealgraph/seal/v1"
-	CandidateSchema = "sealgraph/candidate/v1"
-	DependOn        = "depend-on"
+	SealSchema      = "sealgraph/seal/v2"
+	CandidateSchema = "sealgraph/candidate/v2"
 )
 
-// ObjectID is an algorithm-tagged immutable object identity.
+// ObjectID is a full native SHA-256 object name. The repository config fixes
+// the algorithm, so the canonical representation contains only full hex.
 type ObjectID struct {
-	Algorithm string `json:"algorithm"`
-	Hex       string `json:"hex"`
+	Hex string
 }
 
 func (id ObjectID) String() string {
-	return id.Algorithm + ":" + id.Hex
+	return id.Hex
 }
 
 func (id ObjectID) Equal(other ObjectID) bool {
-	return id.Algorithm == other.Algorithm && id.Hex == other.Hex
+	return id.Hex == other.Hex
 }
 
 func (id ObjectID) ValidateNative() error {
-	if id.Algorithm != NativeAlgorithm {
-		return fmt.Errorf("object algorithm %q is not supported; expected %q", id.Algorithm, NativeAlgorithm)
-	}
 	if len(id.Hex) != 64 {
-		return fmt.Errorf("sha256 object id has %d hex characters; expected 64", len(id.Hex))
+		return fmt.Errorf("native object id has %d hex characters; expected 64", len(id.Hex))
 	}
 	for _, c := range id.Hex {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			return fmt.Errorf("sha256 object id must use lower-case hexadecimal")
+			return fmt.Errorf("native object id must use lower-case hexadecimal")
 		}
 	}
 	return nil
 }
 
 func ParseObjectID(text string) (ObjectID, error) {
-	id := ObjectID{Algorithm: NativeAlgorithm, Hex: text}
-	if algorithm, hex, found := strings.Cut(text, ":"); found {
-		id = ObjectID{Algorithm: algorithm, Hex: hex}
-	}
+	id := ObjectID{Hex: text}
 	if err := id.ValidateNative(); err != nil {
 		return ObjectID{}, fmt.Errorf("invalid object id %q: %w", text, err)
 	}
 	return id, nil
+}
+
+func (id ObjectID) MarshalJSON() ([]byte, error) {
+	if err := id.ValidateNative(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(id.Hex)
+}
+
+func (id *ObjectID) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		return fmt.Errorf("native object ID must be a JSON string: %w", err)
+	}
+	parsed, err := ParseObjectID(text)
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
 }
 
 // ContentRef identifies content in a specific object source.
@@ -72,9 +85,9 @@ func (ref ContentRef) ValidateNativeBlob() error {
 
 // Link commits a dependent seal to one exact upstream seal generation.
 type Link struct {
-	Relation   string   `json:"relation"`
 	TargetREF  string   `json:"target_ref"`
 	TargetSeal ObjectID `json:"target_seal"`
+	Message    string   `json:"message"`
 }
 
 // Attachment is a named immutable blob included in the seal.
@@ -84,7 +97,7 @@ type Attachment struct {
 	Blob      ContentRef `json:"blob"`
 }
 
-// SealPayload is the semantic payload encoded by sealgraph-canonical-json-v1.
+// SealPayload is the semantic payload encoded by sealgraph-canonical-json-v2.
 type SealPayload struct {
 	Schema      string       `json:"schema"`
 	REF         string       `json:"ref"`
@@ -120,8 +133,8 @@ func ValidateREF(ref string) error {
 	if !utf8.ValidString(ref) {
 		return errors.New("REF is not valid UTF-8")
 	}
-	if ref == "@" {
-		return errors.New(`REF cannot be the single character "@"`)
+	if strings.ContainsRune(ref, '@') {
+		return errors.New(`REF cannot contain '@'; it is reserved for seal selectors`)
 	}
 	if strings.HasPrefix(ref, "/") || strings.HasSuffix(ref, "/") || strings.Contains(ref, "//") {
 		return errors.New("REF cannot begin or end with '/', or contain consecutive '/'")
@@ -152,4 +165,36 @@ func ValidateREF(ref string) error {
 		return errors.New("REF cannot end with '.'")
 	}
 	return nil
+}
+
+// ValidateTagName validates the raw, user-facing name. Filesystem encoding is
+// a storage concern and is deliberately separate.
+func ValidateTagName(name string) error {
+	if name == "" {
+		return errors.New("TAGNAME is empty")
+	}
+	if !utf8.ValidString(name) {
+		return errors.New("TAGNAME is not valid UTF-8")
+	}
+	for _, c := range name {
+		if c < 0x20 || c == 0x7f || c == '@' {
+			return fmt.Errorf("TAGNAME contains forbidden character %q", c)
+		}
+	}
+	if IsObjectPrefix(name) {
+		return errors.New("TAGNAME cannot be 4 to 64 lower-case hex characters; that syntax is reserved for object prefixes")
+	}
+	return nil
+}
+
+func IsObjectPrefix(text string) bool {
+	if len(text) < 4 || len(text) > 64 {
+		return false
+	}
+	for _, c := range text {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
 }

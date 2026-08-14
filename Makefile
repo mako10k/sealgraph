@@ -1,4 +1,4 @@
-.PHONY: fmt vet test check build
+.PHONY: fmt vet test clone-check check build
 
 fmt:
 	gofmt -w .
@@ -9,7 +9,10 @@ vet:
 test:
 	go test ./...
 
-check: fmt vet test
+clone-check:
+	npm run clone-check
+
+check: fmt vet test clone-check
 
 build:
 	mkdir -p bin
