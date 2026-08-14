@@ -115,6 +115,34 @@ seal-ID cycle as an integrity error. It does not repair, relink, or reseal
 anything. These commands are read-only and do not persist stale or impact
 results.
 
+History inspection uses sealgraph generations, not Git history:
+
+- `log REF` starts at the current REF head and walks the immutable `parent`
+  chain newest first. Every generation must be a canonical seal owned by the
+  requested REF, and a repeated parent seal ID is an integrity error.
+- `linklog REF [--upstream REF]` walks the same validated history and compares
+  each generation with its parent. It reports dependency additions, removals,
+  and repoints. The optional filter limits events by the exact upstream logical
+  REF. This is not a Git reflog and does not claim to record every mutable REF
+  file movement.
+- `diff REF` compares the current head with its parent. It fails explicitly for
+  an initial seal with no parent.
+- `diff REF@<old-seal> REF@<new-seal>` compares two exact canonical generations
+  owned by the same logical REF. Cross-REF comparison and implicit current
+  selectors in the two-argument form are rejected.
+
+Semantic diff reports seal IDs and changes in content identity, attachments,
+direct links, message, root/draft state, parent, and `created_at`. Dependency
+changes distinguish add, remove, and repoint. Attachment changes are keyed by
+their unique canonical name. Content bytes are not emitted or text-diffed in
+this slice: content is compared by its complete store/type/ObjectID identity,
+which keeps human output bounded and safe for binary or control-byte content.
+Messages and attachment metadata are quoted in human output.
+
+`log`, `linklog`, and `diff` validate all required immutable objects before
+printing a result. They never create runtime directories, append a log, move a
+REF, repair history, or persist their derived output.
+
 The Phase 2 human-readable text is for operator inspection. It is not yet a
 versioned machine-readable output contract.
 

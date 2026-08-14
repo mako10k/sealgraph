@@ -2,9 +2,14 @@ package repository
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mako10k/sealgraph/internal/canonical"
+	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/history"
 )
 
 var fixedTime = time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC)
@@ -272,6 +277,127 @@ func TestShowExplicitHistoricalSeal(t *testing.T) {
 	if string(shown.Content) != "v1 bytes" || !shown.ID.Equal(v1.ID) {
 		t.Fatalf("historical show = %+v content=%q", shown, shown.Content)
 	}
+}
+
+func TestLogLinkLogAndDiffAcrossRelink(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1", "root v1")
+	if _, err := repo.Add(ctx, AddOptions{REF: "design/api", Content: []byte("unchanged design"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
+		t.Fatal(err)
+	}
+	designV1, err := repo.Seal(ctx, "design/api", "reviewed root v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2", "root v2")
+	if _, err := repo.Link(ctx, "design/api", []Dependency{{REF: "ROOT"}}); err != nil {
+		t.Fatal(err)
+	}
+	designV2, err := repo.Seal(ctx, "design/api", "reviewed root v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := repo.Log(ctx, "design/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || !entries[0].ID.Equal(designV2.ID) || !entries[1].ID.Equal(designV1.ID) {
+		t.Fatalf("history = %+v", entries)
+	}
+
+	linkEntries, err := repo.LinkLog(ctx, "design/api", "ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(linkEntries) != 2 || len(linkEntries[0].Changes) != 1 || linkEntries[0].Changes[0].Kind != history.LinkRepoint {
+		t.Fatalf("new link history = %+v", linkEntries)
+	}
+	change := linkEntries[0].Changes[0]
+	if !change.BeforeSeal.Equal(rootV1.ID) || !change.AfterSeal.Equal(rootV2.ID) {
+		t.Fatalf("repoint = %+v", change)
+	}
+	if len(linkEntries[1].Changes) != 1 || linkEntries[1].Changes[0].Kind != history.LinkAdd {
+		t.Fatalf("initial link history = %+v", linkEntries[1].Changes)
+	}
+
+	diff, err := repo.DiffCurrent(ctx, "design/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff.Content.Changed || len(diff.Links) != 1 || diff.Links[0].Kind != history.LinkRepoint || !diff.Message.Changed || !diff.Parent.Changed {
+		t.Fatalf("current diff = %+v", diff)
+	}
+	explicit, err := repo.DiffExact(ctx, "design/api", designV1.ID, designV2.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(explicit, diff) {
+		t.Fatalf("explicit diff = %+v, current diff = %+v", explicit, diff)
+	}
+}
+
+func TestCurrentDiffRejectsInitialSeal(t *testing.T) {
+	repo := openTestRepository(t)
+	sealRoot(t, repo, "ROOT", "root", "initial")
+	if _, err := repo.DiffCurrent(context.Background(), "ROOT"); err == nil || !strings.Contains(err.Error(), "has no parent") {
+		t.Fatalf("initial diff error = %v", err)
+	}
+}
+
+func TestLogRejectsCorruptAndForeignParent(t *testing.T) {
+	t.Run("corrupt parent", func(t *testing.T) {
+		repo := openTestRepository(t)
+		ctx := context.Background()
+		root := sealRoot(t, repo, "ROOT", "root", "initial")
+		badParent, err := repo.objects.WriteBlob(ctx, []byte("not a canonical seal"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		head := writeTestSealPayload(t, repo, domain.SealPayload{
+			Schema: domain.SealSchema, REF: "ROOT", Parent: &badParent, Content: root.Payload.Content,
+			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Message: "synthetic corrupt ancestry",
+			Root: true, CreatedAt: "2026-08-14T00:00:01Z",
+		})
+		if err := repo.refs.Update(ctx, "ROOT", &root.ID, &head); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Log(ctx, "ROOT"); err == nil || !strings.Contains(err.Error(), "not a valid canonical seal") || !strings.Contains(err.Error(), "inspect the named seal objects") {
+			t.Fatalf("corrupt parent error = %v", err)
+		}
+	})
+
+	t.Run("foreign parent", func(t *testing.T) {
+		repo := openTestRepository(t)
+		ctx := context.Background()
+		root := sealRoot(t, repo, "ROOT", "root", "initial")
+		foreign := sealRoot(t, repo, "OTHER", "other", "other initial")
+		head := writeTestSealPayload(t, repo, domain.SealPayload{
+			Schema: domain.SealSchema, REF: "ROOT", Parent: &foreign.ID, Content: root.Payload.Content,
+			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Message: "synthetic foreign ancestry",
+			Root: true, CreatedAt: "2026-08-14T00:00:01Z",
+		})
+		if err := repo.refs.Update(ctx, "ROOT", &root.ID, &head); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Log(ctx, "ROOT"); err == nil || !strings.Contains(err.Error(), "belongs to REF OTHER, not ROOT") {
+			t.Fatalf("foreign parent error = %v", err)
+		}
+	})
+}
+
+func writeTestSealPayload(t *testing.T, repo *Repository, payload domain.SealPayload) domain.ObjectID {
+	t.Helper()
+	encoded, err := canonical.EncodeSeal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := repo.objects.WriteBlob(context.Background(), encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func TestUnsealedDraftCandidateStatus(t *testing.T) {

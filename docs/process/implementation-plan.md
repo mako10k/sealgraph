@@ -41,17 +41,27 @@ Do not create the project-root `.sealgraph/` in R0.
 - transitive stale
 - reverse impact
 - graph/stale/status
-- linklog/log
 
 The tracked R1 dogfood predecessor is the focused graph slice through
 `graph`/`stale`/`status`/`impact`. `linklog` and `log` remain later Phase 2
 inspection work and do not block the initial tracked manifest exercise.
 
-## Phase 3 — attachments and diff
+## History inspection slice
+
+- validated one-REF parent-chain traversal
+- `log`
+- derived `linklog` add/remove/repoint events
+- semantic `diff` for all canonical seal fields
+- focused R1 history dogfood
+
+This slice adds no persisted fields and no Git history/reflog semantics. Content
+diff is identity-based and does not print arbitrary blob bytes.
+
+## Phase 3 — attachments
 
 - attachment blob import
 - attachment metadata hashing
-- semantic diff across content/link/attachment changes
+- attachment CLI integration with the existing semantic diff model
 
 ## Phase 4 — integrity/forensics
 

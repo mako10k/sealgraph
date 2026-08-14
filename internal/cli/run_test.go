@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -189,6 +190,100 @@ func TestGraphStaleAndImpactCommands(t *testing.T) {
 	if !strings.Contains(atImpact, "SOURCE team/@name@sha256:") || !strings.Contains(atImpact, "NO_IMPACT") {
 		t.Fatalf("at-sign REF impact output = %q", atImpact)
 	}
+}
+
+func TestLogLinkLogAndSemanticDiffCommandsAreReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	run := func(args ...string) string {
+		t.Helper()
+		out.Reset()
+		errOut.Reset()
+		if code := runStandaloneAt(dir, args, &out, &errOut); code != 0 {
+			t.Fatalf("%v code=%d stderr=%q", args, code, errOut.String())
+		}
+		return out.String()
+	}
+	sealID := func(output, ref string) string {
+		t.Helper()
+		return strings.TrimSpace(strings.TrimPrefix(output, "SEALED "+ref+" "))
+	}
+
+	run("init")
+	run("add", "ROOT", "--root", "--content", "root v1")
+	rootV1 := sealID(run("seal", "ROOT", "-m", "root v1"), "ROOT")
+	run("add", "design/api", "--content", "unchanged design", "--depend-on", "ROOT")
+	designV1 := sealID(run("seal", "design/api", "-m", "reviewed root v1"), "design/api")
+	run("add", "ROOT", "--root", "--content", "root v2")
+	rootV2 := sealID(run("seal", "ROOT", "-m", "root v2"), "ROOT")
+	run("link", "design/api", "--depend-on", "ROOT")
+	designV2 := sealID(run("seal", "design/api", "-m", "reviewed root v2"), "design/api")
+
+	before := snapshotRegularFiles(t, filepath.Join(dir, ".sealgraph"))
+	logOutput := run("log", "design/api")
+	if first, second := strings.Index(logOutput, "SEAL "+designV2), strings.Index(logOutput, "SEAL "+designV1); first < 0 || second <= first {
+		t.Fatalf("log output is not newest first: %q", logOutput)
+	}
+	if !strings.Contains(logOutput, `MESSAGE "reviewed root v2"`) || !strings.Contains(logOutput, "depend-on ROOT@"+rootV1) {
+		t.Fatalf("log output = %q", logOutput)
+	}
+
+	linkOutput := run("linklog", "design/api", "--upstream", "ROOT")
+	if !strings.Contains(linkOutput, "UPSTREAM ROOT") || !strings.Contains(linkOutput, "LINK_REPOINT depend-on ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(linkOutput, "LINK_ADD depend-on ROOT new="+rootV1) {
+		t.Fatalf("linklog output = %q", linkOutput)
+	}
+
+	diffOutput := run("diff", "design/api")
+	if !strings.Contains(diffOutput, "FROM "+designV1) || !strings.Contains(diffOutput, "TO "+designV2) || !strings.Contains(diffOutput, "CONTENT UNCHANGED") || !strings.Contains(diffOutput, "LINK_REPOINT depend-on ROOT old="+rootV1+" new="+rootV2) || !strings.Contains(diffOutput, `MESSAGE CHANGED old="reviewed root v1" new="reviewed root v2"`) {
+		t.Fatalf("diff output = %q", diffOutput)
+	}
+	explicitOutput := run("diff", "design/api@"+designV1, "design/api@"+designV2)
+	if explicitOutput != diffOutput {
+		t.Fatalf("explicit diff differs from HEAD-parent diff:\nexplicit=%q\ncurrent=%q", explicitOutput, diffOutput)
+	}
+	rootDiff := run("diff", "ROOT")
+	if !strings.Contains(rootDiff, "CONTENT CHANGED") || !strings.Contains(rootDiff, "LINKS UNCHANGED") {
+		t.Fatalf("root diff output = %q", rootDiff)
+	}
+
+	after := snapshotRegularFiles(t, filepath.Join(dir, ".sealgraph"))
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("read-only inspection changed repository files:\nbefore=%v\nafter=%v", before, after)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := runStandaloneAt(dir, []string{"diff", "ROOT@" + rootV1, "design/api@" + designV2}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "one logical REF") {
+		t.Fatalf("cross-REF diff code=%d stderr=%q", code, errOut.String())
+	}
+}
+
+func snapshotRegularFiles(t *testing.T, root string) map[string]string {
+	t.Helper()
+	result := make(map[string]string)
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		result[relative] = string(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func TestGitPluginHasSeparateHelpSurface(t *testing.T) {

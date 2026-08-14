@@ -36,6 +36,7 @@ milestone DOGFOOD_R1:
 
 milestone HISTORY_READY:
   title "Seal history and semantic diff contracts work"
+  state reached
 
 milestone USABLE:
   title "Dogfood usability and inspection contracts work"
@@ -86,6 +87,7 @@ task CONTENT_INGEST DOGFOOD_R1 -> USABLE:
 task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
   title "Add log, linklog, and semantic diff (SG-BL-003/004)"
   duration 4p
+  status done
 
 task OPERATOR_CONTRACT HISTORY_READY -> USABLE:
   title "Clarify semantics and add versioned output (SG-BL-005/006/007)"

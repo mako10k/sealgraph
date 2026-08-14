@@ -69,6 +69,18 @@ Derived graph behavior:
 
 Never persist derived stale state here.
 
+### `internal/history`
+
+Read-only inspection derived from immutable seal payloads:
+
+- parent-chain traversal,
+- link add/remove/repoint events between adjacent generations,
+- semantic differences between two generations of one logical REF.
+
+History traversal validates canonical seal loading, REF ownership, and parent
+cycles before returning results. It does not read Git history or maintain a
+reflog, and it does not persist derived events or differences.
+
 ### `internal/repository`
 
 Coordinates:

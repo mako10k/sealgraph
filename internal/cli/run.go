@@ -8,7 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/graph"
+	"github.com/mako10k/sealgraph/internal/history"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
@@ -69,6 +71,12 @@ func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) in
 		return runSeal(ctx, workDir, args[1:], stdout, stderr)
 	case "show":
 		return runShow(ctx, workDir, args[1:], stdout, stderr)
+	case "log":
+		return runLog(ctx, workDir, args[1:], stdout, stderr)
+	case "linklog":
+		return runLinkLog(ctx, workDir, args[1:], stdout, stderr)
+	case "diff":
+		return runDiff(ctx, workDir, args[1:], stdout, stderr)
 	case "status":
 		return runStatus(ctx, workDir, args[1:], stdout, stderr)
 	case "stale":
@@ -214,6 +222,230 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 		fmt.Fprintf(stdout, "  %s %s@%s\n", link.Relation, link.TargetREF, link.TargetSeal)
 	}
 	return 0
+}
+
+func runLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		return usageError(stderr, "log requires exactly one current logical REF")
+	}
+	ref, explicit, err := repository.ParseSelector(args[0])
+	if err != nil {
+		return usageError(stderr, "invalid log REF: %v", err)
+	}
+	if explicit != nil {
+		return usageError(stderr, "log starts from a current logical REF, not REF@SEAL; use show for one historical generation")
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "log", err)
+	}
+	entries, err := repo.Log(ctx, ref)
+	if err != nil {
+		return commandError(stderr, "log", err)
+	}
+	printLog(stdout, ref, entries)
+	return 0
+}
+
+func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "linklog requires exactly one current logical REF")
+	}
+	ref, explicit, err := repository.ParseSelector(args[0])
+	if err != nil {
+		return usageError(stderr, "invalid linklog REF: %v", err)
+	}
+	if explicit != nil {
+		return usageError(stderr, "linklog starts from a current logical REF, not REF@SEAL")
+	}
+	flags := flag.NewFlagSet("linklog", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	upstream := flags.String("upstream", "", "show changes for one exact upstream logical REF")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "linklog accepts exactly one REF; unexpected argument %q", flags.Arg(0))
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "linklog", err)
+	}
+	entries, err := repo.LinkLog(ctx, ref, *upstream)
+	if err != nil {
+		return commandError(stderr, "linklog", err)
+	}
+	printLinkLog(stdout, ref, *upstream, entries)
+	return 0
+}
+
+func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 && len(args) != 2 {
+		return usageError(stderr, "diff requires one current REF or two explicit REF@SEAL generations")
+	}
+	var ref string
+	var fromID, toID *domain.ObjectID
+	if len(args) == 1 {
+		parsedREF, explicit, err := repository.ParseSelector(args[0])
+		if err != nil {
+			return usageError(stderr, "invalid diff REF: %v", err)
+		}
+		if explicit != nil {
+			return usageError(stderr, "one-argument diff requires a current logical REF without @SEAL; provide two explicit selectors to compare historical generations")
+		}
+		ref = parsedREF
+	} else {
+		fromREF, parsedFromID, err := repository.ParseSelector(args[0])
+		if err != nil {
+			return usageError(stderr, "invalid older diff selector: %v", err)
+		}
+		toREF, parsedToID, err := repository.ParseSelector(args[1])
+		if err != nil {
+			return usageError(stderr, "invalid newer diff selector: %v", err)
+		}
+		if parsedFromID == nil || parsedToID == nil {
+			return usageError(stderr, "two-argument diff requires two explicit REF@SEAL selectors; current HEAD shorthand is only available as 'diff REF'")
+		}
+		if fromREF != toREF {
+			return usageError(stderr, "diff compares generations of one logical REF; got %s and %s", fromREF, toREF)
+		}
+		ref, fromID, toID = fromREF, parsedFromID, parsedToID
+	}
+	repo, err := repository.OpenStandalone(workDir, nil)
+	if err != nil {
+		return commandError(stderr, "diff", err)
+	}
+	var result history.SealDiff
+	if fromID == nil {
+		result, err = repo.DiffCurrent(ctx, ref)
+	} else {
+		result, err = repo.DiffExact(ctx, ref, *fromID, *toID)
+	}
+	if err != nil {
+		return commandError(stderr, "diff", err)
+	}
+	printSealDiff(stdout, result)
+	return 0
+}
+
+func printLog(stdout io.Writer, ref string, entries []history.Entry) {
+	fmt.Fprintf(stdout, "REF %s\n", ref)
+	for _, entry := range entries {
+		fmt.Fprintf(stdout, "SEAL %s\n", entry.ID)
+		fmt.Fprintf(stdout, "  PARENT %s\n", formatOptionalObjectID(entry.Payload.Parent))
+		fmt.Fprintf(stdout, "  CREATED_AT %s\n", entry.Payload.CreatedAt)
+		fmt.Fprintf(stdout, "  MESSAGE %q\n", entry.Payload.Message)
+		fmt.Fprintf(stdout, "  ROOT %t\n", entry.Payload.Root)
+		fmt.Fprintf(stdout, "  DRAFT %t\n", entry.Payload.Draft)
+		fmt.Fprintf(stdout, "  CONTENT %s\n", formatContentRef(entry.Payload.Content))
+		fmt.Fprintf(stdout, "  DEPENDENCIES %d\n", len(entry.Payload.Links))
+		for _, link := range entry.Payload.Links {
+			fmt.Fprintf(stdout, "    %s %s@%s\n", link.Relation, link.TargetREF, link.TargetSeal)
+		}
+	}
+}
+
+func printLinkLog(stdout io.Writer, ref, upstream string, entries []history.LinkLogEntry) {
+	fmt.Fprintf(stdout, "REF %s\n", ref)
+	if upstream != "" {
+		fmt.Fprintf(stdout, "UPSTREAM %s\n", upstream)
+	}
+	for _, entry := range entries {
+		fmt.Fprintf(stdout, "SEAL %s\n", entry.Entry.ID)
+		fmt.Fprintf(stdout, "  PARENT %s\n", formatOptionalObjectID(entry.Entry.Payload.Parent))
+		fmt.Fprintf(stdout, "  CREATED_AT %s\n", entry.Entry.Payload.CreatedAt)
+		fmt.Fprintf(stdout, "  MESSAGE %q\n", entry.Entry.Payload.Message)
+		if len(entry.Changes) == 0 {
+			fmt.Fprintln(stdout, "  NO_LINK_CHANGES")
+			continue
+		}
+		for _, change := range entry.Changes {
+			printLinkChange(stdout, "  LINK_", change)
+		}
+	}
+}
+
+func printSealDiff(stdout io.Writer, diff history.SealDiff) {
+	fmt.Fprintf(stdout, "REF %s\nFROM %s\nTO %s\n", diff.REF, diff.From, diff.To)
+	if diff.Content.Changed {
+		fmt.Fprintf(stdout, "CONTENT CHANGED old=%s new=%s\n", formatContentRef(diff.Content.Before), formatContentRef(diff.Content.After))
+	} else {
+		fmt.Fprintf(stdout, "CONTENT UNCHANGED value=%s\n", formatContentRef(diff.Content.Before))
+	}
+	if len(diff.Attachments) == 0 {
+		fmt.Fprintln(stdout, "ATTACHMENTS UNCHANGED")
+	} else {
+		fmt.Fprintf(stdout, "ATTACHMENTS CHANGED count=%d\n", len(diff.Attachments))
+		for _, change := range diff.Attachments {
+			printAttachmentChange(stdout, change)
+		}
+	}
+	if len(diff.Links) == 0 {
+		fmt.Fprintln(stdout, "LINKS UNCHANGED")
+	} else {
+		fmt.Fprintf(stdout, "LINKS CHANGED count=%d\n", len(diff.Links))
+		for _, change := range diff.Links {
+			printLinkChange(stdout, "  LINK_", change)
+		}
+	}
+	printStringChange(stdout, "MESSAGE", diff.Message)
+	printBoolChange(stdout, "ROOT", diff.Root)
+	printBoolChange(stdout, "DRAFT", diff.Draft)
+	if diff.Parent.Changed {
+		fmt.Fprintf(stdout, "PARENT CHANGED old=%s new=%s\n", formatOptionalObjectID(diff.Parent.Before), formatOptionalObjectID(diff.Parent.After))
+	} else {
+		fmt.Fprintf(stdout, "PARENT UNCHANGED value=%s\n", formatOptionalObjectID(diff.Parent.Before))
+	}
+	printStringChange(stdout, "CREATED_AT", diff.CreatedAt)
+}
+
+func printLinkChange(stdout io.Writer, prefix string, change history.LinkChange) {
+	switch change.Kind {
+	case history.LinkAdd:
+		fmt.Fprintf(stdout, "%sADD %s %s new=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.AfterSeal))
+	case history.LinkRemove:
+		fmt.Fprintf(stdout, "%sREMOVE %s %s old=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.BeforeSeal))
+	case history.LinkRepoint:
+		fmt.Fprintf(stdout, "%sREPOINT %s %s old=%s new=%s\n", prefix, change.Relation, change.TargetREF, formatOptionalObjectID(change.BeforeSeal), formatOptionalObjectID(change.AfterSeal))
+	}
+}
+
+func printAttachmentChange(stdout io.Writer, change history.AttachmentChangeRecord) {
+	switch change.Kind {
+	case history.AttachmentAdd:
+		fmt.Fprintf(stdout, "  ATTACHMENT_ADD name=%q media_type=%q blob=%s\n", change.Name, change.After.MediaType, formatContentRef(change.After.Blob))
+	case history.AttachmentRemove:
+		fmt.Fprintf(stdout, "  ATTACHMENT_REMOVE name=%q media_type=%q blob=%s\n", change.Name, change.Before.MediaType, formatContentRef(change.Before.Blob))
+	case history.AttachmentChange:
+		fmt.Fprintf(stdout, "  ATTACHMENT_CHANGE name=%q old_media_type=%q new_media_type=%q old_blob=%s new_blob=%s\n", change.Name, change.Before.MediaType, change.After.MediaType, formatContentRef(change.Before.Blob), formatContentRef(change.After.Blob))
+	}
+}
+
+func printStringChange(stdout io.Writer, name string, change history.ValueChange[string]) {
+	if change.Changed {
+		fmt.Fprintf(stdout, "%s CHANGED old=%q new=%q\n", name, change.Before, change.After)
+	} else {
+		fmt.Fprintf(stdout, "%s UNCHANGED value=%q\n", name, change.Before)
+	}
+}
+
+func printBoolChange(stdout io.Writer, name string, change history.ValueChange[bool]) {
+	if change.Changed {
+		fmt.Fprintf(stdout, "%s CHANGED old=%t new=%t\n", name, change.Before, change.After)
+	} else {
+		fmt.Fprintf(stdout, "%s UNCHANGED value=%t\n", name, change.Before)
+	}
+}
+
+func formatOptionalObjectID(id *domain.ObjectID) string {
+	if id == nil {
+		return "-"
+	}
+	return id.String()
+}
+
+func formatContentRef(ref domain.ContentRef) string {
+	return ref.Store + "/" + ref.Type + "@" + ref.ID.String()
 }
 
 func runStatus(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -420,6 +652,10 @@ Usage:
   sealgraph link REF --depend-on REF[@SEAL]...
   sealgraph seal REF -m MESSAGE
   sealgraph show REF[@SEAL]
+  sealgraph log REF
+  sealgraph linklog REF [--upstream REF]
+  sealgraph diff REF
+  sealgraph diff REF@OLD REF@NEW
   sealgraph status [REF]
   sealgraph stale
   sealgraph impact REF

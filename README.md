@@ -10,8 +10,9 @@ The core question is not only “what changed?” but:
 
 ## Status
 
-The Phase 1 native standalone vertical slice implements `init`, `add`, `link`,
-`seal`, `show`, and direct `status`. The normative requirements are in
+The native standalone slices implement repository creation and sealing,
+direct/transitive graph inspection, immutable seal history, link history, and
+semantic generation diff. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0005.
 
@@ -91,7 +92,13 @@ sealgraph add
 sealgraph link
 sealgraph seal
 sealgraph show
+sealgraph log
+sealgraph linklog
+sealgraph diff
 sealgraph status
+sealgraph stale
+sealgraph impact
+sealgraph graph
 ```
 
 Later phases retain the following planned surface:
@@ -100,12 +107,6 @@ Later phases retain the following planned surface:
 sealgraph attach
 sealgraph detach
 sealgraph unlink
-sealgraph diff
-sealgraph log
-sealgraph linklog
-sealgraph impact
-sealgraph graph
-sealgraph stale
 sealgraph fsck
 ```
 
