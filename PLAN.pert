@@ -20,6 +20,7 @@ milestone NATIVE:
 
 milestone DOGFOOD_R0:
   title "Hermetic native dogfood passes"
+  state reached
 
 milestone GRAPH:
   title "Stale and impact graph works"
@@ -46,6 +47,7 @@ task NATIVE_SLICE FORMAT -> NATIVE:
 task DOGFOOD_HERMETIC NATIVE -> DOGFOOD_R0:
   title "Exercise Phase 1 in a temporary repository"
   duration 1p
+  status done
 
 task GRAPH_ENGINE DOGFOOD_R0 -> GRAPH:
   title "Implement DAG validation, stale propagation, and impact"

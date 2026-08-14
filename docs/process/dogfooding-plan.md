@@ -1,7 +1,8 @@
 # Sealgraph dogfooding plan
 
-Status: planned. No repository-local `.sealgraph/` has been created by this
-plan.
+Status: R0 passed on 2026-08-14. R1 remains gated and has not been authorized.
+No repository-local `.sealgraph/` was created by R0. See
+[`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md).
 
 ## 1. Objective
 
