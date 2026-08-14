@@ -80,6 +80,7 @@ llmthink dsl audit docs/decisions/sealgraph-design.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-external-spec-review.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-candidate-lifecycle.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-seal-event-metadata.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-reseal-required.think --pretty
 ```
 
 When a major architecture choice changes:

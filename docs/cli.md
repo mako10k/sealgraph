@@ -188,7 +188,7 @@ sealgraph log REF
 sealgraph linklog REF
 sealgraph impact REF
 sealgraph graph
-sealgraph stale
+sealgraph stale [--frontier] [--refs-only]
 sealgraph fsck
 ```
 
@@ -198,7 +198,17 @@ Phase 2 implements the first graph inspection slice:
   heads. A current head may report both when its direct target has advanced and
   that exact historical target seal also contains older stale provenance.
 - `stale` prints only current heads with `STALE_DIRECT` or
-  `STALE_TRANSITIVE`; it prints `CLEAN` when none exist.
+  `STALE_TRANSITIVE`; it prints `CLEAN` when none exist. It reads no candidate
+  state, so `UNSEALED` and candidate-derived `DRAFT` remain `status` concerns.
+- `stale --frontier` selects only a stale head whose current seal has no direct
+  upstream REF that is itself currently stale. This is an upstream-first
+  freshness-review frontier, not readiness, approval, reservation, or a batch
+  reseal plan. Draft/historical provenance uses the same factual selection and
+  is not described as mandatory work.
+- `stale --refs-only`, with or without `--frontier`, emits exactly one valid
+  logical REF plus LF per selected head, deduplicated in bytewise lexical order.
+  It emits no heading, IDs, labels, quoting, or `CLEAN`; an empty result is zero
+  bytes. Empty and non-empty successful results both exit 0.
 - `impact REF` starts from a current logical REF and reports every distinct
   path from a current downstream head to a seal link naming that REF. Paths are
   shown downstream-to-upstream and preserve the concrete historical seal IDs
@@ -211,6 +221,13 @@ Graph inspection validates reachable seal ownership and rejects an immutable
 seal-ID cycle as an integrity error. It does not repair, relink, or reseal
 anything. These commands are read-only and do not persist stale or impact
 results.
+
+Every `stale` mode captures the complete current REF/head set, derives against
+that captured set, buffers the result, and revalidates all REF heads before
+writing stdout. A changed or unreadable observation fails nonzero with empty
+stdout and an instruction to rerun. A successful result is still not a
+reservation: rerun after each explicit link or seal operation, and `seal`
+revalidates dependencies before publication.
 
 History inspection uses sealgraph generations, not Git history:
 
@@ -325,4 +342,7 @@ Initial convention to refine during implementation:
 - 2: CLI usage error,
 - other nonzero: operational/integrity failure.
 
-Machine-readable output contracts should be versioned before external consumers depend on them.
+Structured machine-readable output contracts should be versioned before
+external consumers depend on them. ADR 0010's deliberately minimal
+`stale --refs-only` line stream is the narrow stable exception; future JSON is a
+separate format.

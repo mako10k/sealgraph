@@ -105,10 +105,15 @@ sealgraph log
 sealgraph linklog
 sealgraph diff
 sealgraph status
-sealgraph stale
+sealgraph stale [--frontier] [--refs-only]
 sealgraph impact
 sealgraph graph
 ```
+
+`stale --refs-only` emits the complete stale REF set as a stable one-REF-per-line
+stream. Adding `--frontier` selects only the upstream-most stale REFs to review
+before their stale downstreams. It is a read-only observation, not a batch
+reseal, reservation, or automatic reseal plan.
 
 Later phases retain the following planned surface:
 

@@ -57,6 +57,21 @@ inspection work and do not block the initial tracked manifest exercise.
 This slice adds no persisted fields and no Git history/reflog semantics. Content
 diff is identity-based and does not print arbitrary blob bytes.
 
+## Stale review frontier slice — complete
+
+- extend `stale` with orthogonal `--frontier` and `--refs-only` flags;
+- derive all/frontier membership from current sealed provenance without reading
+  candidates;
+- capture and revalidate the complete REF/head observation before buffered
+  output;
+- keep the REF-only line protocol deterministic and stable;
+- add chain, diamond, candidate-corruption, concurrent-head-change, and
+  read-only tests.
+
+The accepted contract is recorded in
+[ADR 0010](../adr/0010-stale-review-frontier.md). It adds no automatic relink,
+reseal, repair, or batch publication operation.
+
 ## Experimental native v2 and decision dogfood
 
 - replace algorithm-tagged native IDs with full 64-character hex IDs

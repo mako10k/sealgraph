@@ -20,7 +20,7 @@ import (
 type Repository struct {
 	dir        string
 	objects    *native.ObjectStore
-	refs       *native.RefStore
+	refs       store.RefStore
 	tags       *native.TagStore
 	candidates candidateStore
 	writer     writerGuard
@@ -487,20 +487,152 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 	return result, nil
 }
 
-// Stale returns only current REF statuses with derived direct or transitive
-// staleness. Candidate-only UNSEALED state is intentionally excluded.
+// Stale returns all current REF heads with derived direct or transitive
+// staleness. It deliberately does not read mutable candidates.
 func (r *Repository) Stale(ctx context.Context) ([]RefStatus, error) {
-	statuses, err := r.Status(ctx, "")
+	return r.stale(ctx, false)
+}
+
+// StaleFrontier returns the upstream-most stale current REF heads. A selected
+// REF has no current direct upstream REF that is itself stale.
+func (r *Repository) StaleFrontier(ctx context.Context) ([]RefStatus, error) {
+	return r.stale(ctx, true)
+}
+
+func (r *Repository) stale(ctx context.Context, frontierOnly bool) ([]RefStatus, error) {
+	observation, err := r.observeHeads(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]RefStatus, 0, len(statuses))
-	for _, status := range statuses {
-		if len(status.StaleDirect) > 0 || len(status.StaleTransitive) > 0 {
-			result = append(result, status)
+	result := make([]RefStatus, 0, len(observation.names))
+	directUpstreams := make(map[string][]string, len(observation.names))
+	for _, ref := range observation.names {
+		head := observation.heads[ref]
+		payload, err := r.LoadSeal(ctx, head)
+		if err != nil {
+			return nil, fmt.Errorf("read observed current seal for %s: %w", ref, err)
+		}
+		if payload.REF != ref {
+			return nil, fmt.Errorf("REF %s points to a seal for %s", ref, payload.REF)
+		}
+		inspection, err := graph.Inspect(
+			ctx,
+			graph.SealIdentity{REF: ref, Seal: head},
+			payload,
+			observation,
+			r.LoadSeal,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("inspect observed provenance graph for %s: %w; inspect the immutable objects and REF heads explicitly", ref, err)
+		}
+		if len(inspection.Direct) == 0 && len(inspection.Transitive) == 0 {
+			continue
+		}
+		headCopy := head
+		result = append(result, RefStatus{
+			REF:             ref,
+			Head:            &headCopy,
+			Draft:           payload.Draft,
+			StaleDirect:     inspection.Direct,
+			StaleTransitive: inspection.Transitive,
+		})
+		upstreams := make([]string, len(payload.Links))
+		for i, link := range payload.Links {
+			upstreams[i] = link.TargetREF
+		}
+		directUpstreams[ref] = upstreams
+	}
+	if err := r.revalidateHeads(ctx, observation); err != nil {
+		return nil, err
+	}
+	if !frontierOnly {
+		return result, nil
+	}
+	staleREFs := make([]string, len(result))
+	for i, status := range result {
+		staleREFs[i] = status.REF
+	}
+	frontierREFs := graph.StaleFrontier(staleREFs, directUpstreams)
+	selected := make(map[string]struct{}, len(frontierREFs))
+	for _, ref := range frontierREFs {
+		selected[ref] = struct{}{}
+	}
+	frontier := make([]RefStatus, 0, len(frontierREFs))
+	for _, status := range result {
+		if _, found := selected[status.REF]; found {
+			frontier = append(frontier, status)
 		}
 	}
-	return result, nil
+	return frontier, nil
+}
+
+type headObservation struct {
+	names []string
+	heads map[string]domain.ObjectID
+}
+
+func (observation headObservation) Resolve(ctx context.Context, ref string) (domain.ObjectID, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.ObjectID{}, err
+	}
+	id, found := observation.heads[ref]
+	if !found {
+		return domain.ObjectID{}, fmt.Errorf("%w: %s was absent from the observed REF set", store.ErrRefNotFound, ref)
+	}
+	return id, nil
+}
+
+func (r *Repository) observeHeads(ctx context.Context) (headObservation, error) {
+	names, err := r.refs.List(ctx)
+	if err != nil {
+		return headObservation{}, fmt.Errorf("list current REFs for stale observation: %w", err)
+	}
+	sort.Strings(names)
+	observation := headObservation{
+		names: append([]string(nil), names...),
+		heads: make(map[string]domain.ObjectID, len(names)),
+	}
+	for _, ref := range names {
+		head, err := r.refs.Resolve(ctx, ref)
+		if err != nil {
+			return headObservation{}, fmt.Errorf("read current REF %s for stale observation: %w", ref, err)
+		}
+		observation.heads[ref] = head
+	}
+	return observation, nil
+}
+
+func (r *Repository) revalidateHeads(ctx context.Context, observation headObservation) error {
+	names, err := r.refs.List(ctx)
+	if err != nil {
+		return fmt.Errorf("REF heads changed or became unreadable while deriving stale state: %w; rerun 'sealgraph stale'", err)
+	}
+	sort.Strings(names)
+	if !equalStrings(names, observation.names) {
+		return errors.New("REF heads changed while deriving stale state; rerun 'sealgraph stale'")
+	}
+	for _, ref := range names {
+		head, err := r.refs.Resolve(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("REF %s changed or became unreadable while deriving stale state: %w; rerun 'sealgraph stale'", ref, err)
+		}
+		if !head.Equal(observation.heads[ref]) {
+			return fmt.Errorf("REF %s changed while deriving stale state; rerun 'sealgraph stale'", ref)
+		}
+	}
+	return nil
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 type GraphLink struct {

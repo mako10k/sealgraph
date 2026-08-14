@@ -1,0 +1,284 @@
+framework SealgraphResealRequiredProposal:
+  requires problem and decision
+  requires premise and evidence
+
+domain StaleReviewFrontier:
+  description |
+    standalone の immutable seal DAG と current REF heads だけから、stale な
+    current heads と upstream-first review frontier を導出する accepted contract
+
+problem P1:
+  "導出結果を reseal-required と呼べるか"
+
+step S1:
+  premise PR1:
+    |
+      stale は concrete dependency seal と current upstream HEAD の不一致から導出される
+      factual state である。一方 draft は historical dependency を意図的に保持できる
+
+step S2:
+  evidence EV1:
+    |
+      requirements は stale が explicit downstream review/reseal の必要性を自然に伝播すると
+      記すが、draft を provisional intent として stale とは独立に定義し、自動 relink/reseal を禁じる
+
+step S3:
+  viewpoint VP1:
+    axis factual_semantics_without_policy_claim
+
+step S4:
+  decision D1 based_on P1, PR1, EV1, VP1:
+    |
+      command 名と出力は stale と freshness review frontier という導出可能な事実に限定し、
+      required、ready-to-seal、automatic reseal という policy/action claim をしない
+
+step S5:
+  decision D2 based_on P1, PR1, EV1, VP1:
+    "top-level reseal-required command を追加する"
+    annotation caveat:
+      |
+        intentional draft/historical head にも無条件の再シール義務があるように見え、
+        review、relink、candidate edit、seal の明示段階を一語に潰す
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "domain-independent core が組織的な再承認 policy を決めないため"
+
+step S6:
+  comparison CMP1 on P1 viewpoint VP1 relation preferred_over D1, D2:
+    "stale は既存の canonical fact を再利用し、required は導出不能な policy claim を追加する"
+
+problem P2:
+  "既存 stale と新しい対象一覧をどの CLI surface で対称に表すか"
+
+step S7:
+  premise PR2:
+    |
+      current stale command は current heads の STALE_DIRECT または STALE_TRANSITIVE を列挙し、
+      status は一つの current REF、impact は stale でない structural paths も扱う
+
+step S8:
+  evidence EV2:
+    |
+      CLI contract は stale、status、impact を別概念として既に公開し、versioned cross-command
+      JSON は SG-BL-006 へ defer している
+
+step S9:
+  viewpoint VP2:
+    axis set_and_presentation_orthogonality
+
+step S10:
+  decision D3 based_on P2, PR2, EV2, VP2:
+    |
+      stale の集合選択を default all と --frontier、presentation を default detail と
+      --refs-only に分け、四組合せを許可する。新しい top-level command は追加しない
+
+step S11:
+  decision D4 based_on P2, PR2, EV2, VP2:
+    "review-required または reseal-list という別 command を追加する"
+    annotation caveat:
+      "stale と同じ基礎集合を別名で再定義し、selector、error、output の contract が二重化する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "既存 stale の factual vocabulary を拡張する方が対称であるため"
+
+step S12:
+  comparison CMP2 on P2 viewpoint VP2 relation preferred_over D3, D4:
+    "set selector と presentation selector の直交は all/frontier と human/REF-list を混同しない"
+
+problem P3:
+  "全 stale 集合と次に review できる upstream-first frontier をどう定義するか"
+
+step S13:
+  premise PR3:
+    |
+      S は current head が direct または transitive stale である logical REF の集合とする。
+      deps(r) は r の current seal が concrete links で名前付ける direct upstream REF 集合とする
+
+step S14:
+  evidence EV3:
+    |
+      normal publication は complete closure の HEAD consistency を要求し、一回の seal は一 REF のみである。
+      chain と diamond では stale upstream を先に明示 review しなければ downstream は再び stale になる
+
+step S15:
+  viewpoint VP3:
+    axis dependency_order_without_batch_plan
+
+step S16:
+  decision D5 based_on P3, PR3, EV3, VP3:
+    |
+      frontier F を { r in S | every u in deps(r) is not in S } と定義する。
+      F は freshness review を開始できる current heads であり seal admissibility や作業義務を保証しない
+
+step S17:
+  decision D6 based_on P3, PR3, EV3, VP3:
+    "S 全体を topological order で一回だけ出し、それを reseal plan とする"
+    annotation caveat:
+      |
+        total topological order は一意でなく、出力後の HEAD movement を反映せず、
+        batch repair plan と誤認される
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "各 one-REF operation 後に current graph から frontier を再導出するため"
+
+step S18:
+  comparison CMP3 on P3 viewpoint VP3 relation preferred_over D5, D6:
+    "frontier は現在の dependency precondition だけを述べ、将来操作列を予約しない"
+
+problem P4:
+  "draft head と mutable candidate を集合 membership に含めるか"
+
+step S19:
+  premise PR4:
+    |
+      draft は sealed generation property、candidate は mutable unsealed state、stale は current sealed
+      graph の derived state であり三者は直交する
+
+step S20:
+  evidence EV4:
+    |
+      candidate は INITIAL、CURRENT、HEAD_ADVANCED、HEAD_MISSING、UNEXPECTED_HEAD を表示する。
+      normal seal は historical dependency または draft closure を publish 時に拒否するが draft seal は許容する
+
+step S21:
+  viewpoint VP4:
+    axis canonical_query_without_mutable_candidate_reads
+
+step S22:
+  decision D7 based_on P4, PR4, EV4, VP4:
+    |
+      S と F は current canonical heads だけで決める。stale draft head も含めるが promotion/reseal を
+      required と呼ばない。全 stale mode は candidate を list、load、validate、annotate しない
+
+step S23:
+  decision D8 based_on P4, PR4, EV4, VP4:
+    "CURRENT candidate がある stale REF だけを frontier とする"
+    annotation caveat:
+      |
+        candidate 不在を stale でないかのように扱い、candidate content と dependencies の review 済みを
+        core が推測する
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "mutable preparation state は canonical freshness membership を変えないため"
+
+step S24:
+  comparison CMP4 on P4 viewpoint VP4 relation preferred_over D7, D8:
+    "candidate read 自体を stale query から除くことで canonical inspect と mutable inspection の責務を保つ"
+
+problem P5:
+  "複数 path と diamond がある場合の重複と順序をどうするか"
+
+step S25:
+  premise PR5:
+    |
+      transitive stale evidence は一 REF に複数 path を持ち得るが、要求される対象単位は logical REF である
+
+step S26:
+  evidence EV5:
+    |
+      impact は distinct paths を保存し、status は path evidence を表示する。repository REF listing と
+      status listing は bytewise lexical REF order を用いる
+
+step S27:
+  viewpoint VP5:
+    axis deterministic_deduplicated_target_list
+
+step S28:
+  decision D9 based_on P5, PR5, EV5, VP5:
+    |
+      all と frontier は logical REF ごとに一行または一 record とし、bytewise lexical REF order で出す。
+      detailed all view では同じ record 内に複数 stale path evidence を保持できる
+
+step S29:
+  decision D10 based_on P5, PR5, EV5, VP5:
+    "各 stale path ごとに REF を再出力し topological order を採用する"
+    annotation caveat:
+      "diamond で同じ作業対象が重複し、同順位 node の total order が実装依存になる"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "path evidence と one-REF target identity を分離するため"
+
+problem P6:
+  "selector、missing HEAD、cycle、corruption、並行変更をどう扱うか"
+
+step S30:
+  premise PR6:
+    |
+      stale は repository-wide current-head observation で、historical selector や tag/object prefix は
+      currentness を持たない。read commands は ADR 0007 の multi-file snapshot API ではない
+
+step S31:
+  evidence EV6:
+    |
+      graph inspection は dependency HEAD missing、seal ownership mismatch、unreadable object、cycle を error とし、
+      seal publication は writer guard 内で closure と expected state を再検証する
+
+step S32:
+  viewpoint VP6:
+    axis fail_closed_read_only_observation
+
+step S33:
+  decision D11 based_on P6, PR6, EV6, VP6:
+    |
+      stale options は positional selector を受けず、REF@TOKEN、tag、object prefix も受けない。
+      canonical graph の missing/cycle/corruption/ownership error では stdout を空のまま非零終了する。
+      complete REF/head set を capture してその集合上で導出し、出力前に全件再検証する。
+      読み取り中の結果は reservation ではなく publish 時に必ず再検証する
+
+step S34:
+  decision D12 based_on P6, PR6, EV6, VP6:
+    "読めた REF だけ部分表示し、壊れた graph node を warning として飛ばす"
+    annotation caveat:
+      "欠落 upstream を clean と誤認して frontier を過大にする"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "frontier membership の完全性を証明できない結果は出さないため"
+
+problem P7:
+  "human detail、REF-only output、empty result、exit status をどう区別するか"
+
+step S35:
+  premise PR7:
+    |
+      existing human stale は empty を CLEAN と表示するが shell pipeline は exact REF list と
+      result state、usage failure、integrity failure を区別する必要がある
+
+step S36:
+  evidence EV7:
+    |
+      SG-BL-006 は versioned JSON と cross-command exit contract を将来所有し、clean/stale result を
+      integrity/usage failure と混同しないことを要求する
+
+step S37:
+  viewpoint VP7:
+    axis minimal_stable_ref_stream
+
+step S38:
+  decision D13 based_on P7, PR7, EV7, VP7:
+    |
+      default detail は existing full-ID status evidence と empty CLEAN を維持する。
+      --refs-only は一つの valid logical REF と LF だけを lexical order で出し、empty は zero-byte stdout とする。
+      この line protocol は SG-BL-006 より先に stable とする。future JSON は別 format とする。
+      successful empty/non-empty は共に exit 0、usage は 2、operational/integrity は既存非零 contract に従う
+
+step S39:
+  decision D14 based_on P7, PR7, EV7, VP7:
+    "stale が一件以上なら exit 1 とする"
+    annotation caveat:
+      "query result を command failure と混同し、既存 stale と future versioned output の symmetry を壊す"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "policy check mode は必要なら別の明示 contract として決めるため"
+
+step S40:
+  decision D15 based_on P6, PR6, EV6, VP6:
+    |
+      help は validated observation of current REF heads、not a reservation or batch plan と説明する。
+      各 explicit link/seal 後の再実行と seal publication 時の dependency 再検証を明記する

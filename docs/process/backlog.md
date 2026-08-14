@@ -221,6 +221,8 @@ to whitespace and presentation changes.
 
 - Add a versioned format such as `--format json` for `show`, `status`, `stale`,
   `graph`, `impact`, `log`, `linklog`, and `diff`.
+- Preserve ADR 0010's already stable `stale --refs-only` one-REF-per-line stream
+  as a narrow shell-composition format; JSON remains separate and structured.
 - Represent ObjectIDs and graph paths as structured values, not formatted
   strings.
 - Preserve orthogonal direct/transitive stale states.

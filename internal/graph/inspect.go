@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/store"
 )
 
 // LoadSealFunc loads and validates one immutable canonical seal.
@@ -53,7 +52,7 @@ func (err *CycleError) Error() string {
 // Inspect derives direct and transitive staleness for one exact seal and also
 // validates that its reachable immutable seal graph is acyclic and that each
 // target seal belongs to the REF named by its link.
-func Inspect(ctx context.Context, root SealIdentity, payload domain.SealPayload, refs store.RefStore, load LoadSealFunc) (Inspection, error) {
+func Inspect(ctx context.Context, root SealIdentity, payload domain.SealPayload, refs HeadResolver, load LoadSealFunc) (Inspection, error) {
 	if payload.REF != root.REF {
 		return Inspection{}, fmt.Errorf("seal %s belongs to REF %s, not %s", root.Seal, payload.REF, root.REF)
 	}
@@ -72,7 +71,7 @@ func Inspect(ctx context.Context, root SealIdentity, payload domain.SealPayload,
 
 type inspectionWalker struct {
 	ctx      context.Context
-	refs     store.RefStore
+	refs     HeadResolver
 	load     LoadSealFunc
 	active   map[string]int
 	complete map[string]bool

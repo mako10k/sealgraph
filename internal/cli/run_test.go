@@ -282,6 +282,12 @@ func TestLinkCommandAcceptsExplicitHistoricalSeal(t *testing.T) {
 	if !strings.Contains(status, "DRAFT,STALE_DIRECT") {
 		t.Fatalf("status output = %q", status)
 	}
+	if refs := run("stale", "--frontier", "--refs-only"); refs != "REVIEW\n" {
+		t.Fatalf("draft historical frontier = %q, want factual REVIEW membership", refs)
+	}
+	if detail := run("stale", "--frontier"); !strings.Contains(detail, "REVIEW DRAFT,STALE_DIRECT") {
+		t.Fatalf("draft historical frontier detail = %q", detail)
+	}
 }
 
 func TestTagPrefixAndLinkMessageCommands(t *testing.T) {
@@ -390,6 +396,96 @@ func TestGraphStaleAndImpactCommands(t *testing.T) {
 	teamImpact := run("impact", "team/name")
 	if !strings.Contains(teamImpact, "SOURCE team/name@") || !strings.Contains(teamImpact, "NO_IMPACT") {
 		t.Fatalf("hierarchical REF impact output = %q", teamImpact)
+	}
+}
+
+func TestStaleFrontierAndStableREFOnlyOutput(t *testing.T) {
+	harness := newStandaloneHarness(t)
+	run := harness.run
+	run("init")
+	run("add", "ROOT", "--root", "--content", "root v1")
+	run("seal", "ROOT")
+	for _, ref := range []string{"B", "C"} {
+		run("add", ref, "--content", strings.ToLower(ref), "--depend-on", "ROOT")
+		run("seal", ref)
+	}
+	run("add", "D", "--content", "d", "--depend-on", "C", "--depend-on", "B")
+	run("seal", "D")
+	run("add", "ROOT", "--root", "--content", "root v2")
+	run("seal", "ROOT")
+	run("add", "WORK", "--root", "--content", "candidate only")
+	run("add", "B", "--draft", "--content", "unsealed candidate")
+	if err := os.WriteFile(filepath.Join(harness.dir, ".sealgraph", "index", "B"), []byte("{corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	before := snapshotRegularFiles(t, filepath.Join(harness.dir, ".sealgraph"))
+	if got := run("stale", "--refs-only"); got != "B\nC\nD\n" {
+		t.Fatalf("all stale REF stream = %q, want B, C, D", got)
+	}
+	if got := run("stale", "--frontier", "--refs-only"); got != "B\nC\n" {
+		t.Fatalf("frontier REF stream = %q, want B, C", got)
+	}
+	detail := run("stale", "--frontier")
+	if !strings.Contains(detail, "B STALE_DIRECT") || !strings.Contains(detail, "C STALE_DIRECT") || strings.Contains(detail, "D STALE_TRANSITIVE") || strings.Contains(detail, "UNSEALED") || strings.Contains(detail, "DRAFT") {
+		t.Fatalf("frontier detail = %q", detail)
+	}
+	after := snapshotRegularFiles(t, filepath.Join(harness.dir, ".sealgraph"))
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("stale queries changed repository files\nbefore=%v\nafter=%v", before, after)
+	}
+}
+
+func TestStaleREFOnlyEmptyUsageAndHelpContracts(t *testing.T) {
+	harness := newStandaloneHarness(t)
+	run := harness.run
+	run("init")
+	run("add", "ROOT", "--root", "--content", "clean")
+	run("seal", "ROOT")
+	if got := run("stale", "--refs-only"); got != "" {
+		t.Fatalf("empty REF stream = %q, want zero bytes", got)
+	}
+	if got := run("stale", "--frontier", "--refs-only"); got != "" {
+		t.Fatalf("empty frontier REF stream = %q, want zero bytes", got)
+	}
+	if got := run("stale", "--frontier"); got != "CLEAN\n" {
+		t.Fatalf("empty detailed frontier = %q", got)
+	}
+	if help := run("stale", "--help"); !strings.Contains(help, "not a reservation or batch plan") || !strings.Contains(help, "Re-run after each link or seal operation") {
+		t.Fatalf("stale help = %q", help)
+	}
+
+	for _, args := range [][]string{{"stale", "ROOT"}, {"stale", "--frontier", "--frontier"}, {"stale", "--unknown"}} {
+		harness.stdout.Reset()
+		harness.stderr.Reset()
+		if code := runStandaloneAt(harness.dir, args, &harness.stdout, &harness.stderr); code != 2 || harness.stdout.Len() != 0 {
+			t.Fatalf("%v code=%d stdout=%q stderr=%q", args, code, harness.stdout.String(), harness.stderr.String())
+		}
+	}
+}
+
+func TestStaleIntegrityFailureHasNoStdout(t *testing.T) {
+	harness := newStandaloneHarness(t)
+	run := harness.run
+	run("init")
+	run("add", "ROOT", "--root", "--content", "root")
+	run("seal", "ROOT")
+	headBytes, err := os.ReadFile(filepath.Join(harness.dir, ".sealgraph", "refs", "seals", "ROOT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(string(headBytes))
+	objectPath := filepath.Join(harness.dir, ".sealgraph", "objects", head[:2], head[2:])
+	if err := os.Chmod(objectPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(objectPath, []byte("corrupt"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	harness.stdout.Reset()
+	harness.stderr.Reset()
+	if code := runStandaloneAt(harness.dir, []string{"stale", "--refs-only"}, &harness.stdout, &harness.stderr); code == 0 || harness.stdout.Len() != 0 || !strings.Contains(harness.stderr.String(), "read observed current seal") {
+		t.Fatalf("corrupt stale code=%d stdout=%q stderr=%q", code, harness.stdout.String(), harness.stderr.String())
 	}
 }
 

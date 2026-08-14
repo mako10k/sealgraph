@@ -130,6 +130,16 @@ Resealing an upstream dependent changes its seal identity because the seal commi
 
 This naturally propagates the need for explicit downstream review/reseal.
 
+The product MUST expose both the complete set of stale current REF heads and an
+upstream-first freshness-review frontier. The frontier contains a stale current
+REF head only when none of the direct upstream REFs named by its current seal is
+itself stale. Both sets remain factual derived observations: they do not assert
+approval, a mandatory operation, seal admissibility, or a batch plan.
+
+Stale-set membership MUST NOT depend on mutable candidate state. A stale query
+MUST derive against one validated observation of the complete current REF/head
+set and fail without a partial result if that set changes before output.
+
 ## 4. Seal admissibility
 
 A normal non-draft seal MUST reject a candidate whose complete reachable
@@ -211,6 +221,11 @@ The product is expected to provide:
 `diff` MUST be capable of representing content, attachment, link, and material metadata differences.
 
 `status` MUST distinguish at least candidate modifications/unsealed state from direct/transitive staleness.
+
+`stale` MUST offer a stable REF-only line form for shell composition. It emits
+one valid logical REF plus LF per selected current head in bytewise lexical
+order, with no header or status fields, and emits zero bytes for an empty set.
+Candidate inspection remains outside this command.
 
 Default human inspection MUST NOT emit arbitrary content or metadata bytes
 directly. It MUST use bounded, unambiguous escaping. Exact content extraction

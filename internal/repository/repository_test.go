@@ -14,6 +14,7 @@ import (
 	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/history"
+	"github.com/mako10k/sealgraph/internal/store"
 )
 
 func openTestRepository(t *testing.T) *Repository {
@@ -33,6 +34,19 @@ func sealRoot(t *testing.T, repo *Repository, ref, content string) SealResult {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := repo.Add(ctx, AddOptions{REF: ref, Content: []byte(content), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := repo.Seal(ctx, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sealed
+}
+
+func sealDependent(t *testing.T, repo *Repository, ref, content, upstream string) SealResult {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: ref, Content: []byte(content), Dependencies: []Dependency{{REF: upstream}}}); err != nil {
 		t.Fatal(err)
 	}
 	sealed, err := repo.Seal(ctx, ref)
@@ -630,6 +644,13 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	if len(stale) != 2 || stale[0].REF != "LEAF" || stale[1].REF != "MIDDLE" {
 		t.Fatalf("stale refs = %+v, want LEAF and MIDDLE", stale)
 	}
+	frontier, err := repo.StaleFrontier(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frontier) != 1 || frontier[0].REF != "MIDDLE" {
+		t.Fatalf("stale frontier = %+v, want MIDDLE", frontier)
+	}
 	sourceHead, impacts, err := repo.Impact(ctx, "ROOT")
 	if err != nil {
 		t.Fatal(err)
@@ -655,6 +676,13 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	if !contains(leafStatus[0].Labels(), "STALE_DIRECT") || !contains(leafStatus[0].Labels(), "STALE_TRANSITIVE") {
 		t.Fatalf("leaf after middle repair labels = %v, want direct and transitive stale until explicit leaf repair", leafStatus[0].Labels())
 	}
+	frontier, err = repo.StaleFrontier(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frontier) != 1 || frontier[0].REF != "LEAF" {
+		t.Fatalf("stale frontier after middle repair = %+v, want LEAF", frontier)
+	}
 	if _, err := repo.Link(ctx, "LEAF", []Dependency{{REF: "MIDDLE"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -671,6 +699,90 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	}
 	if labels := leafStatus[0].Labels(); len(labels) != 1 || labels[0] != "CLEAN" {
 		t.Fatalf("leaf after explicit repair labels = %v, want CLEAN", labels)
+	}
+}
+
+func TestStaleAndFrontierIgnoreCandidateState(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	sealRoot(t, repo, "ROOT", "root v1")
+	sealDependent(t, repo, "CHILD", "child", "ROOT")
+	sealRoot(t, repo, "ROOT", "root v2")
+
+	if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("unsealed draft edit"), Draft: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "WORK", Content: []byte("candidate only"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	assertOnlyChild := func(name string, statuses []RefStatus, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(statuses) != 1 || statuses[0].REF != "CHILD" {
+			t.Fatalf("%s = %+v, want CHILD only", name, statuses)
+		}
+		if statuses[0].Unsealed || statuses[0].Draft {
+			t.Fatalf("%s leaked candidate state: %+v", name, statuses[0])
+		}
+	}
+	statuses, err := repo.Stale(ctx)
+	assertOnlyChild("stale with valid candidates", statuses, err)
+	frontier, err := repo.StaleFrontier(ctx)
+	assertOnlyChild("frontier with valid candidates", frontier, err)
+
+	if err := os.WriteFile(filepath.Join(repo.dir, "index", "CHILD"), []byte("{corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statuses, err = repo.Stale(ctx)
+	assertOnlyChild("stale with corrupt candidate", statuses, err)
+	frontier, err = repo.StaleFrontier(ctx)
+	assertOnlyChild("frontier with corrupt candidate", frontier, err)
+	if _, err := repo.Status(ctx, "CHILD"); err == nil {
+		t.Fatal("status unexpectedly accepted corrupt candidate; test did not establish the intended boundary")
+	}
+}
+
+type changingObservationRefStore struct {
+	store.RefStore
+	listCalls   int
+	change      func() error
+	changeError error
+}
+
+func (refs *changingObservationRefStore) List(ctx context.Context) ([]string, error) {
+	refs.listCalls++
+	if refs.listCalls == 2 {
+		refs.changeError = refs.change()
+	}
+	return refs.RefStore.List(ctx)
+}
+
+func TestStaleRejectsREFHeadChangeDuringObservation(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	sealRoot(t, repo, "ROOT", "root v1")
+	sealDependent(t, repo, "CHILD", "child", "ROOT")
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2")
+	rootV3 := sealRoot(t, repo, "ROOT", "root v3")
+	realRefs := repo.refs
+	if err := realRefs.Update(ctx, "ROOT", &rootV3.ID, &rootV2.ID); err != nil {
+		t.Fatal(err)
+	}
+	changing := &changingObservationRefStore{
+		RefStore: realRefs,
+		change: func() error {
+			return realRefs.Update(ctx, "ROOT", &rootV2.ID, &rootV3.ID)
+		},
+	}
+	repo.refs = changing
+
+	if _, err := repo.StaleFrontier(ctx); err == nil || !strings.Contains(err.Error(), "changed while deriving stale state") || !strings.Contains(err.Error(), "rerun 'sealgraph stale'") {
+		t.Fatalf("stale observation error = %v", err)
+	}
+	if changing.changeError != nil {
+		t.Fatalf("test REF change failed: %v", changing.changeError)
 	}
 }
 

@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -792,22 +794,48 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 }
 
 func runStale(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 0 {
-		return usageError(stderr, "stale accepts no arguments")
+	if len(args) == 1 && isHelp(args[0]) {
+		printStaleHelp(stdout)
+		return 0
+	}
+	flags := flag.NewFlagSet("stale", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var frontier singleBool
+	var refsOnly singleBool
+	flags.Var(&frontier, "frontier", "select the upstream-most stale review frontier")
+	flags.Var(&refsOnly, "refs-only", "emit one logical REF per line")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "stale accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "stale", err)
 	}
-	statuses, err := repo.Stale(ctx)
+	var statuses []repository.RefStatus
+	if frontier.value {
+		statuses, err = repo.StaleFrontier(ctx)
+	} else {
+		statuses, err = repo.Stale(ctx)
+	}
 	if err != nil {
 		return commandError(stderr, "stale", err)
 	}
-	if len(statuses) == 0 {
-		fmt.Fprintln(stdout, "CLEAN")
-		return 0
+	var output bytes.Buffer
+	if refsOnly.value {
+		for _, status := range statuses {
+			fmt.Fprintln(&output, status.REF)
+		}
+	} else if len(statuses) == 0 {
+		fmt.Fprintln(&output, "CLEAN")
+	} else {
+		printStatuses(&output, statuses)
 	}
-	printStatuses(stdout, statuses)
+	if _, err := stdout.Write(output.Bytes()); err != nil {
+		return commandError(stderr, "stale", fmt.Errorf("write output: %w", err))
+	}
 	return 0
 }
 
@@ -949,6 +977,27 @@ type singleString struct {
 	set   bool
 }
 
+type singleBool struct {
+	value bool
+	set   bool
+}
+
+func (v *singleBool) String() string { return strconv.FormatBool(v.value) }
+func (v *singleBool) IsBoolFlag() bool {
+	return true
+}
+func (v *singleBool) Set(value string) error {
+	if v.set {
+		return fmt.Errorf("may be specified only once")
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return err
+	}
+	v.value, v.set = parsed, true
+	return nil
+}
+
 func (v *singleString) String() string { return v.value }
 func (v *singleString) Set(value string) error {
 	if v.set {
@@ -996,11 +1045,29 @@ Usage:
   sealgraph diff REF
   sealgraph diff REF@OLD REF@NEW
   sealgraph status [REF]
-  sealgraph stale
+  sealgraph stale [--frontier] [--refs-only]
   sealgraph impact REF
   sealgraph graph
 
 Each seal operation advances exactly one logical REF.
+
+stale reports a validated observation of current REF heads.
+The result is not a reservation or batch plan.
+Re-run after each link or seal operation; seal revalidates dependencies before publication.
+`)
+}
+
+func printStaleHelp(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  sealgraph stale [--frontier] [--refs-only]
+
+Reports current REF heads with derived direct or transitive staleness.
+--frontier selects only stale REFs with no direct upstream REF that is stale.
+--refs-only emits the selected logical REFs, one per line, with no other text.
+
+Reports a validated observation of current REF heads.
+The result is not a reservation or batch plan.
+Re-run after each link or seal operation; seal revalidates dependencies before publication.
 `)
 }
 

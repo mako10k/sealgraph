@@ -76,6 +76,7 @@ Derived graph behavior:
 - reverse impact
 - cycle detection
 - provenance traversal
+- upstream-first stale review frontier
 
 Never persist derived stale state here.
 
@@ -102,7 +103,8 @@ Coordinates:
 - ref updates,
 - object store selection,
 - validation,
-- explicit one-candidate inspection, unlink, and discard.
+- explicit one-candidate inspection, unlink, and discard,
+- coherent, candidate-independent current-head observations for stale queries.
 
 It MUST receive repository mode explicitly. It MUST NOT infer sidecar mode by probing for `.git`.
 
@@ -197,6 +199,12 @@ retain compare-and-swap semantics even though cooperative writers are
 serialized, because external filesystem mutation does not honor the writer
 guard. Object writes that precede a failed publication remain immutable and may
 be reported as dangling.
+
+Multi-REF stale reads do not acquire the exclusive writer guard. They capture
+the complete current REF/head set, derive against that captured resolver, and
+revalidate the complete set before returning buffered output. A detected change
+fails explicitly. A returned observation is not a reservation; `seal` still
+revalidates closure and expected state at publication.
 
 ## 8. Future extension points
 
