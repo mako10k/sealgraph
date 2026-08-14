@@ -1,9 +1,10 @@
 # Sealgraph dogfooding plan
 
-Status: R0 passed on 2026-08-14. R1 was explicitly authorized on 2026-08-14
-and starts only after the Phase 2 graph predecessor passes. No repository-local
-`.sealgraph/` was created by R0. See
-[`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md).
+Status: R0 and R1 passed on 2026-08-14. The tracked project repository now
+contains only approved canonical standalone `.sealgraph` state; runtime-only
+paths remain ignored. See
+[`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md)
+and [`dogfooding-receipts/2026-08-14-r1.md`](dogfooding-receipts/2026-08-14-r1.md).
 
 ## 1. Objective
 

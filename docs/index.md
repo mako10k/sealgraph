@@ -30,4 +30,5 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/implementation-plan.md`](process/implementation-plan.md)
 - [`process/dogfooding-plan.md`](process/dogfooding-plan.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
+- [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)
