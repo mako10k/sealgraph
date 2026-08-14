@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,5 +49,61 @@ func TestInitRejectsUnsafeExistingRepositoryDirectory(t *testing.T) {
 	}
 	if _, err := InitStandalone(dir); err == nil {
 		t.Fatal("init accepted incomplete existing .sealgraph")
+	}
+}
+
+func TestExplicitInitBootstrapsOnlyMissingRuntimeDirectories(t *testing.T) {
+	dir := t.TempDir()
+	if created, err := InitStandalone(dir); err != nil || !created {
+		t.Fatalf("initial init created=%t err=%v", created, err)
+	}
+	repositoryDir := filepath.Join(dir, ".sealgraph")
+	configBefore, err := os.ReadFile(filepath.Join(repositoryDir, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{"index", "locks"} {
+		if err := os.Remove(filepath.Join(repositoryDir, relative)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if created, err := InitStandalone(dir); err != nil || created {
+		t.Fatalf("bootstrap init created=%t err=%v", created, err)
+	}
+	for _, relative := range []string{"index", "locks"} {
+		info, err := os.Lstat(filepath.Join(repositoryDir, relative))
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			t.Fatalf("runtime directory %s info=%v err=%v", relative, info, err)
+		}
+	}
+	configAfter, err := os.ReadFile(filepath.Join(repositoryDir, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(configAfter) != string(configBefore) {
+		t.Fatal("runtime bootstrap changed canonical config")
+	}
+}
+
+func TestRuntimeBootstrapRejectsUnsafePathBeforeCreatingAnything(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := InitStandalone(dir); err != nil {
+		t.Fatal(err)
+	}
+	repositoryDir := filepath.Join(dir, ".sealgraph")
+	if err := os.Remove(filepath.Join(repositoryDir, "index")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(repositoryDir, "locks")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("objects", filepath.Join(repositoryDir, "locks")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InitStandalone(dir); err == nil {
+		t.Fatal("init accepted a symbolic-link runtime path")
+	}
+	if _, err := os.Lstat(filepath.Join(repositoryDir, "index")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed bootstrap created index before rejecting locks: %v", err)
 	}
 }

@@ -146,6 +146,11 @@ R1 starts only after:
 3. the operator explicitly approves creating this repository's `.sealgraph/`;
 4. the exact initial REF set and content manifest are reviewed.
 
+If a canonical-only outer checkout cannot be opened because ignored runtime
+directories are absent, complete `RUNTIME_BOOTSTRAP` first. The accepted
+behavior is an explicit idempotent `sealgraph init` that recreates only missing
+empty runtime directories and never repairs objects or REFs.
+
 Approved initial REF hierarchy for R1:
 
 ```text
@@ -191,7 +196,8 @@ R1 acceptance:
 - the resulting canonical metadata is committed in its own reviewable Git
   commit;
 - checking out the parent commit and the dogfood commit reproduces the two
-  exact canonical states without invoking automatic repair.
+  exact canonical states; an explicit `sealgraph init` may bootstrap ignored
+  runtime directories, but no automatic object/REF repair is invoked.
 
 If R1 is rejected, use an explicit outer-Git revert of the isolated dogfood
 commit. Do not rewrite Git history or selectively delete immutable sealgraph

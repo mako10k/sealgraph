@@ -10,6 +10,14 @@ Always initializes standalone `.sealgraph`.
 
 It never inspects Git.
 
+For an existing repository with valid canonical `config`, `objects`, and
+`refs/seals`, an explicit `init` invocation also recreates missing empty
+`index` or `locks` runtime directories. This supports an outer checkout that
+tracks canonical state but ignores runtime-only directories. It never creates,
+changes, deletes, or repairs an object or REF, and it rejects unsafe or invalid
+existing paths. Read-only inspection commands do not perform this bootstrap
+implicitly.
+
 ### `sealgraph add`
 
 Creates/updates one REF's working candidate.

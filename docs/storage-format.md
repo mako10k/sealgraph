@@ -31,6 +31,12 @@ Candidate/index state is mutable but unsealed.
 
 Caches/logs/locks are not canonical provenance.
 
+An outer VCS checkout may therefore contain only `config`, `objects`, and
+`refs/seals`. In that state, an explicit `sealgraph init` may create missing
+empty `index` and `locks` directories after validating the canonical layout.
+This is runtime bootstrap, not object/REF repair. Ordinary reads do not mutate
+the checkout to create them.
+
 ## 2. Object compatibility goal
 
 Native objects should use a low-level Git-compatible loose-object envelope/layout where doing so does not distort sealgraph semantics.

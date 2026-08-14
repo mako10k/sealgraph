@@ -76,6 +76,41 @@ func TestStandaloneEndToEndCommands(t *testing.T) {
 	}
 }
 
+func TestExplicitInitBootstrapsRuntimeAfterCanonicalCheckout(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	run := func(args ...string) int {
+		out.Reset()
+		errOut.Reset()
+		return runStandaloneAt(dir, args, &out, &errOut)
+	}
+	if code := run("init"); code != 0 {
+		t.Fatalf("initial init code=%d stderr=%q", code, errOut.String())
+	}
+	if code := run("add", "ROOT", "--root", "--content", "root"); code != 0 {
+		t.Fatalf("add code=%d stderr=%q", code, errOut.String())
+	}
+	if code := run("seal", "ROOT", "-m", "root"); code != 0 {
+		t.Fatalf("seal code=%d stderr=%q", code, errOut.String())
+	}
+	repositoryDir := filepath.Join(dir, ".sealgraph")
+	for _, relative := range []string{"index", "locks"} {
+		if err := os.RemoveAll(filepath.Join(repositoryDir, relative)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if code := run("status"); code == 0 || !strings.Contains(errOut.String(), "run 'sealgraph init'") {
+		t.Fatalf("status before bootstrap code=%d stderr=%q", code, errOut.String())
+	}
+	if code := run("init"); code != 0 {
+		t.Fatalf("bootstrap init code=%d stderr=%q", code, errOut.String())
+	}
+	if code := run("status"); code != 0 || !strings.Contains(out.String(), "ROOT CLEAN") {
+		t.Fatalf("status after bootstrap code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+}
+
 func TestLinkCommandAcceptsExplicitHistoricalSeal(t *testing.T) {
 	dir := t.TempDir()
 	var out bytes.Buffer

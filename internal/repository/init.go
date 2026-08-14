@@ -18,8 +18,11 @@ func InitStandalone(workDir string) (bool, error) {
 		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return false, fmt.Errorf("%s exists but is not a standalone sealgraph directory; inspect it and choose a different directory", repositoryDir)
 		}
-		if err := validateLayout(repositoryDir); err != nil {
+		if err := validateCanonicalLayout(repositoryDir); err != nil {
 			return false, fmt.Errorf("%s exists but is not a valid standalone repository: %w; repair it explicitly before retrying", repositoryDir, err)
+		}
+		if err := bootstrapRuntimeLayout(repositoryDir); err != nil {
+			return false, fmt.Errorf("%s has unsafe runtime state: %w; inspect it explicitly before retrying", repositoryDir, err)
 		}
 		return false, nil
 	}
@@ -50,6 +53,18 @@ func InitStandalone(workDir string) (bool, error) {
 }
 
 func validateLayout(repositoryDir string) error {
+	if err := validateCanonicalLayout(repositoryDir); err != nil {
+		return err
+	}
+	for _, relative := range []string{"index", "locks"} {
+		if err := validateRealDirectory(filepath.Join(repositoryDir, relative), relative); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCanonicalLayout(repositoryDir string) error {
 	configPath := filepath.Join(repositoryDir, "config")
 	configInfo, err := os.Lstat(configPath)
 	if err != nil {
@@ -65,15 +80,51 @@ func validateLayout(repositoryDir string) error {
 	if string(config) != configBytes {
 		return fmt.Errorf("unsupported or malformed config")
 	}
-	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), "index", "locks"} {
+	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals")} {
+		if err := validateRealDirectory(filepath.Join(repositoryDir, relative), relative); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bootstrapRuntimeLayout(repositoryDir string) error {
+	missing := make([]string, 0, 2)
+	for _, relative := range []string{"index", "locks"} {
 		path := filepath.Join(repositoryDir, relative)
 		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			missing = append(missing, relative)
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("inspect %s: %w", relative, err)
 		}
 		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%s is not a directory", relative)
+			return fmt.Errorf("%s is not a real directory", relative)
 		}
+	}
+	for _, relative := range missing {
+		path := filepath.Join(repositoryDir, relative)
+		if err := os.Mkdir(path, 0o755); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				if validateErr := validateRealDirectory(path, relative); validateErr == nil {
+					continue
+				}
+			}
+			return fmt.Errorf("create %s runtime directory: %w", relative, err)
+		}
+	}
+	return nil
+}
+
+func validateRealDirectory(path, relative string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("inspect %s: %w", relative, err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is not a real directory", relative)
 	}
 	return nil
 }

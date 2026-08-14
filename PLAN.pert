@@ -26,6 +26,10 @@ milestone GRAPH:
   title "Stale and impact graph works"
   state reached
 
+milestone RUNTIME:
+  title "Canonical checkout can bootstrap runtime state"
+  state reached
+
 milestone DOGFOOD_R1:
   title "Tracked project dogfood passes"
 
@@ -55,7 +59,12 @@ task GRAPH_ENGINE DOGFOOD_R0 -> GRAPH:
   duration 4p
   status done
 
-task DOGFOOD_TRACKED GRAPH -> DOGFOOD_R1:
+task RUNTIME_BOOTSTRAP GRAPH -> RUNTIME:
+  title "Bootstrap ignored runtime directories from canonical checkout"
+  duration 1p
+  status done
+
+task DOGFOOD_TRACKED RUNTIME -> DOGFOOD_R1:
   title "Add explicitly approved tracked project provenance"
   duration 1p
 
