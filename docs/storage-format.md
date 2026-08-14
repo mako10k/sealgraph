@@ -1,7 +1,7 @@
 # Storage format
 
-Status: native v2 byte contract frozen by ADR 0006. Native v1 is intentionally
-unsupported during the pre-1.0 experimental phase.
+Status: native v3 byte contract frozen by ADR 0009. Native v1 and v2 are
+intentionally unsupported during the pre-1.0 experimental phase.
 
 ## 1. Layout
 
@@ -64,25 +64,25 @@ object translation or guessed identity is forbidden.
 
 ## 3. Canonical seal payload
 
-Native v2 uses `sealgraph-canonical-json-v2`: compact UTF-8 JSON with no
+Native v3 uses `sealgraph-canonical-json-v3`: compact UTF-8 JSON with no
 insignificant whitespace or trailing LF. Illustrative semantic form:
 
 ```json
-{"schema":"sealgraph/seal/v2","ref":"DESIGN-001","parent":"<64-hex-seal-id>","content":{"store":"native","type":"blob","id":"<64-hex-object-id>"},"attachments":[],"links":[{"target_ref":"REQ-001","target_seal":"<64-hex-seal-id>","message":"Reviewed requirement basis"}],"message":"Reviewed design","root":false,"draft":false,"created_at":"2026-08-14T00:00:00Z"}
+{"schema":"sealgraph/seal/v3","ref":"DESIGN-001","parent":"<64-hex-seal-id>","content":{"store":"native","type":"blob","id":"<64-hex-object-id>"},"attachments":[],"links":[{"target_ref":"REQ-001","target_seal":"<64-hex-seal-id>","message":"Reviewed requirement basis"}],"root":false,"draft":false}
 ```
 
 Member order is exact:
 
 ```text
 seal:       schema, ref, parent, content, attachments, links,
-            message, root, draft, created_at
+            root, draft
 content:    store, type, id
 attachment: name, media_type, blob
 link:       target_ref, target_seal, message
 ```
 
 Every member is required. `parent` is JSON `null` only for the first seal. The
-schema is exactly `sealgraph/seal/v2`. Native IDs are JSON strings containing
+schema is exactly `sealgraph/seal/v3`. Native IDs are JSON strings containing
 exactly 64 lower-case hex characters; `sha256:` and per-ID algorithm members are
 not accepted or persisted.
 
@@ -105,11 +105,13 @@ attachments: (name, media_type, blob.store, blob.type, blob.id)
 ```
 
 There is one dependency link per target REF. Duplicate target REFs and duplicate
-attachment names are errors, never silently deduplicated. V2 has no link kind.
+attachment names are errors, never silently deduplicated. V3 has no link kind.
 Link messages may be empty, are valid UTF-8, and are part of seal identity.
 
-Content bytes are exact. `created_at` is identity-bearing UTC whole-second time
-formatted `YYYY-MM-DDTHH:MM:SSZ`.
+Content bytes are exact. Seal-level event fields such as `message`, `created_at`,
+and `actor` are forbidden rather than optional or identity-external. Evidence
+about actor, time, or rationale is represented as separately sealed content
+with an explicit concrete link when a domain requires it.
 
 ## 4. Merkle provenance
 
@@ -124,7 +126,7 @@ lower-case hex characters plus LF. REFs map byte-for-byte and component-for-
 component with no cleaning, escaping, normalization, or case folding.
 
 The constructed `refs/seals/<REF>` follows `git check-ref-format` rules without
-normalization, branch shorthand, or refspec patterns. V2 additionally forbids
+normalization, branch shorthand, or refspec patterns. V3 additionally forbids
 `@`, reserving it as selector delimiter. One-level and hierarchical REFs are
 valid. File/directory prefix conflicts such as `design` and `design/api` are
 rejected in either creation order; intermediate directories are implicit.
@@ -167,7 +169,7 @@ no escaping, relocation, or automatic repair is performed.
 
 ## 8. Candidate state
 
-V2 candidate files use schema `sealgraph/candidate/v2`, full-hex JSON string
+V3 candidate files use schema `sealgraph/candidate/v3`, full-hex JSON string
 IDs, and the same attachment/link representation as seals. Candidate dependency
 inputs are resolved to concrete full seal IDs immediately. Candidate base
 records the observed REF head for CAS sealing.
@@ -177,6 +179,11 @@ repository writer guard rooted in the runtime-only `locks/` directory.
 Candidate clearing compares the candidate's exact persisted bytes with the
 version loaded for sealing and never removes a different version. The guard and
 candidate comparison are runtime transaction state, not canonical seal fields.
+
+Explicit candidate discard removes only the regular file at the exact
+validated candidate path. It never recursively deletes a candidate namespace,
+moves a REF, or removes immutable objects. Candidate discard and inspection add
+no canonical field or candidate identity.
 
 ## 9. Seal admissibility
 
@@ -188,7 +195,7 @@ candidate comparison are runtime transaction state, not canonical seal fields.
 - A draft may retain a concrete non-HEAD dependency.
 - A normal non-draft seal requires complete reachable dependency closure HEAD
   consistency and rejects any reachable draft seal.
-- Every v2 link participates in freshness, impact, and the Merkle DAG.
+- Every v3 link participates in freshness, impact, and the Merkle DAG.
 - There is no generic validation bypass.
 
 Stale remains derived from immutable seals and current REF heads and is never
@@ -196,6 +203,6 @@ stored canonically.
 
 ## 10. Experimental format boundary
 
-`repository_format = 2` rejects format 1. There is no dual reader, migration,
-or compatibility switch. V2 remains loose-only: no canonical packs, packed
+`repository_format = 3` rejects formats 1 and 2. There is no dual reader,
+migration, or compatibility switch. V3 remains loose-only: no canonical packs, packed
 refs, alternates, or object-format translation maps.

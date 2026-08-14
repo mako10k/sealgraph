@@ -14,7 +14,7 @@ The native standalone slices implement repository creation and sealing,
 direct/transitive graph inspection, immutable seal history, link history, and
 semantic generation diff. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
-is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0006.
+is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0009.
 
 ## Two product surfaces
 
@@ -23,12 +23,12 @@ is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0006.
 ```sh
 sealgraph init
 sealgraph add REQ-001 --root --content 'Authentication is required.'
-sealgraph seal REQ-001 -m 'Initial requirement'
+sealgraph seal REQ-001
 
 sealgraph add DESIGN-001 \
   --content 'JWT authentication design' \
   --depend-on REQ-001
-sealgraph seal DESIGN-001 -m 'Design reviewed against current requirement'
+sealgraph seal DESIGN-001
 
 sealgraph tag DESIGN-001 reviewed
 sealgraph show DESIGN-001@reviewed
@@ -82,8 +82,11 @@ A seal commits to:
 - exact upstream target seal identities,
 - previous seal identity,
 - root/draft semantics,
-- seal message,
 - canonical format/version metadata.
+
+Actor, time, and seal-operation rationale are not implicit seal fields. When a
+domain needs them, it seals the claim as separate content and links it to the
+exact subject seal.
 
 The design is Merkle-DAG-like: a downstream seal includes direct upstream seal identities; those upstream seals already commit to their own upstream dependencies.
 
@@ -93,6 +96,8 @@ The design is Merkle-DAG-like: a downstream seal includes direct upstream seal i
 sealgraph init
 sealgraph add
 sealgraph link
+sealgraph unlink
+sealgraph candidate
 sealgraph tag
 sealgraph seal
 sealgraph show
@@ -110,7 +115,6 @@ Later phases retain the following planned surface:
 ```text
 sealgraph attach
 sealgraph detach
-sealgraph unlink
 sealgraph fsck
 ```
 

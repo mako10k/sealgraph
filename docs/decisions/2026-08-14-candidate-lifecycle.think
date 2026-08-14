@@ -1,0 +1,224 @@
+framework SealgraphCandidateLifecycle:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain CandidateLifecycle:
+  description |
+    mutable candidate の inspection/recovery と binary-safe human output を、
+    sealgraph 固有の one-REF semantics のまま設計する
+
+problem P1:
+  "mutable candidate をどの CLI surface で明示するか"
+
+step S1:
+  premise PR1:
+    |
+      REF@TOKEN は immutable seal generation を解決する既存 grammar であり、
+      candidate は未封印で mutable、non-authoritative な state である
+
+step S2:
+  evidence EV1:
+    |
+      current show/diff は immutable seal selector を取り、status と add/link output は
+      candidate を別状態として既に CANDIDATE/UNSEALED と表現している
+
+step S3:
+  viewpoint VP1:
+    axis semantic_separation_and_cli_symmetry
+
+step S4:
+  decision D1 based_on P1, PR1, EV1, VP1:
+    |
+      推奨案として candidate show REF、candidate diff REF、candidate discard REF の
+      dedicated mutable-state namespace を追加する
+
+step S5:
+  decision D2 based_on P1, PR1, EV1, VP1:
+    |
+      代替案として show/diff の --candidate flag または REF@candidate selector を使う
+    annotation caveat:
+      |
+        mutable/immutable selector が混在し、REF-scoped tag と grammar collision を起こす
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "operator は dedicated candidate namespace を承認した"
+
+step S6:
+  comparison CMP1 on P1 viewpoint VP1 relation preferred_over D1, D2:
+    |
+      dedicated namespace は immutable REF@TOKEN grammar を変えず、show/diff/discard を
+      同じ one-REF candidate lifecycle として発見可能にする
+
+problem P2:
+  "candidate diff は recorded base と current HEAD のどちらを比較基準にするか"
+
+step S7:
+  premise PR2:
+    |
+      candidate.base は candidate 作成時に観測した HEAD であり、seal CAS と operator intent の
+      出発点である。current HEAD は別 process または外部 filesystem edit で変化し得る
+
+step S8:
+  evidence EV2:
+    |
+      current seal は base と HEAD が不一致なら明示的再作成を要求し、自動 rebase/relink を拒否する
+
+step S9:
+  viewpoint VP2:
+    axis intent_preservation
+
+step S10:
+  decision D3 based_on P2, PR2, EV2, VP2:
+    |
+      推奨案として candidate diff は recorded base と比較し、current HEAD と BASE_STATE を
+      同時表示する。初期 candidate は absent state からの addition として扱う
+
+step S11:
+  decision D4 based_on P2, PR2, EV2, VP2:
+    "代替案として inspection 時点の current HEAD とだけ比較する"
+    annotation caveat:
+      "candidate が実際にどの generation から派生したかを隠し、暗黙 rebase のように見える"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "operator は recorded base comparison と current HEAD relation の分離を承認した"
+
+step S12:
+  comparison CMP2 on P2 viewpoint VP2 relation preferred_over D3, D4:
+    "base diff と HEAD relation の分離が candidate intent と publication admissibility を混同しない"
+
+problem P3:
+  "candidate discard の destructive confirmation をどこまで要求するか"
+
+step S13:
+  premise PR3:
+    |
+      discard は unsealed candidate file 一つだけを消し、REF と immutable objects を変更しない。
+      一方、corrupt candidate にも使える必要があり、interactive prompt は automation を壊す
+
+step S14:
+  evidence EV3:
+    |
+      ADR 0007 により mutation command 実行中の cooperative writer は repository-wide に
+      直列化されるが、別 command 間の inspect-then-act period は transaction ではない
+
+step S15:
+  viewpoint VP3:
+    axis pre_1_0_safe_simplicity
+
+step S16:
+  decision D5 based_on P3, PR3, EV3, VP3:
+    |
+      推奨案として candidate discard REF という明示 command と exact REF を confirmation とし、
+      prompt、--yes、--force、candidate fingerprint は導入しない。missing/non-regular/prefix conflict は
+      no-op success にせず error とする
+
+step S17:
+  decision D6 based_on P3, PR3, EV3, VP3:
+    "代替案として public candidate fingerprint と必須 --expect token を導入する"
+    annotation caveat:
+      |
+        cross-command CAS は強くなるが、mutable state に seal-like identity と新しい出力契約を追加する
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "operator は explicit command と exact REF を initial confirmation とする案を承認した"
+
+step S18:
+  comparison CMP3 on P3 viewpoint VP3 relation preferred_over D5, D6:
+    |
+      初期 slice は exact one-file discard と deterministic error を保ち、実 workflow の競合 evidence が
+      生じるまで public mutable identity を増やさない
+
+problem P4:
+  "unlink が一つの dependency edge をどの identity で指定するか"
+
+step S19:
+  premise PR4:
+    |
+      native v2 dependency set は target REF ごとに最大一 edge であり、concrete target seal は
+      edge value として保存される
+
+step S20:
+  evidence EV4:
+    |
+      bare --depend-on REF は current HEAD resolution を意味するため、historical edge の removal に
+      流用すると candidate が保持する concrete generation と操作対象がずれる
+
+step S21:
+  decision D7 based_on P4, PR4, EV4:
+    |
+      推奨案として unlink REF --upstream UPSTREAM[@TOKEN] を採用する。bare upstream はその REF edge、
+      qualified upstream は resolved generation と current candidate target の一致を removal precondition とする
+
+step S22:
+  decision D8 based_on P4, PR4, EV4:
+    "代替案として unlink でも --depend-on を使用し、bare REF を HEAD に解決する"
+    annotation caveat:
+      "historical link removal が HEAD shorthand に引きずられ、edge key と edge value を混同する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "operator は --upstream edge identity と optional generation guard を承認した"
+
+problem P5:
+  "arbitrary content bytes を default human show で安全に確認するにはどうするか"
+
+step S23:
+  premise PR5:
+    |
+      content は NUL、control byte、invalid UTF-8、metadata-like line を含む exact bytes であり、
+      message/metadata も terminal display control を含み得る
+
+step S24:
+  evidence EV5:
+    |
+      current show は content bytes と unquoted seal message を metadata lines の間へ直接出力する
+
+step S25:
+  viewpoint VP4:
+    axis bounded_unambiguous_human_output
+
+step S26:
+  decision D9 based_on P5, PR5, EV5, VP4:
+    |
+      推奨案として default show は identity、byte size、先頭256 input bytes の bytewise ASCII escape preview を
+      表示し、message/metadata も同じ safe quote を使う。--raw-content は stdout に exact bytes のみを出す
+
+step S27:
+  decision D10 based_on P5, PR5, EV5, VP4:
+    "代替案として top-level content command を追加し、show は preview のみにする"
+    annotation caveat:
+      |
+        raw extraction は明瞭だが、seal content と candidate content を選ぶ第二の operand grammar が必要になる
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "operator は corresponding show surface の --raw-content を承認した"
+
+step S28:
+  comparison CMP4 on P5 viewpoint VP4 relation preferred_over D9, D10:
+    |
+      corresponding show surface の explicit bytes-only flag は selector semantics を再利用し、
+      metadata と raw bytes を混在させない
+
+problem P6:
+  "human safe-output slice と versioned machine output を同時に決めるか"
+
+step S29:
+  premise PR6:
+    |
+      machine output は show だけでなく status/stale/graph/impact/log/linklog/diff 全体で schema と
+      exit-state separation を揃える必要がある
+
+step S30:
+  evidence EV6:
+    "SG-BL-006 と OPERATOR_CONTRACT が cross-command versioned JSON contract を既に所有する"
+
+step S31:
+  decision D11 based_on P6, PR6, EV6:
+    |
+      今回は human preview と exact raw bytes のみを設計し、--format json と binary encoding は
+      SG-BL-006 まで defer する

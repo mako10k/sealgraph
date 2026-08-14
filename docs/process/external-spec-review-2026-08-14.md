@@ -119,6 +119,9 @@ The exact CLI spelling remains open. A dedicated candidate surface or explicit
 `--candidate` selectors should be compared without importing Git reset/index
 semantics.
 
+The resulting unaccepted CLI proposal is recorded in
+[`candidate-lifecycle-proposal-2026-08-14.md`](candidate-lifecycle-proposal-2026-08-14.md).
+
 ### 3.3 Safe content presentation
 
 Default human `show` should print content identity, byte size, and a bounded
@@ -128,6 +131,10 @@ through an explicit bytes-only mode that does not mix payload with metadata.
 
 Versioned machine output must define a binary encoding and structured fields.
 Preview limits, raw option naming, and JSON encoding remain open.
+
+The candidate-lifecycle proposal recommends a bounded bytewise preview and an
+explicit bytes-only raw mode while leaving cross-command JSON schema design to
+SG-BL-006.
 
 ### 3.4 Root scope — accepted clarification
 
@@ -144,10 +151,11 @@ or non-root dependency admissibility before sealing.
 
 ### 3.5 Integrity is not authority
 
-Native v2 seals are unauthenticated assertions by a repository writer. Their
+Native v3 seals are unauthenticated assertions by a repository writer. Their
 hashes prove the integrity and identity of bytes and linked objects; they do
-not prove actor identity, approval authority, trusted time, or truth. The
-identity-bearing `created_at` field is not an authenticated timestamp.
+not prove actor identity, approval authority, trusted time, or truth. ADR 0009
+removed compulsory seal-level `created_at`, actor, and event message fields;
+domains that require such evidence must seal it as explicit linked content.
 
 This clarification does not introduce signatures. Signatures and attestations
 remain separate future requirements.
@@ -202,7 +210,8 @@ override the blocker above:
 1. [x] Implement accepted writer coordination and no-loss candidate clearing
    with focused multi-process tests.
 2. [x] Implement complete-closure draft rejection tests.
-3. Implement candidate inspection/diff/unlink/discard and binary-safe `show`.
+3. [x] Implement candidate inspection/diff/unlink/discard and binary-safe
+   `show` under ADR 0008.
 4. repeat decision-document dogfood using the causal order above.
 5. resolve remaining operator/tag contracts.
 6. decide the Git-sidecar identity ADR before adding its runtime SDK seam.

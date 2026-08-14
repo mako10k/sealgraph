@@ -6,7 +6,8 @@ import (
 )
 
 type writerGuard struct {
-	lockDir string
+	lockDir      string
+	afterAcquire func()
 }
 
 func newWriterGuard(lockDir string) writerGuard {
@@ -27,5 +28,8 @@ func withMutation[T any](ctx context.Context, guard writerGuard, operation strin
 			err = fmt.Errorf("%w; repository writer guard release also failed: %v", err, releaseErr)
 		}
 	}()
+	if guard.afterAcquire != nil {
+		guard.afterAcquire()
+	}
 	return mutate()
 }

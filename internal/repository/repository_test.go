@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,28 +16,26 @@ import (
 	"github.com/mako10k/sealgraph/internal/history"
 )
 
-var fixedTime = time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC)
-
 func openTestRepository(t *testing.T) *Repository {
 	t.Helper()
 	dir := t.TempDir()
 	if _, err := InitStandalone(dir); err != nil {
 		t.Fatal(err)
 	}
-	repo, err := OpenStandalone(dir, func() time.Time { return fixedTime })
+	repo, err := OpenStandalone(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return repo
 }
 
-func sealRoot(t *testing.T, repo *Repository, ref, content, message string) SealResult {
+func sealRoot(t *testing.T, repo *Repository, ref, content string) SealResult {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := repo.Add(ctx, AddOptions{REF: ref, Content: []byte(content), Root: true}); err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := repo.Seal(ctx, ref, message)
+	sealed, err := repo.Seal(ctx, ref)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +48,7 @@ func sealDraftRoot(t *testing.T, repo *Repository) SealResult {
 	if _, err := repo.Add(ctx, AddOptions{REF: "ROOT", Content: []byte("provisional root"), Root: true, Draft: true}); err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := repo.Seal(ctx, "ROOT", "provisional root")
+	sealed, err := repo.Seal(ctx, "ROOT")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +60,7 @@ func sealDraftRoot(t *testing.T, repo *Repository) SealResult {
 
 func TestRootCanSealAndNonRootNeedsDependency(t *testing.T) {
 	repo := openTestRepository(t)
-	root := sealRoot(t, repo, "requirements/ROOT-001", "external requirement", "initial root")
+	root := sealRoot(t, repo, "requirements/ROOT-001", "external requirement")
 	if !root.Payload.Root || root.Payload.Parent != nil {
 		t.Fatalf("root payload = %+v", root.Payload)
 	}
@@ -72,7 +69,7 @@ func TestRootCanSealAndNonRootNeedsDependency(t *testing.T) {
 	if _, err := repo.Add(ctx, AddOptions{REF: "design/DESIGN-001", Content: []byte("design")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Seal(ctx, "design/DESIGN-001", "reviewed"); err == nil || !strings.Contains(err.Error(), "requires at least one dependency") {
+	if _, err := repo.Seal(ctx, "design/DESIGN-001"); err == nil || !strings.Contains(err.Error(), "requires at least one dependency") {
 		t.Fatalf("non-root seal error = %v, want dependency rejection", err)
 	}
 }
@@ -80,7 +77,7 @@ func TestRootCanSealAndNonRootNeedsDependency(t *testing.T) {
 func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	rootV1 := sealRoot(t, repo, "requirements/ROOT-001", "requirement v1", "root v1")
+	rootV1 := sealRoot(t, repo, "requirements/ROOT-001", "requirement v1")
 
 	if _, err := repo.Add(ctx, AddOptions{
 		REF: "design/api/DESIGN-001", Content: []byte("same design"),
@@ -88,7 +85,7 @@ func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	designV1, err := repo.Seal(ctx, "design/api/DESIGN-001", "reviewed root v1")
+	designV1, err := repo.Seal(ctx, "design/api/DESIGN-001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +93,7 @@ func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) 
 		t.Fatalf("plain --depend-on equivalent resolved %s, want concrete HEAD %s", got, rootV1.ID)
 	}
 
-	rootV2 := sealRoot(t, repo, "requirements/ROOT-001", "requirement v2", "root v2")
+	rootV2 := sealRoot(t, repo, "requirements/ROOT-001", "requirement v2")
 	if rootV2.ID.Equal(rootV1.ID) {
 		t.Fatal("root supersession did not create a new identity")
 	}
@@ -123,7 +120,7 @@ func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	historical, err := repo.Seal(ctx, "review/historical", "draft against v1")
+	historical, err := repo.Seal(ctx, "review/historical")
 	if err != nil {
 		t.Fatalf("explicit historical draft seal: %v", err)
 	}
@@ -142,27 +139,27 @@ func TestDependencyResolutionHistoricalImmutabilityAndDirectStale(t *testing.T) 
 func TestNormalHistoricalSealIsRejectedAndRelinkChangesIdentity(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	rootV1 := sealRoot(t, repo, "ROOT", "one", "v1")
+	rootV1 := sealRoot(t, repo, "ROOT", "one")
 	if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("unchanged"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}
-	childV1, err := repo.Seal(ctx, "CHILD", "same review message")
+	childV1, err := repo.Seal(ctx, "CHILD")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootV2 := sealRoot(t, repo, "ROOT", "two", "v2")
+	rootV2 := sealRoot(t, repo, "ROOT", "two")
 
 	if _, err := repo.Add(ctx, AddOptions{REF: "NORMAL-HISTORY", Content: []byte("x"), Dependencies: []Dependency{{REF: "ROOT", Revision: rootV1.ID.String()}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Seal(ctx, "NORMAL-HISTORY", "not draft"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
+	if _, err := repo.Seal(ctx, "NORMAL-HISTORY"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
 		t.Fatalf("normal historical seal error = %v, want HEAD consistency rejection", err)
 	}
 
 	if _, err := repo.Link(ctx, "CHILD", []Dependency{{REF: "ROOT"}}); err != nil {
 		t.Fatal(err)
 	}
-	childV2, err := repo.Seal(ctx, "CHILD", "same review message")
+	childV2, err := repo.Seal(ctx, "CHILD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,18 +177,18 @@ func TestNormalHistoricalSealIsRejectedAndRelinkChangesIdentity(t *testing.T) {
 func TestNormalSealChecksCompleteDependencyClosure(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	sealRoot(t, repo, "ROOT", "v1", "v1")
+	sealRoot(t, repo, "ROOT", "v1")
 	if _, err := repo.Add(ctx, AddOptions{REF: "MIDDLE", Content: []byte("middle"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Seal(ctx, "MIDDLE", "middle v1"); err != nil {
+	if _, err := repo.Seal(ctx, "MIDDLE"); err != nil {
 		t.Fatal(err)
 	}
-	sealRoot(t, repo, "ROOT", "v2", "v2")
+	sealRoot(t, repo, "ROOT", "v2")
 	if _, err := repo.Add(ctx, AddOptions{REF: "LEAF", Content: []byte("leaf"), Dependencies: []Dependency{{REF: "MIDDLE"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Seal(ctx, "LEAF", "leaf"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
+	if _, err := repo.Seal(ctx, "LEAF"); err == nil || !strings.Contains(err.Error(), "HEAD-consistent") {
 		t.Fatalf("closure-stale seal error = %v, want HEAD consistency rejection", err)
 	}
 }
@@ -205,14 +202,14 @@ func TestNormalSealRejectsDraftAnywhereInDependencyClosure(t *testing.T) {
 		if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("child"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.Seal(ctx, "CHILD", "normal child"); err == nil || !strings.Contains(err.Error(), "non-draft dependency closure") || !strings.Contains(err.Error(), "ROOT@") {
+		if _, err := repo.Seal(ctx, "CHILD"); err == nil || !strings.Contains(err.Error(), "non-draft dependency closure") || !strings.Contains(err.Error(), "ROOT@") {
 			t.Fatalf("normal seal error = %v, want direct draft rejection", err)
 		}
 
 		if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("child"), Draft: true}); err != nil {
 			t.Fatal(err)
 		}
-		child, err := repo.Seal(ctx, "CHILD", "provisional child")
+		child, err := repo.Seal(ctx, "CHILD")
 		if err != nil {
 			t.Fatalf("draft child depending on draft root: %v", err)
 		}
@@ -232,7 +229,6 @@ func TestNormalSealRejectsDraftAnywhereInDependencyClosure(t *testing.T) {
 		middle := writeTestSealPayload(t, repo, domain.SealPayload{
 			Schema: domain.SealSchema, REF: "MIDDLE", Content: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: middleContent},
 			Attachments: []domain.Attachment{}, Links: []domain.Link{{TargetREF: "ROOT", TargetSeal: draftRoot.ID}},
-			Message: "synthetic legacy normal seal", CreatedAt: "2026-08-14T00:00:01Z",
 		})
 		if err := repo.refs.Update(ctx, "MIDDLE", nil, &middle); err != nil {
 			t.Fatal(err)
@@ -240,7 +236,7 @@ func TestNormalSealRejectsDraftAnywhereInDependencyClosure(t *testing.T) {
 		if _, err := repo.Add(ctx, AddOptions{REF: "LEAF", Content: []byte("leaf"), Dependencies: []Dependency{{REF: "MIDDLE"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.Seal(ctx, "LEAF", "normal leaf"); err == nil || !strings.Contains(err.Error(), "ROOT@") || !strings.Contains(err.Error(), "is draft") {
+		if _, err := repo.Seal(ctx, "LEAF"); err == nil || !strings.Contains(err.Error(), "ROOT@") || !strings.Contains(err.Error(), "is draft") {
 			t.Fatalf("normal seal error = %v, want transitive draft rejection", err)
 		}
 	})
@@ -249,26 +245,23 @@ func TestNormalSealRejectsDraftAnywhereInDependencyClosure(t *testing.T) {
 func TestWriterGuardSerializesSealAndPreservesLaterCandidate(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	sealRoot(t, repo, "ROOT", "root", "root")
+	sealRoot(t, repo, "ROOT", "root")
 	if _, err := repo.Add(ctx, AddOptions{REF: "CHILD", Content: []byte("sealed version"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}
 
 	workDir := filepath.Dir(repo.dir)
-	clockEntered := make(chan struct{})
-	releaseClock := make(chan struct{})
-	var clockOnce sync.Once
-	sealingRepo, err := OpenStandalone(workDir, func() time.Time {
-		clockOnce.Do(func() {
-			close(clockEntered)
-			<-releaseClock
-		})
-		return fixedTime
-	})
+	guardEntered := make(chan struct{})
+	releaseGuard := make(chan struct{})
+	sealingRepo, err := OpenStandalone(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	editingRepo, err := OpenStandalone(workDir, func() time.Time { return fixedTime })
+	sealingRepo.writer.afterAcquire = func() {
+		close(guardEntered)
+		<-releaseGuard
+	}
+	editingRepo, err := OpenStandalone(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,13 +272,13 @@ func TestWriterGuardSerializesSealAndPreservesLaterCandidate(t *testing.T) {
 	}
 	sealDone := make(chan sealOutcome, 1)
 	go func() {
-		result, err := sealingRepo.Seal(ctx, "CHILD", "seal first version")
+		result, err := sealingRepo.Seal(ctx, "CHILD")
 		sealDone <- sealOutcome{result: result, err: err}
 	}()
 	select {
-	case <-clockEntered:
+	case <-guardEntered:
 	case <-time.After(2 * time.Second):
-		close(releaseClock)
+		close(releaseGuard)
 		t.Fatal("seal did not reach the guarded publication path")
 	}
 
@@ -300,11 +293,11 @@ func TestWriterGuardSerializesSealAndPreservesLaterCandidate(t *testing.T) {
 	}()
 	select {
 	case outcome := <-addDone:
-		close(releaseClock)
+		close(releaseGuard)
 		t.Fatalf("later add completed while seal held the writer guard: %+v", outcome)
 	case <-time.After(100 * time.Millisecond):
 	}
-	close(releaseClock)
+	close(releaseGuard)
 
 	sealed := <-sealDone
 	if sealed.err != nil {
@@ -354,6 +347,161 @@ func TestCandidateCleanupRefusesChangedVersion(t *testing.T) {
 	remaining, err := repo.candidates.Load("ROOT")
 	if err != nil || !remaining.Draft {
 		t.Fatalf("changed candidate was not retained: %+v, %v", remaining, err)
+	}
+}
+
+func TestCandidateInspectionAndDiffUseRecordedBase(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1")
+	candidate, err := repo.Add(ctx, AddOptions{REF: "ROOT", Content: []byte("candidate v2"), Root: true, Draft: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inspection, err := repo.InspectCandidate(ctx, "ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.BaseState != CandidateBaseCurrent || inspection.CurrentHead == nil || !inspection.CurrentHead.Equal(rootV1.ID) || string(inspection.Content) != "candidate v2" {
+		t.Fatalf("inspection = %+v", inspection)
+	}
+	diff, err := repo.DiffCandidate(ctx, "ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff.Diff.Initial || !diff.Diff.Content.Changed || !diff.Diff.Draft.Changed || diff.Diff.Root.Changed {
+		t.Fatalf("candidate diff = %+v", diff.Diff)
+	}
+	if !diff.Diff.Content.Before.ID.Equal(rootV1.Payload.Content.ID) || !diff.Diff.Content.After.ID.Equal(candidate.Content.ID) {
+		t.Fatalf("content diff = %+v", diff.Diff.Content)
+	}
+
+	headContent, err := repo.objects.WriteBlob(ctx, []byte("externally advanced head"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	headV2 := writeTestSealPayload(t, repo, domain.SealPayload{
+		Schema: domain.SealSchema, REF: "ROOT", Parent: &rootV1.ID,
+		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: headContent},
+		Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true,
+	})
+	if err := repo.refs.Update(ctx, "ROOT", &rootV1.ID, &headV2); err != nil {
+		t.Fatal(err)
+	}
+
+	advanced, err := repo.DiffCandidate(ctx, "ROOT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advanced.Inspection.BaseState != CandidateBaseHeadAdvanced || advanced.Inspection.CurrentHead == nil || !advanced.Inspection.CurrentHead.Equal(headV2) {
+		t.Fatalf("advanced inspection = %+v", advanced.Inspection)
+	}
+	if !advanced.Diff.Content.Before.ID.Equal(rootV1.Payload.Content.ID) {
+		t.Fatalf("diff silently switched from recorded base: %+v", advanced.Diff.Content)
+	}
+}
+
+func TestInitialCandidateDiffUsesAbsentState(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "NEW", Content: []byte("new"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.DiffCandidate(ctx, "NEW")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Diff.Initial || result.Inspection.BaseState != CandidateBaseInitial || result.Inspection.CurrentHead != nil || !result.Diff.Content.Changed {
+		t.Fatalf("initial candidate diff = %+v", result)
+	}
+}
+
+func TestUnlinkSupportsBareAndGuardedHistoricalEdges(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1")
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2")
+	candidate, err := repo.Add(ctx, AddOptions{
+		REF: "REVIEW", Content: []byte("review"), Draft: true,
+		Dependencies: []Dependency{{REF: "ROOT", Revision: rootV1.ID.String()[:12]}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repo.Unlink(ctx, "REVIEW", "ROOT", rootV2.ID.String()[:12]); err == nil || !strings.Contains(err.Error(), "not required generation") {
+		t.Fatalf("guard mismatch error = %v", err)
+	}
+	unchanged, err := repo.InspectCandidate(ctx, "REVIEW")
+	if err != nil || len(unchanged.Candidate.Links) != 1 || !unchanged.Candidate.Links[0].TargetSeal.Equal(rootV1.ID) {
+		t.Fatalf("guard mismatch changed candidate: %+v, %v", unchanged, err)
+	}
+
+	unlinked, err := repo.Unlink(ctx, "REVIEW", "ROOT", rootV1.ID.String()[:12])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unlinked.Links) != 0 || !unlinked.Content.ID.Equal(candidate.Content.ID) || !unlinked.Draft {
+		t.Fatalf("guarded unlink = %+v", unlinked)
+	}
+	if _, err := repo.Link(ctx, "REVIEW", []Dependency{{REF: "ROOT"}}); err != nil {
+		t.Fatal(err)
+	}
+	if unlinked, err = repo.Unlink(ctx, "REVIEW", "ROOT", ""); err != nil || len(unlinked.Links) != 0 {
+		t.Fatalf("bare unlink = %+v, %v", unlinked, err)
+	}
+	if _, err := repo.Unlink(ctx, "REVIEW", "ROOT", ""); err == nil || !strings.Contains(err.Error(), "has no dependency") {
+		t.Fatalf("missing edge error = %v", err)
+	}
+}
+
+func TestDiscardCandidateHandlesCorruptionWithoutRecursiveDeletion(t *testing.T) {
+	repo := openTestRepository(t)
+	ctx := context.Background()
+	candidate, err := repo.Add(ctx, AddOptions{REF: "team/api", Content: []byte("unsealed"), Root: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidatePath := filepath.Join(repo.dir, "index", "team", "api")
+	if err := os.WriteFile(candidatePath, []byte("{corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.InspectCandidate(ctx, "team/api"); err == nil || !strings.Contains(err.Error(), "candidate discard team/api") {
+		t.Fatalf("corrupt inspection error = %v", err)
+	}
+	if err := repo.DiscardCandidate(ctx, "team"); err == nil || !strings.Contains(err.Error(), "prefix") {
+		t.Fatalf("recursive parent discard error = %v", err)
+	}
+	if _, err := os.Lstat(candidatePath); err != nil {
+		t.Fatalf("parent discard removed child candidate: %v", err)
+	}
+	if err := repo.DiscardCandidate(ctx, "team/api"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(candidatePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("candidate still exists: %v", err)
+	}
+	if _, err := repo.objects.ReadObject(ctx, candidate.Content.ID); err != nil {
+		t.Fatalf("discard removed immutable content object: %v", err)
+	}
+	if err := repo.DiscardCandidate(ctx, "team/api"); err == nil || !strings.Contains(err.Error(), "nothing was discarded") {
+		t.Fatalf("missing discard error = %v", err)
+	}
+
+	target := filepath.Join(t.TempDir(), "target")
+	if err := os.WriteFile(target, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(repo.dir, "index", "ALIAS")
+	if err := os.Symlink(target, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DiscardCandidate(ctx, "ALIAS"); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("symlink discard error = %v", err)
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "outside" {
+		t.Fatalf("symlink target changed: %q, %v", data, err)
 	}
 }
 
@@ -439,22 +587,22 @@ func waitForTestPath(t *testing.T, path string) {
 func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	rootV1 := sealRoot(t, repo, "ROOT", "root v1", "root v1")
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1")
 	if _, err := repo.Add(ctx, AddOptions{REF: "MIDDLE", Content: []byte("middle"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}
-	middleV1, err := repo.Seal(ctx, "MIDDLE", "middle v1")
+	middleV1, err := repo.Seal(ctx, "MIDDLE")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.Add(ctx, AddOptions{REF: "LEAF", Content: []byte("leaf"), Dependencies: []Dependency{{REF: "MIDDLE"}}}); err != nil {
 		t.Fatal(err)
 	}
-	leafV1, err := repo.Seal(ctx, "LEAF", "leaf v1")
+	leafV1, err := repo.Seal(ctx, "LEAF")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootV2 := sealRoot(t, repo, "ROOT", "root v2", "root v2")
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2")
 
 	middleStatus, err := repo.Status(ctx, "MIDDLE")
 	if err != nil {
@@ -493,7 +641,7 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	if _, err := repo.Link(ctx, "MIDDLE", []Dependency{{REF: "ROOT"}}); err != nil {
 		t.Fatal(err)
 	}
-	middleV2, err := repo.Seal(ctx, "MIDDLE", "middle reviewed against root v2")
+	middleV2, err := repo.Seal(ctx, "MIDDLE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +658,7 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 	if _, err := repo.Link(ctx, "LEAF", []Dependency{{REF: "MIDDLE"}}); err != nil {
 		t.Fatal(err)
 	}
-	leafV2, err := repo.Seal(ctx, "LEAF", "leaf reviewed against middle v2")
+	leafV2, err := repo.Seal(ctx, "LEAF")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,8 +677,8 @@ func TestTransitiveStaleReverseImpactAndSequentialRepair(t *testing.T) {
 func TestShowExplicitHistoricalSeal(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	v1 := sealRoot(t, repo, "requirements/ROOT", "v1 bytes", "v1")
-	sealRoot(t, repo, "requirements/ROOT", "v2 bytes", "v2")
+	v1 := sealRoot(t, repo, "requirements/ROOT", "v1 bytes")
+	sealRoot(t, repo, "requirements/ROOT", "v2 bytes")
 	shown, err := repo.Show(ctx, "requirements/ROOT", v1.ID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -543,11 +691,11 @@ func TestShowExplicitHistoricalSeal(t *testing.T) {
 func TestUniquePrefixScopedTagAndLinkMessageResolveToConcreteSeal(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	rootV1 := sealRoot(t, repo, "requirements/ROOT", "v1", "v1")
+	rootV1 := sealRoot(t, repo, "requirements/ROOT", "v1")
 	if _, err := repo.CreateTag(ctx, "requirements/ROOT", rootV1.ID.Hex[:12], "baseline/1.0"); err != nil {
 		t.Fatal(err)
 	}
-	rootV2 := sealRoot(t, repo, "requirements/ROOT", "v2", "v2")
+	rootV2 := sealRoot(t, repo, "requirements/ROOT", "v2")
 	if _, err := repo.CreateTag(ctx, "requirements/ROOT", "", "current"); err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +717,7 @@ func TestUniquePrefixScopedTagAndLinkMessageResolveToConcreteSeal(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	design, err := repo.Seal(ctx, "design/api", "historical design review")
+	design, err := repo.Seal(ctx, "design/api")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,19 +737,19 @@ func TestUniquePrefixScopedTagAndLinkMessageResolveToConcreteSeal(t *testing.T) 
 func TestLogLinkLogAndDiffAcrossRelink(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	rootV1 := sealRoot(t, repo, "ROOT", "root v1", "root v1")
+	rootV1 := sealRoot(t, repo, "ROOT", "root v1")
 	if _, err := repo.Add(ctx, AddOptions{REF: "design/api", Content: []byte("unchanged design"), Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}
-	designV1, err := repo.Seal(ctx, "design/api", "reviewed root v1")
+	designV1, err := repo.Seal(ctx, "design/api")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootV2 := sealRoot(t, repo, "ROOT", "root v2", "root v2")
+	rootV2 := sealRoot(t, repo, "ROOT", "root v2")
 	if _, err := repo.Link(ctx, "design/api", []Dependency{{REF: "ROOT"}}); err != nil {
 		t.Fatal(err)
 	}
-	designV2, err := repo.Seal(ctx, "design/api", "reviewed root v2")
+	designV2, err := repo.Seal(ctx, "design/api")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -633,7 +781,7 @@ func TestLogLinkLogAndDiffAcrossRelink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diff.Content.Changed || len(diff.Links) != 1 || diff.Links[0].Kind != history.LinkRepoint || !diff.Message.Changed || !diff.Parent.Changed {
+	if diff.Content.Changed || len(diff.Links) != 1 || diff.Links[0].Kind != history.LinkRepoint || !diff.Parent.Changed {
 		t.Fatalf("current diff = %+v", diff)
 	}
 	explicit, err := repo.DiffExact(ctx, "design/api", designV1.ID, designV2.ID)
@@ -647,7 +795,7 @@ func TestLogLinkLogAndDiffAcrossRelink(t *testing.T) {
 
 func TestCurrentDiffRejectsInitialSeal(t *testing.T) {
 	repo := openTestRepository(t)
-	sealRoot(t, repo, "ROOT", "root", "initial")
+	sealRoot(t, repo, "ROOT", "root")
 	if _, err := repo.DiffCurrent(context.Background(), "ROOT"); err == nil || !strings.Contains(err.Error(), "has no parent") {
 		t.Fatalf("initial diff error = %v", err)
 	}
@@ -657,15 +805,14 @@ func TestLogRejectsCorruptAndForeignParent(t *testing.T) {
 	t.Run("corrupt parent", func(t *testing.T) {
 		repo := openTestRepository(t)
 		ctx := context.Background()
-		root := sealRoot(t, repo, "ROOT", "root", "initial")
+		root := sealRoot(t, repo, "ROOT", "root")
 		badParent, err := repo.objects.WriteBlob(ctx, []byte("not a canonical seal"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		head := writeTestSealPayload(t, repo, domain.SealPayload{
 			Schema: domain.SealSchema, REF: "ROOT", Parent: &badParent, Content: root.Payload.Content,
-			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Message: "synthetic corrupt ancestry",
-			Root: true, CreatedAt: "2026-08-14T00:00:01Z",
+			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true,
 		})
 		if err := repo.refs.Update(ctx, "ROOT", &root.ID, &head); err != nil {
 			t.Fatal(err)
@@ -678,12 +825,11 @@ func TestLogRejectsCorruptAndForeignParent(t *testing.T) {
 	t.Run("foreign parent", func(t *testing.T) {
 		repo := openTestRepository(t)
 		ctx := context.Background()
-		root := sealRoot(t, repo, "ROOT", "root", "initial")
-		foreign := sealRoot(t, repo, "OTHER", "other", "other initial")
+		root := sealRoot(t, repo, "ROOT", "root")
+		foreign := sealRoot(t, repo, "OTHER", "other")
 		head := writeTestSealPayload(t, repo, domain.SealPayload{
 			Schema: domain.SealSchema, REF: "ROOT", Parent: &foreign.ID, Content: root.Payload.Content,
-			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Message: "synthetic foreign ancestry",
-			Root: true, CreatedAt: "2026-08-14T00:00:01Z",
+			Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true,
 		})
 		if err := repo.refs.Update(ctx, "ROOT", &root.ID, &head); err != nil {
 			t.Fatal(err)
@@ -710,7 +856,7 @@ func writeTestSealPayload(t *testing.T, repo *Repository, payload domain.SealPay
 func TestUnsealedDraftCandidateStatus(t *testing.T) {
 	repo := openTestRepository(t)
 	ctx := context.Background()
-	sealRoot(t, repo, "ROOT", "root", "root")
+	sealRoot(t, repo, "ROOT", "root")
 	if _, err := repo.Add(ctx, AddOptions{REF: "REVIEW", Content: []byte("work"), Draft: true, Dependencies: []Dependency{{REF: "ROOT"}}}); err != nil {
 		t.Fatal(err)
 	}

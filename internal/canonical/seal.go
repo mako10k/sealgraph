@@ -86,12 +86,7 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 		}
 		b = append(b, '}')
 	}
-	b = append(b, `],"message":`...)
-	b, err = appendString(b, normalized.Message)
-	if err != nil {
-		return nil, err
-	}
-	b = append(b, `,"root":`...)
+	b = append(b, `],"root":`...)
 	if normalized.Root {
 		b = append(b, "true"...)
 	} else {
@@ -102,11 +97,6 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 		b = append(b, "true"...)
 	} else {
 		b = append(b, "false"...)
-	}
-	b = append(b, `,"created_at":`...)
-	b, err = appendString(b, normalized.CreatedAt)
-	if err != nil {
-		return nil, err
 	}
 	b = append(b, '}')
 	return b, nil

@@ -2,6 +2,10 @@
 
 Status: accepted on 2026-08-14.
 
+The seal-level event-message behavior described below is superseded by ADR 0009.
+ADR 0009 retains edge-specific link messages but removes seal-level `message`
+and `created_at` from native v3.
+
 ## Context
 
 Sealgraph is still experimental. The current native v1 contract repeats the

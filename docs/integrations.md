@@ -78,6 +78,8 @@ Suggested optional workflow:
 ```sh
 llmthink dsl audit docs/decisions/sealgraph-design.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-external-spec-review.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-candidate-lifecycle.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-seal-event-metadata.think --pretty
 ```
 
 When a major architecture choice changes:
@@ -108,7 +110,7 @@ Exact supply/route/demand policy belongs to deployment-specific configuration, n
 Rules:
 
 - never put secret plaintext in `.sealgraph`,
-- never copy secret values into seal messages,
+- never copy secret values into seal content or link messages,
 - never include decrypted secrets in fixtures/snapshots/logs,
 - do not add a hard runtime dependency on secdat,
 - if command JSON/output from secdat is consumed, use its secret-safe/preflight surfaces rather than scraping plaintext.

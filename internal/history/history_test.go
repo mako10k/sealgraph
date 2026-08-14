@@ -121,13 +121,13 @@ func TestDiffSealsCoversCanonicalFields(t *testing.T) {
 		REF: "design/api", Parent: &parent1,
 		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: content1},
 		Attachments: []domain.Attachment{{Name: "report", MediaType: "text/plain", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: blob1}}},
-		Links:       []domain.Link{testLink("ROOT", root1)}, Message: "before", Root: false, Draft: true, CreatedAt: "2026-08-14T00:00:00Z",
+		Links:       []domain.Link{testLink("ROOT", root1)}, Root: false, Draft: true,
 	}
 	to := domain.SealPayload{
 		REF: "design/api", Parent: &parent2,
 		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: content2},
 		Attachments: []domain.Attachment{{Name: "report", MediaType: "application/octet-stream", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: blob2}}},
-		Links:       []domain.Link{testLink("ROOT", root2)}, Message: "after", Root: true, Draft: false, CreatedAt: "2026-08-14T00:00:01Z",
+		Links:       []domain.Link{testLink("ROOT", root2)}, Root: true, Draft: false,
 	}
 
 	diff, err := DiffSeals(fromID, from, toID, to)
@@ -137,7 +137,7 @@ func TestDiffSealsCoversCanonicalFields(t *testing.T) {
 	if !diff.Content.Changed || len(diff.Attachments) != 1 || diff.Attachments[0].Kind != AttachmentChange || len(diff.Links) != 1 || diff.Links[0].Kind != LinkRepoint {
 		t.Fatalf("collection diff = %+v", diff)
 	}
-	if !diff.Message.Changed || !diff.Root.Changed || !diff.Draft.Changed || !diff.Parent.Changed || !diff.CreatedAt.Changed {
+	if !diff.Root.Changed || !diff.Draft.Changed || !diff.Parent.Changed {
 		t.Fatalf("scalar diff = %+v", diff)
 	}
 

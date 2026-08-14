@@ -1,12 +1,15 @@
 # Sealgraph dogfooding plan
 
-Status: R0, R1, and the native-v2 decision-document round passed on 2026-08-14. The tracked project repository now
-contains only approved canonical standalone `.sealgraph` state; runtime-only
-paths remain ignored. See
+Status: R0, R1, native-v2, candidate-lifecycle, and native-v3 material-identity
+rounds passed on 2026-08-14. The tracked project repository now contains only
+approved canonical standalone `.sealgraph` state; runtime-only paths remain
+ignored. See
 [`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md)
 and [`dogfooding-receipts/2026-08-14-r1.md`](dogfooding-receipts/2026-08-14-r1.md).
 The breaking format-2 regeneration and ADR dogfood are recorded in
 [`dogfooding-receipts/2026-08-14-native-v2.md`](dogfooding-receipts/2026-08-14-native-v2.md).
+The breaking format-3 material-identity regeneration is recorded in
+[`dogfooding-receipts/2026-08-14-native-v3-material-identity.md`](dogfooding-receipts/2026-08-14-native-v3-material-identity.md).
 
 ## 1. Objective
 
@@ -28,7 +31,7 @@ adds canonical `.sealgraph/config`, objects, and refs to this repository.
 - Do not add a Git commit hook or automatic `commit -> seal` behavior.
 - Do not use `seal --all`, recursive repair, or automatic relinking/resealing.
 - Do not put credentials, environment dumps, source archives, or secret
-  plaintext into dogfood content or seal messages.
+  plaintext into dogfood content or link messages.
 - Do not edit or delete immutable objects to make an assertion pass.
 - Do not treat root as trusted or true; root only declares the scenario's
   provenance boundary.
@@ -76,12 +79,12 @@ dogfood/validation/core-tests             depends on native-slice HEAD
 ```
 
 Use compact, non-secret content that includes the frozen source SHA and the
-identity of the artifact being asserted. Seal messages state what was reviewed,
-not merely "update".
+identity of the artifact being asserted. If an event attestation is required,
+seal it as separate content and link it to the exact subject generation.
 
 Acceptance:
 
-- `show` exposes exact content, message, flags, parent, and concrete links;
+- `show` exposes exact content, flags, parent, and concrete links;
 - all three current heads are `CLEAN`;
 - each dependent payload stores only its direct upstream seal identity;
 - repeating inspection does not mutate any object or REF.
@@ -241,3 +244,34 @@ Future ADR dogfood should preserve the decision sequence explicitly:
 
 Do not rewrite an old seal or receipt to make a retrospective graph look
 causal.
+
+## 9. Candidate lifecycle focused round
+
+After ADR 0008 implementation, use a temporary standalone repository to
+exercise candidate show/diff, guarded historical unlink, explicit relink,
+discard, bounded binary-safe preview, and exact candidate/sealed raw content.
+The round must prove that unlink/discard affect one candidate only and that no
+raw control byte is mixed with human metadata. It is focused implementation
+evidence and does not complete the recurring `DOGFOOD_R2` workflow.
+
+## 10. Native v3 material-identity regeneration
+
+ADR 0009 authorizes a breaking regeneration from an empty format-3 repository.
+After code and canonical fixture validation, preserve the old format-2 state in
+outer Git history and replace the tracked `.sealgraph/` state explicitly; do
+not rewrite old objects in place or add a v2 reader.
+
+The focused round must:
+
+1. initialize format 3 without inspecting `.git`;
+2. seal exact ADR 0009 and normative-document bytes without a seal event
+   message/time/actor;
+3. link normative documents to the exact ADR generation where applicable;
+4. prove `show`, `log`, and canonical payload bytes contain none of those event
+   fields;
+5. preserve full concrete IDs and edge-specific link messages;
+6. record source/binary/document hashes and resulting heads in a new receipt.
+
+This is a format-regeneration decision, not an automatic migration or authority
+claim. Any actor/time approval assertion must be modeled as separately sealed
+content and an explicit link.

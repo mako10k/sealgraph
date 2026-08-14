@@ -23,8 +23,6 @@ func fixturePayload() domain.SealPayload {
 			{TargetREF: "requirements/REQ-B", TargetSeal: fixtureID('c'), Message: "later input"},
 			{TargetREF: "requirements/REQ-A", TargetSeal: fixtureID('b'), Message: "review basis"},
 		},
-		Message:   "Reviewed <exactly>\nline two",
-		CreatedAt: "2026-08-14T00:00:00Z",
 	}
 }
 
@@ -34,7 +32,7 @@ func TestCanonicalSealFixtureHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := native.ObjectID(encoded)
-	const expected = "5405d157bdc6ec7a1a23f7f575c48c6ccbdfbb582a313395b5a4e7eee65d4b42"
+	const expected = "1252494cb709ab0721fa9849d68e36fcd4776d1b63013f257ad780ffcac13203"
 	if id.Hex != expected {
 		t.Fatalf("fixture hash = %s, want %s\npayload=%s", id.Hex, expected, encoded)
 	}
@@ -64,7 +62,7 @@ func TestDependencyInputOrderHasSameCanonicalRepresentation(t *testing.T) {
 	}
 }
 
-func TestDirectUpstreamAndMessageAffectSealIdentity(t *testing.T) {
+func TestDirectUpstreamAndLinkMessageAffectSealIdentity(t *testing.T) {
 	base := fixturePayload()
 	encoded, err := EncodeSeal(base)
 	if err != nil {
@@ -82,16 +80,6 @@ func TestDirectUpstreamAndMessageAffectSealIdentity(t *testing.T) {
 		t.Fatal("changing only direct upstream seal identity did not change seal identity")
 	}
 
-	message := fixturePayload()
-	message.Message = "Different review message"
-	messageBytes, err := EncodeSeal(message)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if baseID.Equal(native.ObjectID(messageBytes)) {
-		t.Fatal("changing only message did not change seal identity")
-	}
-
 	linkMessage := fixturePayload()
 	linkMessage.Links[0].Message = "different edge rationale"
 	linkMessageBytes, err := EncodeSeal(linkMessage)
@@ -102,14 +90,20 @@ func TestDirectUpstreamAndMessageAffectSealIdentity(t *testing.T) {
 		t.Fatal("changing only a link message did not change seal identity")
 	}
 
-	createdAt := fixturePayload()
-	createdAt.CreatedAt = "2026-08-14T00:00:01Z"
-	createdAtBytes, err := EncodeSeal(createdAt)
+}
+
+func TestDecoderRejectsSealEventMetadata(t *testing.T) {
+	encoded, err := EncodeSeal(fixturePayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if baseID.Equal(native.ObjectID(createdAtBytes)) {
-		t.Fatal("changing only created_at did not change seal identity")
+	for _, member := range []string{`,"message":"event"`, `,"created_at":"2026-08-14T00:00:00Z"`, `,"actor":"operator"`} {
+		withMetadata := append([]byte(nil), encoded[:len(encoded)-1]...)
+		withMetadata = append(withMetadata, member...)
+		withMetadata = append(withMetadata, '}')
+		if _, err := DecodeSeal(withMetadata); err == nil {
+			t.Fatalf("seal event metadata was accepted: %s", member)
+		}
 	}
 }
 
@@ -160,7 +154,7 @@ func TestDecoderRejectsNonCanonicalMemberOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v2","ref":`), []byte(`{"ref":`), 1)
+	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v3","ref":`), []byte(`{"ref":`), 1)
 	if bytes.Equal(changed, encoded) {
 		t.Fatal("test setup did not alter bytes")
 	}

@@ -3,7 +3,6 @@ package domain
 import (
 	"fmt"
 	"sort"
-	"time"
 	"unicode/utf8"
 )
 
@@ -98,21 +97,11 @@ func NormalizeSeal(payload SealPayload) (SealPayload, error) {
 	if err != nil {
 		return SealPayload{}, err
 	}
-	if payload.Message == "" {
-		return SealPayload{}, fmt.Errorf("seal message is empty; pass a non-empty -m MESSAGE")
-	}
-	if !utf8.ValidString(payload.Message) {
-		return SealPayload{}, fmt.Errorf("seal message is not valid UTF-8")
-	}
 	if payload.Root && len(links) != 0 {
 		return SealPayload{}, fmt.Errorf("root REF %q cannot have dependencies; unlink them before sealing", payload.REF)
 	}
 	if !payload.Root && len(links) == 0 {
 		return SealPayload{}, fmt.Errorf("non-root REF %q requires at least one dependency; use link or declare it --root", payload.REF)
-	}
-	parsedTime, err := time.Parse("2006-01-02T15:04:05Z", payload.CreatedAt)
-	if err != nil || parsedTime.Format("2006-01-02T15:04:05Z") != payload.CreatedAt {
-		return SealPayload{}, fmt.Errorf("created_at %q is not canonical UTC whole-second time", payload.CreatedAt)
 	}
 	payload.Attachments = attachments
 	payload.Links = links

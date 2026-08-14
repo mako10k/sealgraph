@@ -10,7 +10,7 @@ Always initializes standalone `.sealgraph`.
 
 It never inspects Git.
 
-For an existing format-2 repository with valid canonical `config`, `objects`,
+For an existing format-3 repository with valid canonical `config`, `objects`,
 `refs/seals`, and `refs/tags`, an explicit `init` invocation also recreates missing empty
 `index` or `locks` runtime directories. This supports an outer checkout that
 tracks canonical state but ignores runtime-only directories. It never creates,
@@ -76,10 +76,10 @@ sealgraph link DESIGN-001 --depend-on REQ-001@<seal-id-prefix-or-tag> \
   -m 'Requirement basis used by this design'
 ```
 
-Native v2 has only one domain-independent dependency edge and no link kind.
+Native v3 has only one domain-independent dependency edge and no link kind.
 `link -m MESSAGE` records optional rationale on each dependency added or
-replaced by that invocation. It is part of candidate/seal identity and differs
-from the whole-seal event message supplied to `seal -m`.
+replaced by that invocation. It is part of candidate/seal identity and describes
+the dependency relation, not the seal operation or an actor/time claim.
 
 ### `sealgraph tag`
 
@@ -98,23 +98,66 @@ the resolved full 64-character lower-case ID.
 
 ### `sealgraph unlink`
 
-Removes a candidate dependency explicitly.
+Removes exactly one candidate dependency explicitly:
+
+```sh
+sealgraph unlink DESIGN --upstream REQ
+sealgraph unlink DESIGN --upstream REQ@reviewed-v1
+```
+
+The bare form removes the unique edge keyed by upstream REF. The qualified form
+resolves the token and removes the edge only when the candidate stores that
+exact seal generation. Missing edges and generation mismatches are errors. One
+invocation accepts one `--upstream`. The command changes no content, root/draft
+state, other edge, REF head, or seal.
+
+Removing the last dependency from a non-root candidate is permitted as mutable
+intermediate state, but the candidate cannot be sealed until the operator adds
+a dependency or explicitly makes the next generation root.
+
+### `sealgraph candidate`
+
+Inspects or explicitly discards one mutable candidate:
+
+```sh
+sealgraph candidate show DESIGN
+sealgraph candidate diff DESIGN
+sealgraph candidate discard DESIGN
+```
+
+`candidate show` validates the candidate, content object, direct dependency
+ownership, base ownership, and current REF head ownership. It displays the
+recorded base, current HEAD, and derived `BASE_STATE`: `INITIAL`, `CURRENT`,
+`HEAD_ADVANCED`, `HEAD_MISSING`, or `UNEXPECTED_HEAD`.
+
+`candidate diff` compares content identity, attachments, direct links, root,
+and draft with the recorded base. Current HEAD relation is displayed separately.
+An initial candidate is compared with absent state. Parent publication is not
+invented.
+
+`candidate discard` removes only the exact candidate file. The explicit command
+and REF are the confirmation; there is no prompt, `--yes`, or `--force`. It does
+not move a REF, delete immutable objects, recurse through candidate paths, or
+repair state. Missing and unsafe targets are errors. Corrupt candidate files
+may be discarded explicitly.
 
 ### `sealgraph attach` / `detach`
 
 Changes candidate attachments.
 
-### `sealgraph seal REF -m MESSAGE`
+### `sealgraph seal REF`
 
 Creates one immutable seal for one REF.
 
-Message is required in the initial contract.
+Seal accepts no event-message, actor, or timestamp option. Those are not core
+seal fields. When a domain needs such evidence, it seals the claim as ordinary
+content under another REF and links it to the exact subject generation.
 
 There is no batch seal.
 
 Normal non-draft seal validation includes DAG validity and dependency freshness rules defined by requirements.
 
-In native v2, a normal seal requires a HEAD-consistent complete dependency
+In native v3, a normal seal requires a HEAD-consistent complete dependency
 closure containing no draft seal. A draft may preserve an explicit historical
 dependency and may depend on draft or non-draft generations. There is no generic
 `--force` or ignore-validation option. Root seals have no dependencies; all
@@ -130,6 +173,10 @@ that the seal was published but candidate cleanup did not occur.
 ```sh
 sealgraph show REF
 sealgraph show REF@<seal-id-prefix-or-tag>
+sealgraph show REF@<seal-id-prefix-or-tag> --raw-content
+
+sealgraph candidate show REF [--raw-content]
+sealgraph candidate diff REF
 
 sealgraph diff REF
 sealgraph diff REF@<old-prefix-or-tag> REF@<new-prefix-or-tag>
@@ -182,12 +229,23 @@ History inspection uses sealgraph generations, not Git history:
   selectors in the two-argument form are rejected.
 
 Semantic diff reports seal IDs and changes in content identity, attachments,
-direct links, message, root/draft state, parent, and `created_at`. Dependency
+direct links, root/draft state, and parent. Dependency
 changes distinguish add, remove, repoint, and dependency-message change. Attachment changes are keyed by
 their unique canonical name. Content bytes are not emitted or text-diffed in
 this slice: content is compared by its complete store/type/ObjectID identity,
 which keeps human output bounded and safe for binary or control-byte content.
 Messages and attachment metadata are quoted in human output.
+
+Default `show` and `candidate show` print content identity, exact byte size, and
+at most the first 256 input bytes as a bytewise ASCII-escaped preview. Printable
+ASCII is literal except quote/backslash; LF/CR/TAB use `\\n`/`\\r`/`\\t`, and
+all remaining bytes use lower-case `\\xhh`. Messages and other arbitrary string
+metadata use the same safe quoted-byte representation.
+
+With `--raw-content`, stdout contains the exact content bytes and nothing else:
+no metadata, preview, prefix, or added newline. The complete object is validated
+before output. Versioned machine-readable output remains a separate
+cross-command contract.
 
 `log`, `linklog`, and `diff` validate all required immutable objects before
 printing a result. They never create runtime directories, append a log, move a

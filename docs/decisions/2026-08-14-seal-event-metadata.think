@@ -1,0 +1,106 @@
+framework SealEventMetadata:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain Sealgraph:
+  description "seal identity から seal event metadata を分離する"
+
+problem P1:
+  "誰がいつなぜ seal したかを常に material identity へ含めるべきか"
+
+step S1:
+  premise PR1:
+    |
+      dependency link は concrete upstream seal ID を固定するため、upstream seal ID が
+      actor、time、event rationale を含むと、downstream はそれらへも無条件に依存する
+
+step S2:
+  premise PR2:
+    |
+      actor identity と trusted time は hash だけでは証明できず、現在の created_at と
+      seal message は unauthenticated event metadata にすぎない
+
+step S3:
+  evidence EV1:
+    |
+      current native v2 canonical payload は seal-level message と created_at を必須 member
+      とし、両方を seal ID に含めている。actor field はまだ存在しない
+
+step S4:
+  decision D1 based_on P1, PR1, PR2, EV1:
+    |
+      seal-level message と created_at を canonical seal payload、domain model、CLI から
+      削除し、actor その他の seal event metadata も core seal field として追加しない
+
+problem P2:
+  "event metadata を除外した後、seal identity が commit する semantic boundary は何か"
+
+step S5:
+  premise PR3:
+    |
+      content、attachments、direct links、root/draft は sealed material/provenance state であり、
+      ref ownership と parent は ownership/history integrity を定める
+
+step S6:
+  evidence EV2:
+    |
+      link message は actor/time ではなく一つの concrete dependency edge の意味を説明し、
+      linklog は edge target change と edge rationale change を区別している
+
+step S7:
+  decision D2 based_on P2, PR3, EV2:
+    |
+      schema、ref、parent、content、attachments、links、root、draft を canonical state として
+      維持する。edge-specific link message も dependency relation state として維持する
+
+problem P3:
+  "actor、time、approval rationale が必要な domain はどう表現するか"
+
+step S8:
+  premise PR4:
+    |
+      sealgraph は domain independent であり、actor authority や trusted time の意味を
+      unauthenticated scalar field として core が決めるべきではない
+
+step S9:
+  decision D3 based_on P3, PR4:
+    |
+      必要な event/attestation metadata は通常の content として別 REF に seal し、対象 seal
+      への concrete dependency link を含める。署名や trusted timestamp は将来の明示 ADR とする
+
+problem P4:
+  "既存 native v2 と異なる canonical member set をどう識別するか"
+
+step S10:
+  premise PR5:
+    |
+      同じ sealgraph/seal/v2 schema が二つの incompatible canonical byte contract を意味すると、
+      object forensic と decoder behavior が実装 version に依存して曖昧になる
+
+step S11:
+  evidence EV3:
+    |
+      accepted experimental policy は pre-1.0 では simplicity を優先し、old format reader、
+      automatic migration、compatibility switch を持たず repository format を更新できる
+
+step S12:
+  decision D4 based_on P4, PR5, EV3:
+    |
+      repository_format 3、sealgraph/seal/v3、sealgraph/candidate/v3 を採用し、format 2 は
+      明示的に拒否する。dual reader と automatic migration は実装しない
+
+problem P5:
+  "seal command は event message をどのように扱うか"
+
+step S13:
+  premise PR6:
+    |
+      -m を受け取って保存しない、または identity 外の mutable log に保存すると、CLI が
+      provenance を記録したように見せながら canonical claim にならない
+
+step S14:
+  decision D5 based_on P5, PR6:
+    |
+      standalone seal syntax は sealgraph seal REF とし、seal-level -m は削除する。
+      reason が必要なら別の sealed attestation content と concrete link で表現する

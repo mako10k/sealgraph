@@ -143,23 +143,23 @@ commands made the receipt longer and made an omitted generation easy to miss.
 
 ### Dogfood observation
 
-The controlled storage supersession intentionally kept content and links
-unchanged while changing message, time, parent, and seal ID. Downstream repair
-kept content unchanged while changing a concrete link. Side-by-side `show`
-output was the only way to distinguish these cases.
+The historical format-2 storage supersession intentionally kept content and
+links unchanged while changing event message, time, parent, and seal ID.
+ADR 0009 removes those event fields in format 3. Downstream repair still keeps
+content unchanged while changing a concrete link.
 
 ### Required design
 
 - Compare two explicit seals, or a current head with its parent.
-- Separate changes in content identity, attachments, direct links, message,
-  root/draft state, parent, and created time.
+- Separate changes in content identity, attachments, direct links, root/draft
+  state, and parent. Link-message changes remain edge changes.
 - Report link add/remove/repoint distinctly; do not call it a Git merge diff.
 - Define safe textual/binary content presentation and size limits.
 
 ### Acceptance
 
-- R1 storage v1→v2 reports unchanged content/dependencies and changed event
-  metadata/parent.
+- Historical R1 storage v1→v2 remains readable in its receipt; native v3 diff
+  has no seal event metadata fields.
 - R1 implementation v1→v2 reports unchanged content and a storage link
   repoint.
 - Input order or canonical link order does not create false changes.
@@ -367,8 +367,8 @@ and not atomic as a two-edge candidate edit.
   kinds or a free-form kind taxonomy without a separate accepted need.
 - Resolve every selector before candidate mutation, preserve one link per
   target REF, and keep deterministic canonical order.
-- Continue to distinguish link-message changes from target repoints and from
-  the whole-seal event message.
+- Continue to distinguish link-message changes from target repoints. Native v3
+  has no whole-seal event message.
 
 ## Proposed execution order
 

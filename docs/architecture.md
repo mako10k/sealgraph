@@ -9,7 +9,7 @@ between:
 2. Git-backed content/history used by `git sealgraph`.
 
 The shared abstraction is not “Git repository”. It is immutable content reading
-plus sealgraph-specific refs/domain logic. Native v2 does not pre-commit a
+plus sealgraph-specific refs/domain logic. Native v3 does not pre-commit a
 future Git backend to the native SHA-256 `ObjectID` representation: a sidecar
 with SHA-1/SHA-256 or blob/tree/commit sources requires an explicit typed
 identity decision before its product reader is introduced.
@@ -85,7 +85,9 @@ Read-only inspection derived from immutable seal payloads:
 
 - parent-chain traversal,
 - link add/remove/repoint events between adjacent generations,
-- semantic differences between two generations of one logical REF.
+- semantic differences between two generations of one logical REF,
+- semantic comparison between one mutable candidate and its immutable recorded
+  base.
 
 History traversal validates canonical seal loading, REF ownership, and parent
 cycles before returning results. It does not read Git history or maintain a
@@ -99,19 +101,22 @@ Coordinates:
 - seal creation,
 - ref updates,
 - object store selection,
-- validation.
+- validation,
+- explicit one-candidate inspection, unlink, and discard.
 
 It MUST receive repository mode explicitly. It MUST NOT infer sidecar mode by probing for `.git`.
 
 ### `internal/cli`
 
-Parsing/presentation only. Domain decisions remain in repository/graph packages.
+Parsing/presentation only. Binary-safe preview/quoting and bytes-only stdout
+belong here; candidate and graph decisions remain in repository/history/graph
+packages.
 
 ## 4. Native object store
 
 Standalone uses `.sealgraph/objects`.
 
-Native v2 characteristics:
+Native v3 characteristics:
 
 - immutable loose objects,
 - Git-compatible object envelope/layout where practical,
@@ -208,6 +213,6 @@ object by ID, but every binding to a HEAD, parent, tag, or selector validates
 the owner REF. If future requirements introduce a cross-REF alias or federated
 lookup, model it as an explicit scoped resolver returning the resolved
 `(REF, seal ID)` identity. Do not weaken current ownership validation or add a
-speculative native-v2 field.
+speculative native-v3 field.
 
 Do not implement these until requirements exist.

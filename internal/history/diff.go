@@ -44,11 +44,21 @@ type SealDiff struct {
 	Content     ValueChange[domain.ContentRef]
 	Attachments []AttachmentChangeRecord
 	Links       []LinkChange
-	Message     ValueChange[string]
 	Root        ValueChange[bool]
 	Draft       ValueChange[bool]
 	Parent      ParentChange
-	CreatedAt   ValueChange[string]
+}
+
+// CandidateDiff compares mutable candidate state with its recorded immutable
+// base. Initial means there is no base; scalar Before values are then zero
+// values and presentation must describe the candidate fields as additions.
+type CandidateDiff struct {
+	Initial     bool
+	Content     ValueChange[domain.ContentRef]
+	Attachments []AttachmentChangeRecord
+	Links       []LinkChange
+	Root        ValueChange[bool]
+	Draft       ValueChange[bool]
 }
 
 func valueChange[T comparable](before, after T) ValueChange[T] {
@@ -76,7 +86,7 @@ func copyObjectID(id *domain.ObjectID) *domain.ObjectID {
 }
 
 // DiffSeals compares all material canonical fields between two generations of
-// the same logical REF. Schema equality follows from canonical v2 decoding.
+// the same logical REF. Schema equality follows from canonical v3 decoding.
 func DiffSeals(fromID domain.ObjectID, from domain.SealPayload, toID domain.ObjectID, to domain.SealPayload) (SealDiff, error) {
 	if from.REF != to.REF {
 		return SealDiff{}, fmt.Errorf("cannot compare seal generations from different REFs: %s and %s", from.REF, to.REF)
@@ -88,11 +98,37 @@ func DiffSeals(fromID domain.ObjectID, from domain.SealPayload, toID domain.Obje
 		Content:     valueChange(from.Content, to.Content),
 		Attachments: diffAttachments(from.Attachments, to.Attachments),
 		Links:       DiffLinks(from.Links, to.Links),
-		Message:     valueChange(from.Message, to.Message),
 		Root:        valueChange(from.Root, to.Root),
 		Draft:       valueChange(from.Draft, to.Draft),
 		Parent:      parentChange(from.Parent, to.Parent),
-		CreatedAt:   valueChange(from.CreatedAt, to.CreatedAt),
+	}, nil
+}
+
+// DiffCandidate compares only fields represented in mutable candidate state.
+// Parent publication does not exist yet and is deliberately absent.
+func DiffCandidate(base *domain.SealPayload, candidate domain.Candidate) (CandidateDiff, error) {
+	if err := domain.ValidateCandidate(candidate); err != nil {
+		return CandidateDiff{}, fmt.Errorf("invalid candidate for diff: %w", err)
+	}
+	if base == nil {
+		return CandidateDiff{
+			Initial:     true,
+			Content:     valueChange(domain.ContentRef{}, candidate.Content),
+			Attachments: diffAttachments(nil, candidate.Attachments),
+			Links:       DiffLinks(nil, candidate.Links),
+			Root:        valueChange(false, candidate.Root),
+			Draft:       valueChange(false, candidate.Draft),
+		}, nil
+	}
+	if base.REF != candidate.REF {
+		return CandidateDiff{}, fmt.Errorf("cannot compare candidate %s with base owned by %s", candidate.REF, base.REF)
+	}
+	return CandidateDiff{
+		Content:     valueChange(base.Content, candidate.Content),
+		Attachments: diffAttachments(base.Attachments, candidate.Attachments),
+		Links:       DiffLinks(base.Links, candidate.Links),
+		Root:        valueChange(base.Root, candidate.Root),
+		Draft:       valueChange(base.Draft, candidate.Draft),
 	}, nil
 }
 

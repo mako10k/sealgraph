@@ -11,8 +11,8 @@ import (
 const (
 	NativeStore     = "native"
 	BlobType        = "blob"
-	SealSchema      = "sealgraph/seal/v2"
-	CandidateSchema = "sealgraph/candidate/v2"
+	SealSchema      = "sealgraph/seal/v3"
+	CandidateSchema = "sealgraph/candidate/v3"
 )
 
 // ObjectID is a full native SHA-256 object name. The repository config fixes
@@ -105,10 +105,8 @@ type SealPayload struct {
 	Content     ContentRef   `json:"content"`
 	Attachments []Attachment `json:"attachments"`
 	Links       []Link       `json:"links"`
-	Message     string       `json:"message"`
 	Root        bool         `json:"root"`
 	Draft       bool         `json:"draft"`
-	CreatedAt   string       `json:"created_at"`
 }
 
 // Candidate is mutable working state. Base is the REF head observed when the

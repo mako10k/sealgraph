@@ -138,3 +138,24 @@ step S21:
     |
       cooperative standalone mutations を repository-wide に直列化し、target REF CAS
       成功を publication point、unchanged candidate comparison を cleanup precondition とする
+
+problem P9:
+  "actor、time、operation rationale を全 dependency が暗黙に継承すべきか"
+
+step S22:
+  premise PR9:
+    |
+      upstream seal ID に unauthenticated actor、created_at、seal event message を含めると、
+      downstream link は必要性を選べず、それらの event metadata にも依存する
+
+step S23:
+  evidence EV6:
+    |
+      hash は canonical bytes の identity を証明するが、actor authority や trusted time、
+      approval truth を証明しない
+
+step S24:
+  decision D9 based_on P9, PR9, EV6:
+    |
+      native v3 は seal-level message、created_at、actor を canonical payload と CLI から
+      除外する。必要な event attestation は別 REF の sealed content と concrete link で表す

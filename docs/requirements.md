@@ -12,7 +12,7 @@ It MUST make it possible to answer:
 2. Which exact upstream seal generations were used as its basis?
 3. What attachments were part of that sealed state?
 4. What seal did it supersede?
-5. Why was it sealed?
+5. Which semantic flags and direct provenance relations were sealed?
 6. Which current REF heads became stale after an upstream supersession?
 7. Through which dependency paths did that impact propagate?
 
@@ -44,9 +44,12 @@ A seal MUST commit to:
 - content identity,
 - attachment identities plus stable attachment metadata,
 - dependency links,
-- root/draft state,
-- seal message,
-- normalized seal event metadata required by the storage format.
+- root/draft state.
+
+A core seal MUST NOT persist who, when, or why the seal operation happened.
+Seal-level `actor`, `created_at`, event `message`, and equivalent operation
+metadata are outside material/provenance identity. When needed, such a claim is
+ordinary separately sealed content linked to its exact subject generation.
 
 A seal belongs to exactly one logical REF. Its owner REF is identity-bearing
 canonical state. A seal MUST NOT be reused as the HEAD, parent, or tag target of
@@ -68,16 +71,17 @@ Links form an N:M directed acyclic graph across seals.
 
 A persisted link MUST contain a concrete target seal identity.
 
-Native v2 has one domain-independent dependency edge and no persisted link
+Native v3 has one domain-independent dependency edge and no persisted link
 kind. A link MAY carry an edge-specific message explaining why that exact
 upstream generation is a dependency. The link message is part of the seal
-identity and is distinct from the seal event message.
+identity. It describes the dependency relation and does not assert an actor,
+authority, trusted time, or seal-operation event.
 
 `--depend-on UPSTREAM` is command shorthand that resolves the current HEAD at operation time. The persisted seal MUST NOT contain a dynamic HEAD pointer.
 
 The CLI MUST also support explicit historical generation selection.
 
-Native v2 accepts an exact full seal ID, a repository-wide unique hexadecimal
+Native v3 accepts an exact full seal ID, a repository-wide unique hexadecimal
 prefix of at least four characters, or an immutable REF-scoped tag wherever an
 explicit seal generation is selected. Resolution MUST produce a concrete full
 seal ID before candidate or seal persistence.
@@ -171,6 +175,20 @@ sealgraph add DESIGN-001 \
 
 Working candidate state is not a seal and is not authoritative history.
 
+Candidate inspection MUST remain distinct from immutable `REF@TOKEN`
+selection. The standalone CLI MUST allow one candidate to be shown, compared
+with its recorded base, and explicitly discarded. Candidate inspection and
+diff MUST NOT automatically rebase, relink, repair, or seal it.
+
+Discard removes only one exact candidate state. It MUST NOT move a REF, delete
+immutable objects, recurse through hierarchical REFs, or report a missing or
+unsafe target as successful. Explicit discard MUST remain possible when the
+candidate representation is corrupt.
+
+`unlink` removes exactly one dependency edge identified by upstream REF. An
+optional explicit upstream generation acts as a removal precondition. It MUST
+NOT change content, root/draft state, another dependency, or create a seal.
+
 Standalone mutations MUST use repository-wide writer coordination. Cooperative
 writers execute serially. A seal publishes at the successful expected-old CAS
 update of its one target REF and MUST NOT clear a candidate version other than
@@ -193,6 +211,11 @@ The product is expected to provide:
 `diff` MUST be capable of representing content, attachment, link, and material metadata differences.
 
 `status` MUST distinguish at least candidate modifications/unsealed state from direct/transitive staleness.
+
+Default human inspection MUST NOT emit arbitrary content or metadata bytes
+directly. It MUST use bounded, unambiguous escaping. Exact content extraction
+MAY be provided only by an explicit bytes-only mode whose stdout contains no
+mixed metadata or added newline.
 
 ## 8. Intentionally absent VCS semantics
 

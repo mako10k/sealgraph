@@ -137,12 +137,41 @@ func (s candidateStore) RemoveIfUnchanged(ref string, expected []byte) error {
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("remove sealed candidate %s: %w", ref, err)
 	}
+	s.removeEmptyParents(path)
+	return nil
+}
+
+func (s candidateStore) Discard(ref string) error {
+	if err := domain.ValidateREF(ref); err != nil {
+		return err
+	}
+	if err := s.checkPrefixConflict(ref); err != nil {
+		return err
+	}
+	path := s.path(ref)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect candidate %s for discard: %w", ref, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("candidate %s is not a regular non-symlink file; no state was removed", ref)
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("discard candidate %s: %w", ref, err)
+	}
+	s.removeEmptyParents(path)
+	return nil
+}
+
+func (s candidateStore) removeEmptyParents(path string) {
 	for parent := filepath.Dir(path); parent != s.root; parent = filepath.Dir(parent) {
 		if err := os.Remove(parent); err != nil {
 			break
 		}
 	}
-	return nil
 }
 
 func (s candidateStore) List() ([]string, error) {

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -18,8 +17,6 @@ import (
 	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
-type Clock func() time.Time
-
 type Repository struct {
 	dir        string
 	objects    *native.ObjectStore
@@ -27,16 +24,12 @@ type Repository struct {
 	tags       *native.TagStore
 	candidates candidateStore
 	writer     writerGuard
-	clock      Clock
 }
 
-func OpenStandalone(workDir string, clock Clock) (*Repository, error) {
+func OpenStandalone(workDir string) (*Repository, error) {
 	dir := filepath.Join(workDir, ".sealgraph")
 	if err := validateLayout(dir); err != nil {
 		return nil, fmt.Errorf("open standalone repository %s: %w; run 'sealgraph init' in this directory or repair it explicitly", dir, err)
-	}
-	if clock == nil {
-		clock = time.Now
 	}
 	return &Repository{
 		dir:        dir,
@@ -45,7 +38,6 @@ func OpenStandalone(workDir string, clock Clock) (*Repository, error) {
 		tags:       native.NewTagStore(dir),
 		candidates: candidateStore{root: filepath.Join(dir, "index")},
 		writer:     newWriterGuard(filepath.Join(dir, "locks")),
-		clock:      clock,
 	}, nil
 }
 
@@ -210,18 +202,15 @@ type SealResult struct {
 	Payload domain.SealPayload
 }
 
-func (r *Repository) Seal(ctx context.Context, ref, message string) (SealResult, error) {
+func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 	return withMutation(ctx, r.writer, "seal REF", func() (SealResult, error) {
-		return r.seal(ctx, ref, message)
+		return r.seal(ctx, ref)
 	})
 }
 
-func (r *Repository) seal(ctx context.Context, ref, message string) (SealResult, error) {
+func (r *Repository) seal(ctx context.Context, ref string) (SealResult, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return SealResult{}, err
-	}
-	if message == "" {
-		return SealResult{}, errors.New("seal message is required; pass -m MESSAGE")
 	}
 	snapshot, err := r.candidates.LoadSnapshot(ref)
 	if err != nil {
@@ -270,11 +259,10 @@ func (r *Repository) seal(ctx context.Context, ref, message string) (SealResult,
 			return SealResult{}, err
 		}
 	}
-	createdAt := r.clock().UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
 	payload := domain.SealPayload{
 		Schema: domain.SealSchema, REF: ref, Parent: candidate.Base, Content: candidate.Content,
-		Attachments: candidate.Attachments, Links: candidate.Links, Message: message,
-		Root: candidate.Root, Draft: candidate.Draft, CreatedAt: createdAt,
+		Attachments: candidate.Attachments, Links: candidate.Links,
+		Root: candidate.Root, Draft: candidate.Draft,
 	}
 	bytes, err := canonical.EncodeSeal(payload)
 	if err != nil {
@@ -387,11 +375,16 @@ func (r *Repository) Show(ctx context.Context, ref, revision string) (ShowResult
 	if payload.REF != ref {
 		return ShowResult{}, fmt.Errorf("seal %s belongs to REF %s, not %s", id, payload.REF, ref)
 	}
-	content, err := r.objects.ReadObject(ctx, payload.Content.ID)
+	content, err := r.readRepositoryBlob(ctx, payload.Content, fmt.Sprintf("content %s for seal %s", payload.Content.ID, id))
 	if err != nil {
-		return ShowResult{}, fmt.Errorf("read content %s for seal %s: %w", payload.Content.ID, id, err)
+		return ShowResult{}, err
 	}
-	return ShowResult{ID: id, Payload: payload, Content: content.Data}, nil
+	for _, attachment := range payload.Attachments {
+		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("attachment %q for seal %s", attachment.Name, id)); err != nil {
+			return ShowResult{}, err
+		}
+	}
+	return ShowResult{ID: id, Payload: payload, Content: content}, nil
 }
 
 type RefStatus struct {
