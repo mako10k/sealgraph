@@ -1,226 +1,257 @@
 # Architecture
 
+Status: target architecture for the format-4 contract accepted by ADR 0011.
+The checked-in runtime remains format 3 until the sequenced implementation and
+dump/load transition complete.
+
 ## 1. Design center
 
-The main implementation goal is to share the smallest valid read semantics
-between:
+Sealgraph has one native semantic/storage model:
 
-1. standalone `.sealgraph` object storage, and
-2. Git-backed content/history used by `git sealgraph`.
+- content-only immutable Seals;
+- exact Seal-to-Seal Cause Links;
+- one optional exact `parent_revision` edge;
+- movable REF paths outside Seal bytes;
+- native SHA-256 loose objects under `.sealgraph`.
 
-The shared abstraction is not “Git repository”. It is immutable content reading
-plus sealgraph-specific refs/domain logic. Native v3 does not pre-commit a
-future Git backend to the native SHA-256 `ObjectID` representation: a sidecar
-with SHA-1/SHA-256 or blob/tree/commit sources requires an explicit typed
-identity decision before its product reader is introduced.
+Standalone and Git sidecar share that model. Sidecar adds Git-aware read views
+of the same `.sealgraph` files; it is not another Seal schema, ObjectID system,
+or Git-commit interpretation of the revision DAG.
+
+```text
+                    domain / canonical / revision / graph / history
+                                      ^
+                                      |
+                         native repository reader
+                          exact path + file bytes
+                     /           |             \
+                    /            |              \
+       real .sealgraph     staged/commit tree    merge conflict evidence
+       reader + writer       read-only views      stages + source trees
+             ^                     ^                       ^
+             |                     |                       |
+      cmd/sealgraph                    cmd/git-sealgraph
+       no Git access                  explicit Git adapter
+```
+
+Only the real filesystem view is mutable. Equal complete canonical file trees
+have equal native graph meaning regardless of whether bytes came from the
+filesystem, prospective staged result tree, or immutable Git commit tree.
 
 ## 2. Process surfaces
 
-```text
-                 +----------------------+
-                 |    lib sealgraph     |
-                 | domain / graph / CLI |
-                 +----------+-----------+
-                            |
-             +--------------+--------------+
-             |                             |
-      cmd/sealgraph                 cmd/git-sealgraph
-       standalone                      Git plugin
-             |                             |
-   NativeObjectReader              GitObjectReader
-      .sealgraph                       .git
-             \                             /
-              +------ ObjectReader -------+
-                            |
-                     shared decoding
-```
+### `cmd/sealgraph`
 
-`git-sealgraph` is intentionally a separate executable. Git discovers executables named `git-<name>` on PATH and exposes them as `git <name>`.
+- opens only `<workdir>/.sealgraph`;
+- never searches for or reads `.git`;
+- never changes behavior inside a Git worktree;
+- performs native candidate mutation and one-REF publication.
+
+### `cmd/git-sealgraph`
+
+- is invoked explicitly as `git sealgraph ...`;
+- may locate the outer Git repository/worktree;
+- uses the same real `.sealgraph` writer for native mutations;
+- may expose staged, commit-tree, and merge-stage inspection;
+- never treats Git commit/merge success as Sealgraph approval.
+
+The entry points are explicit capabilities, not persisted repository modes.
+`sealgraph init` always remains standalone. Any future `git sealgraph init` or
+setup behavior creates the same native format and must not install hooks or
+modify unrelated Git policy silently.
 
 ## 3. Package boundaries
 
 ### `internal/domain`
 
-Pure semantic value types:
+Pure semantic types:
 
-- ObjectID
-- ContentRef
-- Link
-- Attachment
-- SealPayload
-- REF-related identities/state
+- native `ObjectID` and `ContentRef`;
+- exact-target `Link` and `Attachment`;
+- content-only `SealPayload` with `parent_revision`;
+- candidate topology/publication state;
+- REF names and derived observation facts.
 
-At a seal ownership boundary, code must retain both the expected REF and seal
-ObjectID. A bare ObjectID identifies stored bytes; it does not by itself
-authorize using a seal as another REF's HEAD, parent, or tag target.
+No filesystem, Git, CLI, clock, environment, or current-REF lookup occurs
+here. A Seal contains no owner REF.
 
-No filesystem, Git, CLI, or environment access.
+### `internal/canonical`
+
+- deterministic format-4 Seal encoding;
+- exact member order and JSON escaping;
+- Link/attachment sort and duplicate rejection;
+- canonical decode/re-encode byte equality;
+- fixed fixture hashes.
+
+Canonical encoding does not resolve selectors, inspect REFs, derive stale, or
+perform I/O.
 
 ### `internal/store`
 
-Storage interfaces:
+Native storage capabilities:
 
-- ObjectReader
-- ObjectWriter
-- RefStore
-- TagStore
+- immutable `ObjectReader` / `ObjectWriter`;
+- loose `RefStore` with expected-old CAS;
+- tag storage after the rename-safe namespace decision;
+- exact repository path/file reading needed by native validation.
 
-Native and Git-backed implementations belong below this boundary.
+The real filesystem implementation owns atomic write, lock, no-clobber, fsync,
+path-safety, corruption, and hash-mismatch handling. A later read-only tree
+view exposes exact path existence, enumeration, and file bytes; it does not
+expose Git hash types or mutation.
+
+### `internal/revision`
+
+- active revision DAG from coherent current REF heads and parent ancestry;
+- parent cycle validation;
+- ancestor/descendant queries;
+- active leaves/tips and detached state;
+- explicit parent/fork admissibility.
+
+Parent edges mean revision derivation only. They are not Cause edges and do not
+express replacement or preference.
 
 ### `internal/graph`
 
-Derived graph behavior:
+- Link-only Cause traversal and cycle validation;
+- direct/transitive stale using revision leaf facts;
+- self-stale current heads;
+- reverse impact;
+- exact-Cause stale review frontier;
+- deterministic shortest and bounded all-path evidence.
 
-- direct stale
-- transitive stale
-- reverse impact
-- cycle detection
-- provenance traversal
-- upstream-first stale review frontier
-
-Never persist derived stale state here.
+No stale, impact, frontier, or path result is canonical persisted state.
 
 ### `internal/history`
 
-Read-only inspection derived from immutable seal payloads:
+- `parent_revision` traversal independent of REF names;
+- Seal-to-Seal semantic diff;
+- exact-target Link add/remove/repoint/message events;
+- candidate comparison against `parent_revision`;
+- separate reporting of `expected_ref_head` relation.
 
-- parent-chain traversal,
-- link add/remove/repoint events between adjacent generations,
-- semantic differences between two generations of one logical REF,
-- semantic comparison between one mutable candidate and its immutable recorded
-  base.
-
-History traversal validates canonical seal loading, REF ownership, and parent
-cycles before returning results. It does not read Git history or maintain a
-reflog, and it does not persist derived events or differences.
+It does not implement Git reflog/history semantics or infer ownership from a
+selector spelling.
 
 ### `internal/repository`
 
 Coordinates:
 
-- candidate state,
-- seal creation,
-- ref updates,
-- object store selection,
-- validation,
-- explicit one-candidate inspection, unlink, and discard,
-- coherent, candidate-independent current-head observations for stale queries.
+- candidate lifecycle;
+- content/attachment object writes;
+- exact selector resolution;
+- explicit parent selection and derivation;
+- normal Cause-closure admission;
+- canonical Seal creation;
+- one-REF CAS publication;
+- coherent multi-REF observations;
+- disposable revision/Cause cache orchestration.
 
-It MUST receive repository mode explicitly. It MUST NOT infer sidecar mode by probing for `.git`.
+It never probes Git. A Git entry point passes the real worktree root explicitly
+when native mutation is requested.
 
 ### `internal/cli`
 
-Parsing/presentation only. Binary-safe preview/quoting and bytes-only stdout
-belong here; candidate and graph decisions remain in repository/history/graph
-packages.
+Parsing and presentation only:
+
+- REF and Seal selector grammar;
+- binary-safe preview and raw bytes-only output;
+- deterministic status/stale/impact rendering;
+- stable narrow line protocols;
+- explicit error and next-action text.
+
+### Later Git view adapter
+
+The Git adapter has no Sealgraph domain semantics. It supplies:
+
+- complete exact byte/path views of the worktree, prospective staged result
+  tree, and immutable commit tree;
+- merge stage 1/2/3 conflict entries associated with corresponding validated
+  BASE/OURS/THEIRS complete trees;
+- typed physical Git identity internal to the adapter;
+- coherent index capture/revalidation.
+
+It delegates config/object/REF decoding and all revision/Cause reasoning to the
+native reader and shared domain packages.
 
 ## 4. Native object store
 
-Standalone uses `.sealgraph/objects`.
+Format 4 retains:
 
-Native v3 characteristics:
+- immutable loose objects;
+- Git-compatible SHA-256 blob envelope and path where practical;
+- full 64-character lower-case native IDs;
+- user-input unique prefixes only;
+- one loose mutable file per REF;
+- no canonical packs or packed refs.
 
-- immutable loose objects,
-- Git-compatible object envelope/layout where practical,
-- SHA-256 native object identity,
-- full-hex canonical IDs with user-input unique-prefix resolution,
-- immutable REF-scoped lightweight tags,
-- no canonical packfiles,
-- no packed refs.
+Low-level Git compatibility is forensic/storage compatibility only. An
+explicitly configured Git SHA-256 API may read native loose blobs, but
+`.sealgraph` is not a Git repository or an alternate for an outer SHA-1
+repository and must not receive Git maintenance or porcelain operations.
 
-The exact byte contract belongs in `storage-format.md` and must be locked by fixture tests before production use.
+## 5. Publication transaction
 
-Git compatibility in standalone is deliberately narrower than repository
-compatibility. An explicitly configured Git SHA-256 low-level object API may
-hash and read native loose blobs. `.sealgraph` is not a Git repository, must not
-be attached as a SHA-1 alternate, and must not be subjected to Git maintenance
-or porcelain lifecycles.
+One Seal publication:
 
-## 5. Git content reader
+1. acquires the repository-wide native writer guard;
+2. loads one exact candidate version;
+3. validates `parent_revision`, `expected_ref_head`, material, and complete
+   Cause admissibility;
+4. canonicalizes and writes one immutable Seal object;
+5. revalidates required state;
+6. CAS-updates exactly one destination REF;
+7. clears only the unchanged candidate version;
+8. releases the writer guard.
 
-Git sidecar should use a mature Git SDK rather than hand-implementing packfiles, deltas, alternates, worktrees, or repository object-format details.
+Successful expected-old REF CAS is the publication linearization point.
+Objects left before failed CAS remain immutable dangling objects and are
+reported, not deleted or activated.
 
-Initial candidate: `go-git` stable v5 series.
+## 6. Coherent observations and cache
 
-Adding the SDK is not required for standalone ODB conformance. Before a product
-`GitObjectReader` is implemented, an ADR must decide supported Git object
-formats, typed identities, materialized-versus-external content references, and
-the meaning of blob/tree/commit content. Until then, `ObjectReader` describes a
-narrow architectural seam rather than a claim that native and Git identities
-are interchangeable.
+Multi-REF facts capture the complete current REF/head set, load and validate
+the required parent/Cause graph, buffer output, then revalidate the complete
+head set before emission. A change fails with no plausible partial stdout.
 
-Important boundary:
+The active revision DAG is rooted by current REF heads only. Object existence,
+tag reachability, or Cause reachability does not publish a revision.
 
-```text
-Git SDK = physical Git reading
-Sealgraph = provenance semantics
-```
+The revision/Cause cache is derived and disposable. Its key binds repository
+and schema version plus a digest of the complete sorted REF/head observation.
+Missing or invalid cache triggers canonical scan and atomic refresh. Cache
+failure never repairs or overrides canonical state, and read-only Git views do
+not persist cache.
 
-Do not delegate sealgraph REF/seal semantics to Git branches/commits merely to increase high-level Git CLI compatibility.
+## 7. Git sidecar boundary
 
-## 6. Repository modes
+The first sidecar value is `.sealgraph` file integration:
 
-Modes are explicit configuration selected by separate entry points.
+- prospective staged-tree validation;
+- historical read-only validation/inspection;
+- merge conflict evidence;
+- explicit validation-only hook dispatch.
 
-### standalone
+A staged validator builds the prospective commit tree from the base plus
+stage-zero index and validates unchanged as well as changed canonical paths.
+Nonzero merge stages are a separate conflict state. Concurrent index change,
+missing partial-clone object, unsupported Git/native format, or canonical-byte
+filter transformation fails explicitly without native mutation, implicit
+network fetch, dual reader, or automatic migration.
 
-- command: `sealgraph init`
-- canonical content: `.sealgraph`
-- seals: `.sealgraph`
-- refs: `.sealgraph`
-- Git access: none
+The selected Git SDK must prove the released binary's supported SHA-1/SHA-256,
+worktree, linked-worktree, index, tree, pack, and alternate matrix. No SDK type
+crosses into native domain APIs; there is no hand-written pack reader or silent
+Git CLI fallback.
 
-### git-sidecar
+Importing arbitrary Git blobs/trees/commits/tags as generated material is
+deferred. Exact blob materialization can be added later without changing Seal
+format; zero-copy external references or type-specific projections require a
+separate persisted contract.
 
-- command: `git sealgraph init`
-- Git content/history source: `.git`
-- sealgraph seal metadata/refs: `.sealgraph`
-- merge inspection: Git-aware
-- implicit Git-to-seal approval: forbidden
+## 8. Extension discipline
 
-The modes are mutually explicit; standalone does not discover or recommend sidecar.
-
-## 7. Transaction boundary
-
-Creating a seal conceptually requires:
-
-1. acquire the repository-wide writer guard,
-2. load one REF candidate version,
-3. validate candidate and complete dependency admissibility,
-4. canonicalize payload,
-5. write immutable objects,
-6. revalidate state required by the writer protocol,
-7. atomically CAS-update exactly one REF HEAD,
-8. clear only the unchanged candidate version,
-9. release the writer guard.
-
-The successful REF CAS is the publication linearization point. Ref update must
-retain compare-and-swap semantics even though cooperative writers are
-serialized, because external filesystem mutation does not honor the writer
-guard. Object writes that precede a failed publication remain immutable and may
-be reported as dangling.
-
-Multi-REF stale reads do not acquire the exclusive writer guard. They capture
-the complete current REF/head set, derive against that captured resolver, and
-revalidate the complete set before returning buffered output. A detected change
-fails explicitly. A returned observation is not a reservation; `seal` still
-revalidates closure and expected state at publication.
-
-## 8. Future extension points
-
-Keep interfaces narrow enough to permit:
-
-- alternate content stores,
-- remote CAS readers,
-- signatures/attestations,
-- richer relation types,
-- machine-readable command output.
-
-Current seals remain owned by exactly one REF. Internal traversal may load an
-object by ID, but every binding to a HEAD, parent, tag, or selector validates
-the owner REF. If future requirements introduce a cross-REF alias or federated
-lookup, model it as an explicit scoped resolver returning the resolved
-`(REF, seal ID)` identity. Do not weaken current ownership validation or add a
-speculative native-v3 field.
-
-Do not implement these until requirements exist.
+Do not prebuild remote storage, signatures, daemon/server, MCP, arbitrary link
+kinds, automatic branch choice, automatic relink/reseal, recursive repair, or
+batch publication. New persisted fields require storage-format changes,
+deterministic fixtures, compatibility consideration, and an approved ADR.

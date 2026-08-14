@@ -1,6 +1,29 @@
 # Initial implementation plan
 
-This plan is descriptive. `PLAN.pert` is the optional perttool projection.
+Status: phases through native format 3 are historical completed work. ADR 0011
+accepts a breaking format-4 implementation frontier. `PLAN.pert` is the current
+perttool projection.
+
+## Current format-4 frontier
+
+Proceed in this order; do not partially mix formats:
+
+1. add deterministic read-only logical dump to the format-3 binary;
+2. implement format-4 canonical Seal/candidate bytes and fixture hashes;
+3. add empty-repository load with complete old-to-new mapping;
+4. implement active revision indexing, `derive`, `add --parent`, active-leaf
+   admission, stale cache/`--scan`, history, frontier, and bounded impact;
+5. explicitly convert tracked dogfood and exercise a same-material sibling;
+6. resolve rename-safe tag namespace and narrow crash-safe `mv`;
+7. add read-only native tree views before selecting a Git SDK;
+8. prove staged/commit/merge-stage behavior in temporary SHA-1/SHA-256
+   repositories, then add validation-only hook dispatch.
+
+Runtime, tracked `.sealgraph`, and release claims remain format 3 until the
+corresponding dump/load and implementation gates pass. ADR acceptance alone is
+not migration authority.
+
+## Historical implementation phases
 
 ## Phase 0 — lock semantic contracts
 
@@ -144,16 +167,20 @@ listed in the checklist.
 
 ## Phase 5 — Git sidecar
 
-- add stable go-git dependency
-- GitObjectReader
-- `git sealgraph init/status`
-- Git content source bindings
-- Git merge/index-stage inspection
+- select a maintained Git SDK only after the native format-4 boundary is stable;
+- expose commit-tree, index, and merge-stage views of the exact native
+  `.sealgraph/` paths and bytes through a read-only Git view adapter;
+- add `git sealgraph init/status` without defining a second Seal schema or
+  repository mode;
+- validate staged/commit views against the same native reader and domain
+  invariants;
+- keep hooks validation-only and make merge/index-stage inspection explicit;
+- defer importing arbitrary Git worktree content as Sealgraph material until a
+  separate source-import contract is accepted.
 
-After Phase 2 graph behavior is available and the hermetic round has passed,
-the separately approved R1 dogfood round may add tracked canonical
-`.sealgraph/` state to this repository. R1 is not implicit authorization from a
-passing R0.
+Sidecar implementation begins only after format-4 native graph behavior and
+explicit tracked dogfood conversion pass. Earlier R0/R1 format-3 receipts are
+historical evidence, not authorization to skip that gate.
 
 ## Phase 6 — Git conflict assistant
 

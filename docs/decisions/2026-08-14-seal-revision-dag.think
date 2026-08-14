@@ -1,0 +1,708 @@
+framework SealgraphRevisionDAGProposal:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain RevisionDAG:
+  description |
+    SealからREF所有情報を除き、parentをnon-exclusive revision derivation、Linkをexact Cause、
+    staleをactive revision tipではないCauseの観測として再定義する設計分析
+
+problem P1:
+  "current owner-name contract はcontent-only SealとREF renameに両立するか"
+
+step S1:
+  premise PR1:
+    |
+      現行canonical sealはREF名をowner identityとしてhashし、parent、tag、selector、Link targetが
+      同じREF名を持つSealだけを正当とする
+
+step S2:
+  evidence EV1:
+    |
+      REF pathだけをmoveするとcurrent実装はowner mismatch、missing target_ref、history mismatchを返し、
+      immutable SealとLinkが同じでもinspectionとstaleを維持できない
+
+step S3:
+  viewpoint VP1:
+    axis pure_result_identity_and_movable_ref
+
+step S4:
+  decision D1 based_on P1, PR1, EV1, VP1:
+    |
+      canonical Sealからtop-level REF名を完全に除き、ref_at_sealまたはlineage seedへ置換しない。
+      Linkもtarget REF名を保存せずexact target SealIDだけを保存する。
+      --depend-on REFは操作時にcurrent HEAD SealIDへ解決するshorthandである
+
+problem P2:
+  "parent edgeは何をassertするか"
+
+step S5:
+  premise PR2:
+    |
+      immutable result Sから同一materialの継続revision Fと更新revision Uを別々に生成する場合、
+      FとUはいずれもSを基にするが、互いを置換または優先しない
+
+step S6:
+  evidence EV2:
+    |
+      一つのparentと複数のchildrenを許せば、SealIDにREF identityまたはbranch nameを含めず
+      alternative revision tipsをMerkle-verifiableに表現できる
+
+step S7:
+  viewpoint VP2:
+    axis nonexclusive_revision_derivation
+
+step S8:
+  decision D2 based_on P2, PR2, EV2, VP2:
+    |
+      parent=Pはnew SealがPから派生したrevisionであることだけをassertする。
+      invalidation、replacement、truth、trust、preference、same-REF ownershipをassertしない。
+      canonical Sealは必須member parent_revisionにnullまたはexact full parent SealIDを持ち、
+      そのbytesをSealIDへcommitする。一Sealはzeroまたはone parentを持ち、一parentはzero以上のchildrenを持てる
+
+step S9:
+  decision D3 based_on P2, PR2, EV2, VP2:
+    "parentをexclusive supersession relationとして維持する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "fork siblingの一方が他方を置換しないrevision modelと両立しないため"
+
+problem P3:
+  "dangling objectを新revisionと誤認せずactive revision DAGをどう観測するか"
+
+step S10:
+  premise PR3:
+    |
+      seal objectはREF CAS publicationより前にwriteされるため、failed publicationでvalidだが
+      unpublishedなdangling child objectが残り得る
+
+step S11:
+  evidence EV3:
+    |
+      complete current REF HEAD setをrootとしてparent ancestryを辿れば、current observationで
+      activeなrevision DAGを名前またはobject directory enumerationに依存せず導出できる
+
+step S12:
+  viewpoint VP3:
+    axis published_active_revision_observation
+
+step S13:
+  decision D4 based_on P3, PR3, EV3, VP3:
+    |
+      observation Oのactive revision DAG A_Oはvalidated current REF HEAD SealID集合と、そのparent ancestryである。
+      object storeに存在するだけのchild、tagだけが指すSeal、unreachable Sealはactive childに数えない。
+      Cause Link reachabilityだけではactive revision rootを追加しない。
+      complete REF HEAD setをcaptureしてoutput前に再検証する
+
+problem P4:
+  "revision leaf、REF HEAD、stale、historicalをどう区別するか"
+
+step S14:
+  premise PR4:
+    |
+      current REF HEADは別のcurrent HEADのancestorを指し得るため、REF HEADとrevision leafは同義ではない
+
+step S15:
+  evidence EV4:
+    |
+      A_Oのleafはcurrent HEAD集合のparent ancestry順序におけるmaximal Sealであり、
+      sibling leavesは互いのdescendantではない
+
+step S16:
+  viewpoint VP4:
+    axis branch_aware_revision_freshness
+
+step S17:
+  decision D5 based_on P4, PR4, EV4, VP4:
+    |
+      Seal Sはcurrent HEADのstrict ancestorならSTALE_REVISION、S自身がcurrent HEADでactive descendantを
+      持たなければCURRENT_LEAF、A_Oに含まれなければHISTORICAL_OR_DETACHEDとする。
+      current REFがnon-leaf Sを指す場合、そのREF HEAD自身をself-staleとして観測する。
+      これらはderived factsであり、human CLI status labelとのone-to-one対応をcanonical contractにしない
+
+step S18:
+  decision D6 based_on P4, PR4, EV4, VP4:
+    "object storeにchild Sealが一つでもあればSをstaleとする"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "failed publicationのdangling childがcanonical stale observationを汚染するため"
+
+problem P5:
+  "Cause Linkのdirectとtransitive staleをrevision DAGからどう導出するか"
+
+step S19:
+  premise PR5:
+    |
+      Linkはexact Cause Sealを固定し、parentはrevision derivationを表す。二種類のedgeを同じ
+      freshness propagationとして扱うと、current childは自分のstale parentを継承して必ずstaleになる
+
+step S20:
+  evidence EV5:
+    |
+      Link target tがactive current leafかをparent DAGとcurrent HEADで調べ、Cause closureはLink edgeだけで
+      再帰すれば、sibling branchを互いにstaleにせずactive non-leafとhistorical/detached Causeを区別して観測できる
+
+step S21:
+  viewpoint VP5:
+    axis typed_edges_without_pin_metadata
+
+step S22:
+  decision D7 based_on P5, PR5, EV5, VP5:
+    |
+      current Seal Dはdirect Link targetがactive current leafでなければSTALE_DIRECT、direct targetはすべて
+      current leafだがdeeper Cause targetがそうでなければSTALE_TRANSITIVEとする。exact evidenceではactive
+      non-leafとhistorical/detachedを区別する。parent edgeはrevision leaf判定に使うがCause Linkとして
+      transitive staleを伝播させない。stale自体は保存しない
+
+problem P6:
+  "旧resultへ固定する判断をextra flagなしでrevision DAGに表現できるか"
+
+step S23:
+  premise PR6:
+    |
+      Sから同一result materialのFと更新materialのUをsiblingsとしてpublishし、downstreamをSからFへ
+      explicit relinkすれば、FはUのancestorではない
+
+step S24:
+  evidence EV6:
+    |
+      Fはcontent、attachments、direct Links、root、draftをSから保持しparent=Sだけを追加するため、
+      Fは新SealIDを持ちながらSと同じ生成resultとCauseを監査可能に継続できる
+
+step S25:
+  viewpoint VP6:
+    axis explicit_fork_instead_of_display_suppression
+
+step S26:
+  decision D8 based_on P6, PR6, EV6, VP6:
+    |
+      alternative revision forkを許可する。旧downstream SealはSへのLinkによりstaleのまま保持し、
+      operatorはFへのrelinkとone-REF resealで新downstream Sealをpublishする。
+      pin flag、mutable acknowledgement、automatic relinkを追加しない
+
+problem P7:
+  "normal seal admissibilityとexplicit historical forkをどう両立するか"
+
+step S27:
+  premise PR7:
+    |
+      normal Cause Linkはreview可能なactive leafを選ぶべきだが、fork childを作るparentは意図的に
+      active non-leafまたはhistorical Sealを選ぶ必要がある
+
+step S28:
+  evidence EV7:
+    |
+      parentはCause dependencyではないため、Link closureのHEAD consistencyをそのままparent selectionへ
+      適用するとrevision forkを作れない
+
+step S29:
+  viewpoint VP7:
+    axis explicit_parent_selection_without_generic_override
+
+step S30:
+  decision D9 based_on P7, PR7, EV7, VP7:
+    |
+      normal non-draft Cause Linksはactive CURRENT_LEAFとnon-draft Cause closureを要求する。
+      parent selectionは別contractとし、defaultはtarget REF current HEAD、forkはexact parent Sealを
+      明示して新しい一REFへ一childだけをpublishする。generic ignore-validationは追加しない
+
+problem P8:
+  "selector、history、impact、frontierをREF ownershipなしでどう一貫させるか"
+
+step S31:
+  premise PR8:
+    |
+      logとdiffはparent relation、impactはnew revisionとCause targetのancestry、frontierはbranch tipsと
+      Cause statusを必要とし、いずれもhistorical REF nameを必要としない
+
+step S32:
+  evidence EV8:
+    |
+      exact SealIDはrepository-wideにresolveでき、REFはcurrent HEADまたはtagのlookup shorthandとしてのみ
+      利用できるが、branch tipsが複数なら一つのlatestまたはupstream REFを推測できない
+
+step S33:
+  viewpoint VP8:
+    axis seal_first_cross_command_semantics
+
+step S34:
+  decision D10 based_on P8, PR8, EV8, VP8:
+    |
+      show、log、diff、graph、Link editingはSealIDとparentまたはLink edgeで動作し、表示時だけcurrent REF名を
+      annotationとして解決する。impactはselectorがresolveしたexact Seal hまたはそのparent ancestorsを
+      exact Cause closureに持つcurrent Sealsを報告する。複数tipsからautomatic relink targetを選ばない
+
+step S35:
+  decision D11 based_on P8, PR8, EV8, VP8:
+    |
+      branch-aware frontierは一つのLink targetからzero以上のactive descendant tipsが得られるため、
+      candidate tipsのどのCause状態をfrontier membershipへ要求するかをADR前に確定する
+
+problem P9:
+  "supersede terminologyをrevision DAG meaningから外すべきか"
+
+step S36:
+  premise PR9:
+    |
+      supersedeはreplacementまたは旧revisionの失効を示唆し、valid siblingsと明示的な旧result継続を
+      normal stateとするmodelに過剰な意味を持ち込む
+
+step S37:
+  evidence EV9:
+    |
+      derive revision、publish revision、advance REF、active descendant、revision tipで同じ構造を
+      invalidationまたはpreferenceなしに説明できる
+
+step S38:
+  viewpoint VP9:
+    axis terminology_matches_partial_order
+
+step S39:
+  decision D12 based_on P9, PR9, EV9, VP9:
+    |
+      supersedeをcanonical product semanticsから外す。accepted historical ADRの記録は改変せず、
+      replacement ADRとnormative docsではrevision derivation、active descendant、leafまたはtip、
+      REF advanceという語を使う
+
+problem P10:
+  "format break、Dump Load、REF mv、tag namespaceをどう分離して進めるか"
+
+step S40:
+  premise PR10:
+    |
+      format 4はtop-level refとLink target_refを除去してSealIDを再計算し、異なるformat 3 owner Sealsが
+      同じformat 4 Sealへcollapseする可能性がある
+
+step S41:
+  evidence EV10:
+    |
+      versioned logical dumpからparentとLink DAGをtopological rebuildすればnon-injectiveなold-to-new ID mappingを
+      明示でき、runtime dual readerまたはin-place auto migrationを避けられる
+
+step S42:
+  viewpoint VP10:
+    axis one_clean_break_with_explicit_conversion
+
+step S43:
+  decision D13 based_on P10, PR10, EV10, VP10:
+    |
+      format 3 runtimeへread-only logical dumpを先行追加し、format 4 loadはempty repositoryだけへ
+      topological rebuildする。format 4 runtimeはformat 3を読まない。mvとtag namespaceはSealおよびLinkの
+      Ref-free identityと分離するが、alpha前にcrash-safe contractを確定する
+
+problem P11:
+  "stale revision searchをcanonical correctnessを損なわずcacheできるか"
+
+step S44:
+  premise PR11:
+    |
+      outer Git merge、REF move、revision publicationでcurrent REF HEAD集合が変わり、
+      cacheはcanonical stateより古くなる。failed REF CASのdangling objectはactive revisionではない
+
+step S45:
+  evidence EV11:
+    |
+      repositoryとschema version、complete sorted REFとHEAD snapshot digest、cache checksumを検証し、
+      mismatch時にcurrent HEAD rooted active graphを再走査すればcacheをauthoritative stateにせず利用できる
+
+step S46:
+  viewpoint VP11:
+    axis disposable_cache_with_canonical_fallback
+
+step S47:
+  decision D14 based_on P11, PR11, EV11, VP11:
+    |
+      staleは通常valid cacheを利用する。cache missing、invalid、snapshot mismatchならcanonical active graphを
+      full scanしてatomicにcacheを再構築する。full scanはcurrent REF HEADとparentおよびCause closureを辿り、
+      unrelated ODB objectを列挙してactive childに数えない。canonical破損時はcacheからrepairせずfail closedする
+
+step S48:
+  decision D15 based_on P11, PR11, EV11, VP11:
+    |
+      stale --scanはcache readをbypassし、canonical full scanとcache refresh後に同じoutput contractで表示する。
+      cache write failureだけならvalidated resultは成功させstderr warningとし、cacheはlocal disposable stateとして
+      outer Gitへcommitしない。cached lookupはoutput evidenceに必要なcanonical object validationを省略しない
+
+problem P12:
+  "same-material revision derivationは何をcloneし、新material derivationとどう分離するか"
+
+step S49:
+  premise PR12:
+    |
+      contentだけをcopyしてCause Links、attachments、root、draftを落とすと、生成結果のidentity-bearing materialと
+      provenanceが変わり、same-material revisionとは呼べない
+
+step S50:
+  evidence EV12:
+    |
+      source Sealの全identity-bearing materialをcopyしparent_revisionだけをsource SealIDにすれば、
+      resultとCauseを保持したnew revisionをdeterministicに作れる。REF、tag、stale、cacheはSeal materialではない
+
+step S51:
+  viewpoint VP12:
+    axis explicit_complete_clone_or_explicit_new_material
+
+step S52:
+  decision D16 based_on P12, PR12, EV12, VP12:
+    |
+      derive NEW --from SOURCEはcontent、attachmentsとmetadata、direct Cause Linksとmessages、root、draftを
+      exactにcopyし、parent_revision=SOURCE SealID、expected destination HEAD=nullのcandidateを作る。
+      source parent、REF名、tags、stale、cache、event metadata、candidate metadataはcopyしない
+
+step S53:
+  decision D17 based_on P12, PR12, EV12, VP12:
+    |
+      add NEW --parent SOURCE --content VALUEはmaterialをinheritせずnew candidateを作る。
+      selective inheritance flagは追加せず、derive後のadd、link、unlink、attach、detach、flag editをcandidate diffに残す。
+      candidate作成はstale Causeを許し、normal seal publicationがactive-leafとdraft closureを検証する
+
+problem P13:
+  "Seal-first selectorとGit-like path REFを曖昧なprecedenceなしで両立できるか"
+
+step S54:
+  premise PR13:
+    |
+      lower-hexだけのpathもvalid REFになり得るためbare Seal prefixとREFに
+      population-dependent precedenceを設けると、後からREFを作っただけで同じselectorの意味が変わる
+
+step S55:
+  evidence EV13:
+    |
+      @はREFとTAGNAMEで禁止済みであり、@TOKENはrepository-wide Seal selection、
+      REF@TOKENはREF-scoped selectionと構文上一意に区別できる
+
+step S56:
+  viewpoint VP13:
+    axis deterministic_explicit_selection
+
+step S57:
+  decision D18 based_on P13, PR13, EV13, VP13:
+    |
+      public selectorはREF、@SEAL_TOKEN、REF@TOKENの三形式とし、bare Seal tokenは許可しない。
+      REFはcurrent HEAD、@SEAL_TOKENはrepository-wide unique ODB prefixからcanonical Seal、
+      REF@hex-tokenは同じresolution後にselected Sealがcurrent REF HEADと同一またはparent ancestorであることを
+      要求する。REF@non-hex-tokenはそのREF UI namespaceのimmutable tagをresolveする。
+      prefixとselector scopeは永続化せずexact full SealIDだけを保存する
+
+problem P14:
+  "historicalまたはdraft parentから作るchildのadmissibilityをCause closureとどう分離するか"
+
+step S58:
+  premise PR14:
+    |
+      parentはrevision derivation、draftはgeneration property、LinkはCause dependencyであり、
+      parentのdraftまたはnon-leaf状態はchildのCause closureの一部ではない
+
+step S59:
+  evidence EV14:
+    |
+      explicit historical parentを許すとactive non-leafからsiblingを作れる。deriveがdraftをcopyしつつ
+      その後の明示的flag editで解除を許せば、provisionalなsourceからreview済みchildを
+      履歴を失わず生成できる
+
+step S60:
+  viewpoint VP14:
+    axis separate_revision_and_cause_admission
+
+step S61:
+  decision D19 based_on P14, PR14, EV14, VP14:
+    |
+      active non-leaf、detached historical、draft Sealをexplicit selectorでparentに選べる。
+      parentのdraftはchildへ自動伝播せず、new childのroot、draft、Cause closureを独立検証する。
+      deriveはsource draftをcopyするため、normal childにするにはcandidateのdraftを明示的に変更する。
+      parentはnon-root childに必要なCause Linkの代替にはならない
+
+step S62:
+  decision D20 based_on P14, PR14, EV14, VP14:
+    |
+      first sliceのderive NEW --from SOURCEとadd NEW --parent SOURCEはdestination REFとcandidateの両方が
+      absentであることを要求し、expected_ref_head=nullでpublishする。existing REFの通常更新は
+      observed current HEADをparent_revisionとexpected_ref_headの両方に記録し、alternate parent overrideを拒否する。
+      sourceはcanonical Sealとparent chainを検証してからcandidateを一度だけwriteし、missing、non-Seal、ambiguous、
+      ancestry-scope mismatch、destination conflictでpartial candidateを残さない
+
+problem P15:
+  "LinkがREFを保存しないbranch modelでupstream-first stale frontierをどう定義するか"
+
+step S63:
+  premise PR15:
+    |
+      Linkはexact Cause Sealを固定し、そのactive descendant tipsはzero以上存在し得る。
+      まだLinkしていないsibling tipのcleanまたはstaleはdependent SealのCause事実ではない
+
+step S64:
+  evidence EV15:
+    |
+      current Seal dのexact Cause closureに、それ自体がstaleなcurrent REF head qが含まれるときだけ
+      dよりqを先にreviewする構造的根拠がある。descendant candidate tips全体の状態を使うと、
+      unrelated siblingのrevision publicationだけでfrontier membershipが変わる
+
+step S65:
+  viewpoint VP15:
+    axis exact_cause_structural_review_order
+
+step S66:
+  decision D21 based_on P15, PR15, EV15, VP15:
+    |
+      observation OでS_OをSTALE_SELF、STALE_DIRECT、STALE_TRANSITIVEのいずれかを持つcurrent REF集合、
+      Q_OをS_OのHEAD SealID集合、CausePlus(d)をdからLink edgeだけを辿るstrict exact Cause closureとする。
+      frontier F_O = { r in S_O | CausePlus(HEAD(r)) intersect Q_O is empty }とする。
+      parent edge、active descendant tip readiness、candidateをmembershipに使わず、複数REF aliasは同一Sealで演算し
+      REF-oriented outputではpathごとに出力する
+
+step S67:
+  decision D22 based_on P15, PR15, EV15, VP15:
+    "stale targetのactive descendant tipsが全てcleanなときだけfrontierとする"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "dependentが選んでいないdirty siblingがreviewを無期限にblockするため"
+
+step S68:
+  decision D23 based_on P15, PR15, EV15, VP15:
+    "stale targetのactive descendant tipsに一つでもcleanなものがあればfrontierとする"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "factual review queryへ未選択のrelink readinessと暗黙のbranch choiceを持ち込むため"
+
+problem P16:
+  "impactのreachabilityを保ちながらdiamond DAGのpath重複と出力爆発をどう抑えるか"
+
+step S69:
+  premise PR16:
+    |
+      structural impact membershipはcurrent downstream Sealごとの事実だが、Cause DAGのdistinct path数は
+      diamondの重なりで指数的に増え、同じSealをhuman outputに何度も表示し得る
+
+step S70:
+  evidence EV16:
+    |
+      Link edge数が最小のpathは到達根拠を一つ保ち、direct pathがあればtransitive pathより優先する。
+      full graph validationとimpact membershipをpath presentationから分離すれば、全経路表示を制限しても
+      破損やaffected Sealを隠さずに済む
+
+step S71:
+  viewpoint VP16:
+    axis bounded_deterministic_impact_evidence
+
+step S72:
+  decision D24 based_on P16, PR16, EV16, VP16:
+    |
+      impact defaultはdistinct downstream current-head Sealごとにexactly one shortest Cause pathを表示する。
+      距離はLink edge数とし、同長pathはfull SealID sequenceのbytewise lexical orderの先頭を選ぶ。
+      source selectorはREF、@SEAL_TOKEN、REF@TOKENのいずれも許可しexact Seal hにresolveする。
+      hまたはそのparent ancestorに最初に到達したSealでpathを終了し、h自身はdownstream resultから除外する。
+      同じhにresolveするselectorはmembershipとpathに同じ結果を生成し、selectorのREF名を演算に保存しない。
+      複数current REFが同一downstream Sealを指す場合は一度演算し、REF pathsをsorted annotationとして表示する
+
+step S73:
+  decision D25 based_on P16, PR16, EV16, VP16:
+    |
+      impact --all-pathsはdownstream Sealごとにdistinct simple Cause pathsを距離、SealID sequence順で表示する。
+      --max-paths Nは--all-pathsでのみ許可するpositive integerで、default 100、各downstream Sealごとの
+      path record上限とする。打ち切りは明示truncation markerとlimitを表示しexit 0とするが、
+      全current headsのmembership summary、complete reachable graph validation、snapshot revalidationは省略しない
+
+step S74:
+  decision D26 based_on P16, PR16, EV16, VP16:
+    "defaultで全distinct pathsを無制限に表示する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "impact membershipは小さくてもdiamond DAGのpath数が出力と計算を爆発させるため"
+
+step S75:
+  decision D27 based_on P16, PR16, EV16, VP16:
+    "shortest pathが複数あるときtraversalが最初に見つけたpathを無定義に表示する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "object populationやmap iterationでreceiptが変わりdeterministic dogfoodに使えないため"
+
+problem P17:
+  "Git hash共有を前提にせず将来sidecarへ十分な価値を与えformat 4の転換を避けられるか"
+
+step S76:
+  premise PR17:
+    |
+      outer Gitはcanonical .sealgraph filesをordinary tracked filesとしてversioningできるが、
+      そのGit OIDはtracked file version identityであり、file内のnative ObjectIDまたはSealIDではない。
+      Git commit hash共有をsidecarの中心価値にするとSHA-1/SHA-256とSDK supportへproduct meaningが依存する
+
+step S77:
+  evidence EV17:
+    |
+      worktree、prospective staged tree、immutable commit tree、merge index stagesからexact .sealgraph path bytesを
+      供給し、同じnative config、object、REF decoderとrevision/Cause graphへ渡せば、Git OIDをcanonical identityへ
+      入れずにstaged fsck、historical inspection、three-way conflict evidenceを提供できる
+
+step S78:
+  viewpoint VP17:
+    axis one_native_format_with_git_aware_tree_views
+
+step S79:
+  decision D28 based_on P17, PR17, EV17, VP17:
+    |
+      standaloneとGit sidecarは同一のnative SHA-256 Seal、Link、REF、object store contractを使う。
+      sidecar schema、mode field、Git-backed SealID、alternate Cause identityを作らない。
+      sidecar mutationもreal worktree .sealgraphに対する同じone-REF writer/CAS publicationを使う
+
+step S80:
+  decision D29 based_on P17, PR17, EV17, VP17:
+    |
+      initial sidecarはworktree、prospective staged result tree、immutable commit treeをcomplete exact byte/path viewとして
+      same native readersへ渡すinspection adapterとする。merge stage 1/2/3はcomplete viewではなくconflict entryであるため、
+      対応するBASE、OURS、THEIRS complete treeと結合してgraph evidenceを作る。
+      outer Git OIDはview内physical locatorに限定しnative ObjectID、Seal、Link、REFへ保存しない
+
+step S81:
+  decision D30 based_on P17, PR17, EV17, VP17:
+    |
+      Git source blob、tree、commit、tagをgenerated materialとしてimportする機能はinitial sidecar scopeから外しdeferする。
+      later exact blob materializationはnative ContentRefへ書けるためformat 4を変更しない。
+      zero-copy external referenceまたはtype-specific projectionは別persisted contractとapprovalを要求する
+
+step S82:
+  decision D31 based_on P17, PR17, EV17, VP17:
+    "Seal objectをouter Git ODBのobject formatで保存しGit OIDをSealIDにする"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      |
+        SHA-1/SHA-256 repositoryでSealIDとID lengthが変わり、
+        standaloneとsidecarのCause DAG identityが分裂するため
+
+problem P18:
+  "standaloneと複数Git viewの対称性をどこまで要求しどこを意図的に非対称とするか"
+
+step S83:
+  premise PR18:
+    |
+      equal canonical .sealgraph file treeがview sourceだけで異なるmeaningを持つと、fsck、status、stale、impact、historyが
+      standalone、pre-commit、historical inspection、merge assistanceで矛盾する。一方immutable commit treeをwritableにする
+      対称性はauthority boundaryを壊す
+
+step S84:
+  evidence EV18:
+    |
+      exact path existence、directory enumeration、file bytesを共通inputにし、native decoderとgraphを共有すれば
+      factual resultを一致させられる。mutation capabilityだけをreal filesystem viewに限定すればGit historyを変更しない
+
+step S85:
+  viewpoint VP18:
+    axis semantic_symmetry_with_explicit_authority_asymmetry
+
+step S86:
+  decision D32 based_on P18, PR18, EV18, VP18:
+    |
+      byte-identical complete canonical treesはfilesystem、staged、commit viewで同じvalidation、current-head graph、stale、
+      impact、history factsを返す。merge stages単独をcomplete treeとして扱わない。runtime candidateとcache factsはcanonical
+      tree比較から除外し、そのabsenceをcandidate CLEANと推論しない。selector receiptはnative full SealIDとする
+
+step S87:
+  decision D33 based_on P18, PR18, EV18, VP18:
+    |
+      only real filesystem viewはnative writer/CASでmutateできる。staged、commit、merge-stage viewsはread-onlyで、
+      candidate作成、object write、REF advance、cache refresh、repairを許可しない。
+      このauthority asymmetryは明示contractでありsemantic divergenceではない
+
+problem P19:
+  "staged validationとhookがworktree差分またはGit automationから誤った承認を作らないか"
+
+step S88:
+  premise PR19:
+    |
+      pre-commit時のworktreeはindexと異なり得て、unchanged canonical objectはindex entryとして変更されていない。
+      worktreeだけをfsckすると実際にcommitされるtreeを検証できない
+
+step S89:
+  evidence EV19:
+    |
+      base treeとstage-zero indexからprospective result treeを構成しcomplete index stateをcapture/revalidateすれば、
+      unchanged objectsを含むcommit予定provenanceをread-onlyに検証できる
+
+step S90:
+  viewpoint VP19:
+    axis exact_prospective_tree_validation_without_approval
+
+step S91:
+  decision D34 based_on P19, PR19, EV19, VP19:
+    |
+      staged validatorはprospective result treeのconfig、native objects、REFとtag targets、complete parent/Cause closure、
+      path grammarを検証する。candidate、locks、cache、logs、temp pathのstageを拒否し、concurrent index changeでfailする
+
+step S92:
+  decision D35 based_on P19, PR19, EV19, VP19:
+    |
+      hook integrationはexplicit opt-in validation commandだけをinitial scopeとする。self-install、existing hook overwrite、
+      stage、seal、REF advance、relink、repair、commit、pushを行わず、hook successをsemantic approvalとみなさない
+
+step S93:
+  decision D36 based_on P19, PR19, EV19, VP19:
+    "Git commit成功後に対応するSealを自動生成する"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "candidate inspection、one-REF publication、明示的approvalをGit lifecycleへ暗黙委譲するため"
+
+problem P20:
+  "tracked path、merge、SDK、partial cloneを含むsidecar境界は網羅的にfail closedできるか"
+
+step S94:
+  premise PR20:
+    |
+      outer Git attributesはcanonical bytesをfilterまたはline-ending変換でき、partial cloneはtreeが参照するblobをlocalに
+      持たない場合がある。merge indexはsame REFにBASE、OURS、THEIRSを持ち得る
+
+step S95:
+  evidence EV20:
+    |
+      canonical tracked pathとruntime forbidden pathを列挙し、native hashをview bytesから再検証し、typed Git identityと
+      SDK capability matrixをadapter内へ閉じ、missing objectをnetwork fetchなしでerrorにすればsilent translationを避けられる
+
+step S96:
+  viewpoint VP20:
+    axis complete_fail_closed_git_file_integration
+
+step S97:
+  decision D37 based_on P20, PR20, EV20, VP20:
+    |
+      canonical tracked pathsはconfig、objects、refs/seals、refs/tagsとし、runtime index、locks、cache、logs、tempを拒否する。
+      Git LFS、clean/smudge filter、working-tree encoding、line-ending conversionでcanonical bytesを変換する構成をunsupportedとし、
+      native validation failureを逆変換またはrepairしない
+
+step S98:
+  decision D38 based_on P20, PR20, EV20, VP20:
+    |
+      merge assistanceはstage 1/2/3 conflict entryを対応するvalidated BASE、OURS、THEIRS complete treeへ結合した場合だけ、
+      exact SealID、revision ancestry、Cause differenceを表示できる。immutable object same-path different-bytesをcorruption、
+      divergent REF/tag targetをexplicit conflictとする。
+      sibling選択、child作成、relink、approvalを自動化しない
+
+step S99:
+  decision D39 based_on P20, PR20, EV20, VP20:
+    |
+      Git adapterはobject format、object type、full OIDをtyped physical identityとして持つがSDK型をnative domainへ公開しない。
+      selected SDKが同一binaryでSHA-1/SHA-256、worktree、linked worktree、index stages、trees、packs、alternatesを実証した
+      matrixだけを受理し、unsupported、missing promisor object、mixed stateを拒否する。manual pack reader、silent Git CLI fallback、
+      implicit network fetchを行わない。historical treeのnative repository formatがcurrent binaryでunsupportedならfailし、
+      format 3 dual readerまたはautomatic migrationをsidecar経由で復活させない
+
+pending PD5:
+  |
+    REF path renameに追従するtag namespaceをexternal stable namespace ID、atomic multi-path move、
+    または別manifest設計のどれで実現するか確定する
+
+pending PD6:
+  |
+    format 3 dumpのcandidate policy、tag collision、non-injective SealID mapping、deterministic orderと
+    format 4 load publication boundaryを確定する
+
+pending PD9:
+  |
+    git sealgraph initまたはsetupのnon-destructive .gitignore/.gitattributes policy、unborn HEAD、sparse/split index、
+    submodule、hook dispatcher coexistence、explicit merge resolution transaction、historical CLI surfaceを確定する

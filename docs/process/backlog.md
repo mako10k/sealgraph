@@ -1,6 +1,9 @@
 # Sealgraph dogfood backlog
 
-Status: mirrored to public GitHub Issues on 2026-08-14.
+Status: SG-BL-001 through SG-BL-011 were mirrored to public GitHub Issues on
+2026-08-14. ADR 0011 now adds a release-blocking format-4 tranche in
+`PLAN.pert`; creating or rewriting external Issues remains a separate explicit
+tracker operation.
 
 This document preserves the dogfood evidence, design constraints, and proposed
 execution order behind the Issues in
@@ -318,10 +321,11 @@ complete repository inventory yet.
 
 ### Required design
 
-- Verify every loose object envelope, hash, canonical seal payload, REF value,
-  current-head ownership, parent chain, dependency target, and DAG cycle.
+- Verify every loose object envelope, hash, canonical Seal payload, REF value,
+  parent-revision chain, exact Cause target, active/detached state, and both DAG
+  cycle classes.
 - Report unreachable/dangling immutable objects separately from corruption;
-  superseded history is expected, not garbage.
+  non-leaf and detached history is expected, not garbage.
 - Explain that writable mode does not authorize overwriting a content-addressed
   object and is not the integrity boundary.
 - Remain read-only by default. Any future recovery action must be explicit and
@@ -353,8 +357,8 @@ therefore depends on hierarchical namespace use.
 
 - Decide explicitly whether to retain the limitation or adopt a deliberately
   breaking collision-free format before 1.0.
-- Preserve path-form REFs, immutable REF-scoped tags, injective TAGNAME
-  encoding, and future Git-sidecar forensic usability.
+- Preserve path-form REFs, immutable UI-scoped tags, injective TAGNAME
+  encoding, REF rename, and future Git-sidecar forensic usability.
 - Do not add dual lookup, hidden fallback storage, or automatic migration only
   for experimental compatibility.
 - Test both creation orders and make any retained error name the conflicting
@@ -379,22 +383,29 @@ and not atomic as a two-edge candidate edit.
   the repeated-command contract with documented rationale.
 - Keep one domain-independent dependency semantic; do not add ADR-specific
   kinds or a free-form kind taxonomy without a separate accepted need.
-- Resolve every selector before candidate mutation, preserve one link per
-  target REF, and keep deterministic canonical order.
-- Continue to distinguish link-message changes from target repoints. Native v3
-  has no whole-seal event message.
+- Resolve every selector before candidate mutation, preserve one Link per exact
+  target SealID, and keep deterministic canonical order.
+- Continue to distinguish Link-message changes from target repoints. Format 4
+  has no whole-Seal event message.
 
 ## Proposed execution order
 
 Before Git sidecar:
 
-1. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
-2. `HISTORY_INSPECTION`: SG-BL-003 and SG-BL-004.
-3. `TAG_CONTRACT`: SG-BL-010 resolves the remaining experimental tag mapping
-   boundary without compatibility scaffolding.
-4. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the
+1. `FORMAT3_LOGICAL_DUMP`: preserve an explicit export boundary before the
+   runtime reader changes.
+2. `FORMAT4_NATIVE_CORE` and `FORMAT4_REVISION_GRAPH`: implement ADR 0011
+   without a dual reader or partial owner-check removal.
+3. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise
+   sibling revision behavior.
+4. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
+5. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
+   `parent_revision` and exact target SealIDs.
+6. `TAG_CONTRACT`: SG-BL-010 selects a rename-safe format-4 namespace and
+   narrow `mv` transaction without compatibility scaffolding.
+7. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the
    final history and diff data shapes.
-5. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
+8. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
 
 SG-BL-009 remains in the existing release gate. Git sidecar follows the
 recurring dogfood gate so it can reuse one established inspection vocabulary

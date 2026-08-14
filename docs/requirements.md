@@ -1,6 +1,8 @@
 # Sealgraph requirements
 
-Status: initial normative draft.
+Status: normative format-4 contract accepted by ADR 0011. The checked-in Go
+runtime remains format 3 until the sequenced implementation and explicit
+dump/load transition are completed.
 
 ## 1. Purpose
 
@@ -11,9 +13,10 @@ It MUST make it possible to answer:
 1. What content was sealed?
 2. Which exact upstream seal generations were used as its basis?
 3. What attachments were part of that sealed state?
-4. What seal did it supersede?
+4. From which exact parent revision was it derived?
 5. Which semantic flags and direct provenance relations were sealed?
-6. Which current REF heads became stale after an upstream supersession?
+6. Which current REF heads became stale because their revision or Cause
+   provenance is no longer at an active revision leaf?
 7. Through which dependency paths did that impact propagate?
 
 Sealgraph is not a general-purpose VCS.
@@ -22,9 +25,13 @@ Sealgraph is not a general-purpose VCS.
 
 ### 2.1 REF
 
-A REF is a logical content identity, not a filename.
+A REF is a movable logical lookup/publication name, not immutable Seal
+identity and not a Git branch.
 
 Each REF has at most one current HEAD seal.
+
+Multiple REFs MAY point to the same Seal. Moving or renaming a REF MUST NOT
+rewrite a Seal or Link.
 
 ### 2.2 Blob
 
@@ -34,13 +41,14 @@ Standalone operation MUST NOT require a working file corresponding to a REF.
 
 ### 2.3 Seal
 
-A seal is an immutable snapshot of one REF's candidate state.
+A seal is an immutable snapshot of generated material, exact direct Cause
+provenance, and one optional revision parent. It may be published as one REF's
+HEAD, but the REF name is not part of the Seal.
 
 A seal MUST commit to:
 
 - schema/format version,
-- logical REF identity,
-- previous seal identity when present,
+- parent revision seal identity or explicit absence,
 - content identity,
 - attachment identities plus stable attachment metadata,
 - dependency links,
@@ -51,13 +59,15 @@ Seal-level `actor`, `created_at`, event `message`, and equivalent operation
 metadata are outside material/provenance identity. When needed, such a claim is
 ordinary separately sealed content linked to its exact subject generation.
 
-A seal belongs to exactly one logical REF. Its owner REF is identity-bearing
-canonical state. A seal MUST NOT be reused as the HEAD, parent, or tag target of
-another REF. Parent history stays within one REF.
+The required `parent_revision` is `null` for an initial revision and otherwise
+one exact full SealID. It means only that the new Seal is a revision derived
+from that parent. It MUST NOT imply replacement, invalidation, preference,
+truth, trust, approval, or same-REF ownership. One parent MAY have multiple
+children, and siblings are equally valid revision tips.
 
-A dependency link MAY cross a REF boundary because it names both the target REF
-and one concrete seal owned by that REF. The edge does not transfer or alias the
-target seal into the dependent REF.
+A Seal contains no current or historical REF name. It MAY be reused as the
+HEAD, parent, Link target, or tag target in any explicitly valid scope without
+changing identity.
 
 One `seal` invocation MUST create at most one new seal for exactly one REF.
 
@@ -71,7 +81,7 @@ Links form an N:M directed acyclic graph across seals.
 
 A persisted link MUST contain a concrete target seal identity.
 
-Native v3 has one domain-independent dependency edge and no persisted link
+Native format 4 has one domain-independent Cause edge and no persisted link
 kind. A link MAY carry an edge-specific message explaining why that exact
 upstream generation is a dependency. The link message is part of the seal
 identity. It describes the dependency relation and does not assert an actor,
@@ -81,13 +91,18 @@ authority, trusted time, or seal-operation event.
 
 The CLI MUST also support explicit historical generation selection.
 
-Native v3 accepts an exact full seal ID, a repository-wide unique hexadecimal
-prefix of at least four characters, or an immutable REF-scoped tag wherever an
-explicit seal generation is selected. Resolution MUST produce a concrete full
-seal ID before candidate or seal persistence.
+Format 4 selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
+`REF@TOKEN`. A hexadecimal Seal token is 4 through 64 lower-case hex
+characters, resolves uniquely across the native ODB, and must decode as a
+canonical Seal. `REF@hex` additionally asserts that the selected Seal is the
+REF's current HEAD or a `parent_revision` ancestor of it. `REF@non-hex`
+resolves an immutable tag in that REF's UI namespace. Only the resolved full
+SealID is persisted.
 
-A tag is an immutable alias for one seal owned by one REF. It MUST NOT become a
-dynamic link, a movable branch, or a separate approval claim.
+A tag is an immutable external alias for one exact Seal. It is not part of
+Seal or Link bytes and MUST NOT become a dynamic link, movable branch, or
+approval claim. Rename-safe tag namespace storage remains a separately gated
+format-4 detail.
 
 ### 2.5 Root
 
@@ -114,47 +129,67 @@ A draft may intentionally depend on a non-HEAD upstream seal.
 
 Draft MUST remain visible in status/show/log output.
 
-## 3. Supersession and stale propagation
+## 3. Revision DAG and stale propagation
 
-Seals are immutable. Superseding a REF creates a new seal and moves that REF's HEAD.
+Seals and Links are immutable. Publishing a new revision moves exactly one REF
+HEAD and never changes an older downstream Link.
 
-Existing downstream links remain unchanged.
+For one coherent current-head observation, the active revision DAG is the
+deduplicated set of current REF HEAD SealIDs plus every Seal reached through
+`parent_revision` ancestry. An object-store-only child, tag-only Seal,
+Cause-only Seal, or failed-publication dangling object is not active merely
+because its bytes exist.
 
-A current seal is directly stale when one of its persisted dependency target seal identities differs from the current HEAD seal identity of that dependency's logical REF.
+An active Seal is `STALE_REVISION` when it has an active strict descendant. A
+current REF that points to such a non-leaf has self-stale state. Sibling leaves
+do not make one another stale. A Seal outside the active revision DAG is
+historical or detached, not current-clean.
 
-A current seal is transitively stale when its dependency closure contains stale provenance.
+A current Seal is `STALE_DIRECT` when an exact direct Cause Link target is not
+an active current revision leaf, including an active non-leaf or a
+historical/detached target. It is `STALE_TRANSITIVE` when no direct target is
+stale but a deeper Link-only Cause target is not an active current leaf.
+Parent edges decide revision leafness and MUST NOT be traversed as Cause edges.
 
-Staleness MUST be derived from canonical seals and current REF heads. It MUST NOT be authoritative persisted state.
+Staleness MUST be derived from canonical Seals and one coherent complete REF
+head observation. It MUST NOT be authoritative persisted state or depend on
+mutable candidates. A changed observation fails without partial stdout.
 
-Resealing an upstream dependent changes its seal identity because the seal commits to upstream identities, even when its own textual content is unchanged.
+The product MUST expose the complete stale current-REF set and an upstream-
+first exact-Cause review frontier. A stale current REF is blocked by another
+stale current head only when that exact head Seal appears in its strict
+Link-only Cause closure. Unselected descendant tips and candidates do not
+affect frontier membership. These results are factual observations, not
+approval, mandatory work, seal admissibility, reservation, or a batch plan.
 
-This naturally propagates the need for explicit downstream review/reseal.
-
-The product MUST expose both the complete set of stale current REF heads and an
-upstream-first freshness-review frontier. The frontier contains a stale current
-REF head only when none of the direct upstream REFs named by its current seal is
-itself stale. Both sets remain factual derived observations: they do not assert
-approval, a mandatory operation, seal admissibility, or a batch plan.
-
-Stale-set membership MUST NOT depend on mutable candidate state. A stale query
-MUST derive against one validated observation of the complete current REF/head
-set and fail without a partial result if that set changes before output.
+A disposable derived cache MAY accelerate stale queries when bound to the
+repository/schema version and complete sorted REF/head snapshot. Missing,
+invalid, or mismatched cache state triggers canonical full scan and atomic
+refresh; canonical corruption fails closed. `--scan` MUST bypass cache reads.
+Cache state is not canonical and is not committed to an outer Git repository.
 
 ## 4. Seal admissibility
 
-A normal non-draft seal MUST reject a candidate whose complete reachable
-dependency closure is not HEAD-consistent or contains a draft seal.
+A normal non-draft seal MUST reject a candidate unless every direct and
+reachable Cause target is a non-draft active revision leaf in one coherent
+current-head observation.
 
 This rule exists to force unresolved upstream review to progress explicitly from upstream to downstream.
 
-Explicit draft/historical workflows MAY seal against older generations, but the resulting non-HEAD relation MUST remain observable and MUST NOT be reported as fresh.
+Explicit draft/historical workflows MAY seal against active, historical,
+detached, draft, or non-draft exact Cause targets, but those relations remain
+observable and MUST NOT be reported as normal-clean.
 
 A draft candidate MAY depend on current or historical draft/non-draft seals.
 Draft is distinct from stale and MUST NOT be propagated, relinked, or resealed
 automatically. To depend on provisional provenance, the operator explicitly
 keeps the dependent candidate draft.
 
-The exact CLI override model is to be finalized before v1; do not introduce a generic “ignore validation” escape hatch.
+Revision-parent admissibility is separate from Cause admissibility. An active
+non-leaf, detached historical, or draft Seal MAY be selected explicitly as a
+revision parent. A parent does not satisfy the required Cause of a non-root
+Seal and parent draft state does not automatically propagate. There is no
+generic ignore-validation escape hatch.
 
 ## 5. Attachments
 
@@ -170,7 +205,8 @@ An attachment is contained evidence/artifact data. A link is an external provena
 
 ## 6. Working candidate
 
-`add`, `link`, `unlink`, `attach`, and `detach` edit the next candidate state for one REF.
+`add`, `derive`, `link`, `unlink`, `attach`, and `detach` edit the next
+candidate state for one destination REF.
 
 `add` MAY specify dependencies atomically with content creation/update:
 
@@ -185,9 +221,24 @@ sealgraph add DESIGN-001 \
 
 Working candidate state is not a seal and is not authoritative history.
 
+Format-4 candidates keep revision topology and publication coordination
+separate:
+
+- `parent_revision` is the hash-committed parent of the next Seal;
+- `expected_ref_head` is mutable expected-old state for destination REF CAS.
+
+An ordinary update of an existing REF records its observed current HEAD in both
+fields. `derive NEW_REF --from SOURCE` creates a same-material candidate for an
+absent destination, copies content, attachments, direct Cause Links/messages,
+root, and draft, and sets `parent_revision` to SOURCE.
+`add NEW_REF --parent SOURCE --content ...` creates new material with no
+inheritance. Both require destination REF and candidate absence and record
+`expected_ref_head = null`.
+
 Candidate inspection MUST remain distinct from immutable `REF@TOKEN`
 selection. The standalone CLI MUST allow one candidate to be shown, compared
-with its recorded base, and explicitly discarded. Candidate inspection and
+with its recorded `parent_revision`, and explicitly discarded. Current REF and
+`expected_ref_head` relation is reported separately. Candidate inspection and
 diff MUST NOT automatically rebase, relink, repair, or seal it.
 
 Discard removes only one exact candidate state. It MUST NOT move a REF, delete
@@ -195,9 +246,10 @@ immutable objects, recurse through hierarchical REFs, or report a missing or
 unsafe target as successful. Explicit discard MUST remain possible when the
 candidate representation is corrupt.
 
-`unlink` removes exactly one dependency edge identified by upstream REF. An
-optional explicit upstream generation acts as a removal precondition. It MUST
-NOT change content, root/draft state, another dependency, or create a seal.
+`unlink` removes exactly one dependency edge identified by its resolved exact
+target SealID. A bare REF is current-HEAD lookup shorthand and therefore does
+not match an older stored target after that REF advances. It MUST NOT change
+content, root/draft state, another dependency, or create a seal.
 
 Standalone mutations MUST use repository-wide writer coordination. Cooperative
 writers execute serially. A seal publishes at the successful expected-old CAS
@@ -220,12 +272,20 @@ The product is expected to provide:
 
 `diff` MUST be capable of representing content, attachment, link, and material metadata differences.
 
-`status` MUST distinguish at least candidate modifications/unsealed state from direct/transitive staleness.
+`status` MUST distinguish at least candidate modifications/unsealed state,
+draft, self-stale revision, and direct/transitive Cause staleness.
 
 `stale` MUST offer a stable REF-only line form for shell composition. It emits
 one valid logical REF plus LF per selected current head in bytewise lexical
 order, with no header or status fields, and emits zero bytes for an empty set.
 Candidate inspection remains outside this command.
+
+`impact` accepts every Seal-resolving selector. By default it emits one
+deterministic shortest Link-edge path per distinct impacted current-head Seal;
+equal lengths use the bytewise lexical full-SealID sequence. Explicit
+`--all-paths` is bounded by positive `--max-paths N`, default 100 per impacted
+Seal, with an explicit truncation marker. Presentation limits MUST NOT limit
+membership derivation, integrity validation, or snapshot revalidation.
 
 Default human inspection MUST NOT emit arbitrary content or metadata bytes
 directly. It MUST use bounded, unambiguous escaping. Exact content extraction
@@ -242,7 +302,8 @@ Core sealgraph MUST NOT implement Git-like:
 - checkout
 - cherry-pick
 
-Multiple upstream bases are expressed through provenance links, not merge commits.
+Multiple direct causes are expressed through provenance Links, not merge
+commits.
 
 ## 9. Standalone initialization
 
@@ -278,7 +339,19 @@ conformance tests do not change that lifecycle boundary.
 
 Git sidecar is a separate product surface exposed as `git sealgraph ...` through a `git-sealgraph` executable.
 
-Sidecar MAY use Git blobs, trees, commits, history, index stages, and merge state as read sources.
+Sidecar uses the same native `.sealgraph` Seal, Link, REF, object-store, and
+repository-format contract. It MUST NOT define a sidecar Seal schema or use an
+outer Git OID as a native identity.
+
+Sidecar MAY present outer-Git worktree, prospective staged tree, and immutable
+commit tree as complete read-only exact path/byte views to the same native
+decoders and domain/graph validators. Merge index stages are conflict entries,
+not complete repository views; graph claims require the corresponding
+validated BASE/OURS/THEIRS complete trees.
+
+Sidecar publication writes the real worktree `.sealgraph` using the same
+one-REF writer/CAS protocol. Git tree/index/history views are read-only and
+MUST NOT create candidates, objects, REFs, cache, or repairs.
 
 Sealgraph provenance semantics remain independent from Git commit semantics.
 
@@ -289,6 +362,19 @@ Git merge MUST NOT automatically repair stale provenance.
 Git-sidecar MAY provide three-way conflict inspection/resolution assistance for sealgraph REF conflicts.
 
 Automatic semantic merging or fabricated approval is forbidden.
+
+Hook integration MUST be explicit, opt-in, and validation-only. A validation
+hook MUST inspect the prospective staged result tree rather than a potentially
+different worktree, and MUST NOT install itself, overwrite an existing hook,
+stage, seal, advance a REF, relink, repair, commit, push, or treat success as
+approval.
+
+Canonical `.sealgraph` files tracked by outer Git MUST reach the staged tree
+without LFS, clean/smudge filtering, working-tree encoding, or line-ending
+transformation. Runtime candidates, locks, cache, logs, and temporary paths
+MUST NOT be staged. Missing partial-clone objects and unsupported Git or native
+repository formats fail explicitly without implicit network fetch, dual
+reader, or automatic migration.
 
 ## 11. Merge-friendly metadata
 

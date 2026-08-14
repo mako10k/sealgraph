@@ -1,16 +1,19 @@
 # Standalone alpha release checklist
 
-Status: preparation contract for `v0.1.0-alpha.1`. Completing this document does
-not authorize a tag, GitHub Release, package publication, or Git-sidecar
-release. Publication requires a separate explicit operator approval after an
-exact commit SHA and artifacts are frozen.
+Status: release-blocked by the accepted ADR 0011 format-4 implementation and
+explicit dogfood conversion. Completing this document does not authorize a tag,
+GitHub Release, package publication, or Git-sidecar release. Publication
+requires a separate explicit operator approval after an exact commit SHA and
+artifacts are frozen.
 
 ## 1. Release identity and scope
 
 - Target: `v0.1.0-alpha.1`.
 - Product surface: standalone `sealgraph` only.
-- Repository format: native format 3, explicitly experimental.
-- Compatibility policy: formats 1 and 2 remain unsupported; pre-1.0 breaking
+- Repository format: native format 4 after implementation; the current
+  format-3 runtime is not a release candidate.
+- Compatibility policy: formats 1 through 3 remain unsupported by the
+  format-4 runtime; pre-1.0 breaking
   regeneration is allowed and preferred over compatibility scaffolding.
 - Initial binary artifact scope: Linux amd64 only unless another platform is
   separately built and tested before the freeze.
@@ -21,6 +24,14 @@ exact commit SHA and artifacts are frozen.
 
 ## 2. Product blockers before freeze
 
+- [ ] Add the deterministic read-only format-3 logical dump.
+- [ ] Implement format-4 canonical Seal/candidate bytes, fixtures, and
+      empty-repository load with complete ID mapping.
+- [ ] Implement and validate active revision DAG, same-material sibling,
+      active-leaf admission, stale cache/`--scan`, exact-Cause frontier, and
+      bounded impact.
+- [ ] Explicitly convert tracked dogfood through dump/load and verify there is
+      no mixed-format or partial owner-check behavior.
 - [ ] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit
       pre-1.0 storage decision and tests.
 - [ ] Complete SG-BL-002's deterministic explicit-path manifest builder.
@@ -50,7 +61,8 @@ versioned structured format.
 - [ ] Replace the hard-coded `0.1.0-dev` release value with deterministic build
       metadata injection while keeping an honest development fallback.
 - [ ] Document source build and Linux amd64 installation/uninstallation.
-- [ ] Add concise release notes covering format 3, breaking-regeneration policy,
+- [ ] Add concise release notes covering format 4, explicit dump/load,
+      breaking-regeneration policy,
       standalone-only scope, supported platform, and known omissions.
 - [ ] Add a deterministic artifact build that produces:
 
@@ -83,6 +95,7 @@ go test -race ./...
 npm ci
 npm run clone-check
 llmthink dsl audit docs/decisions/sealgraph-design.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-seal-revision-dag.think --pretty
 perttool document check PLAN.pert
 perttool dag analyze PLAN.pert
 ```

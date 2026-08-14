@@ -1,9 +1,12 @@
 # Sealgraph dogfooding plan
 
 Status: R0, R1, native-v2, candidate-lifecycle, and native-v3 material-identity
-rounds passed on 2026-08-14. The tracked project repository now contains only
-approved canonical standalone `.sealgraph` state; runtime-only paths remain
-ignored. See
+rounds passed on 2026-08-14 and remain historical evidence. ADR 0011 now
+accepts format 4; the next tracked round must use explicit logical dump/load,
+must not rewrite format-3 dogfood in place, and must not claim migration before
+the new runtime passes. The tracked project repository currently contains only
+approved canonical format-3 standalone `.sealgraph` state; runtime-only paths
+remain ignored. See
 [`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md)
 and [`dogfooding-receipts/2026-08-14-r1.md`](dogfooding-receipts/2026-08-14-r1.md).
 The breaking format-2 regeneration and ADR dogfood are recorded in

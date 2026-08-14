@@ -50,6 +50,22 @@ milestone MATERIAL_IDENTITY:
   title "Seal identity excludes compulsory event metadata"
   state reached
 
+milestone FORMAT4_DESIGN:
+  title "REF-independent branching revision contract accepted"
+  state reached
+
+milestone FORMAT3_DUMP:
+  title "Format-3 logical dump is available"
+
+milestone FORMAT4_RUNTIME:
+  title "Format-4 native repository works"
+
+milestone REVISION_DAG:
+  title "Branching revision and Cause graph semantics work"
+
+milestone FORMAT4_DOGFOOD:
+  title "Tracked dogfood is explicitly converted to format 4"
+
 milestone USABLE:
   title "Dogfood usability and inspection contracts work"
 
@@ -107,7 +123,28 @@ task MATERIAL_IDENTITY_V3 CONSISTENCY -> MATERIAL_IDENTITY:
   duration 3p
   status done
 
-task CONTENT_INGEST MATERIAL_IDENTITY -> USABLE:
+task ADR11_DESIGN MATERIAL_IDENTITY -> FORMAT4_DESIGN:
+  title "Accept REF-independent Seals, branching revisions, and Git tree-view boundary"
+  duration 2p
+  status done
+
+task FORMAT3_LOGICAL_DUMP FORMAT4_DESIGN -> FORMAT3_DUMP:
+  title "Add deterministic read-only format-3 logical dump"
+  duration 3p
+
+task FORMAT4_NATIVE_CORE FORMAT3_DUMP -> FORMAT4_RUNTIME:
+  title "Implement format-4 canonical Seal, candidate, selector, and dump/load core"
+  duration 6p
+
+task FORMAT4_REVISION_GRAPH FORMAT4_RUNTIME -> REVISION_DAG:
+  title "Implement active revision DAG, derive/add-parent, stale cache/scan, history, and impact"
+  duration 6p
+
+task FORMAT4_DOGFOOD_LOAD REVISION_DAG -> FORMAT4_DOGFOOD:
+  title "Convert tracked dogfood by explicit dump/load and exercise a sibling revision"
+  duration 2p
+
+task CONTENT_INGEST FORMAT4_DOGFOOD -> USABLE:
   title "Add exact file input and deterministic manifests (SG-BL-001/002)"
   duration 3p
 
@@ -116,12 +153,12 @@ task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
   duration 4p
   status done
 
-task OPERATOR_CONTRACT MATERIAL_IDENTITY -> USABLE:
+task OPERATOR_CONTRACT FORMAT4_DOGFOOD -> USABLE:
   title "Clarify semantics, output, and link-message editing (SG-BL-005/006/007/011)"
   duration 3p
 
-task TAG_CONTRACT MATERIAL_IDENTITY -> USABLE:
-  title "Resolve REF-scoped tag loose-path collision policy (SG-BL-010)"
+task TAG_CONTRACT FORMAT4_DOGFOOD -> USABLE:
+  title "Resolve rename-safe format-4 tag namespace and REF mv transaction (SG-BL-010)"
   duration 2p
 
 task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
@@ -129,8 +166,8 @@ task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
   duration 1p
 
 task GIT_SIDECAR DOGFOOD_R2 -> GIT:
-  title "Implement git-sealgraph reader and sidecar status"
-  duration 4p
+  title "Implement staged/commit tree validation, hook dispatch, and merge-stage inspection"
+  duration 6p
 
 task RELEASE_GATE GIT -> READY:
   title "Add fsck, integration tests, docs, and release checks"

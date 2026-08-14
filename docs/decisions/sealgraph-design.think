@@ -15,7 +15,7 @@ step S1:
 
 step S2:
   premise PR2:
-    "上流の supersede 後も既存 seal と link は immutable な履歴として残す"
+    "上流にnew revisionがpublishされた後も既存sealとlinkはimmutableな履歴として残す"
 
 step S3:
   evidence EV1:
@@ -23,7 +23,9 @@ step S3:
 
 step S4:
   decision D1 based_on P1, PR1, PR2, EV1:
-    "seal を immutable provenance node とし、stale は current REF heads と seal DAG から導出する"
+    |
+      sealをimmutable provenance nodeとし、staleはcurrent REF headsからrooted active revision DAGと
+      exact Cause Link closureを使って導出する。parent edgeはCause edgeとして伝播させない
 
 problem P2:
   "standalone と Git sidecar の実装をどう共通化するか"
@@ -34,11 +36,16 @@ step S5:
 
 step S6:
   premise PR4:
-    "Git sidecar では Git の blob/history/merge state を再利用したい"
+    |
+      Git sidecarではouter Gitがversioningするexact .sealgraph filesをprospective staged tree、
+      commit tree、merge stagesから検査したい
 
 step S7:
   decision D2 based_on P2, PR3, PR4:
-    "共通 ObjectReader 境界を置き、standalone は .sealgraph、sidecar は .git を content source として読む"
+    |
+      standaloneとsidecarはone native formatとsame decoder/domain graphを使う。
+      sidecarはcomplete .sealgraph treeのread-only exact byte/path viewを供給し、Git OIDをnative identityにしない。
+      mutationはreal filesystem .sealgraphのnative writer/CASだけで行う
 
 problem P3:
   "Git integration の CLI 名をどう分離するか"
@@ -72,12 +79,12 @@ step S11:
 step S12:
   decision D5 based_on P5, PR5:
     |
-      normal non-draft seal は dependency closure 全体の HEAD consistency と
-      non-draft を要求し、draft のみ explicit historical または draft link を
-      保持して seal できる
+      normal non-draft sealはdirectおよびreachable Cause target全てにactive revision leafと
+      non-draftを要求し、draftのみactive、historical、detached、draft exact Causeを保持できる。
+      revision parent admissibilityはCause admissibilityから分離する
 
 pending PD3:
-  "Git sidecar が Git blob/tree/commit のどの単位を content source として first-class に扱うかを確定する"
+  "将来Git source material importが必要になった場合だけblob materializationまたはtype-specific projection contractを確定する"
 
 problem P6:
   "実験段階の native ID と human alias を単純化しつつ Git ODB 互換性を保てるか"
@@ -157,5 +164,54 @@ step S23:
 step S24:
   decision D9 based_on P9, PR9, EV6:
     |
-      native v3 は seal-level message、created_at、actor を canonical payload と CLI から
-      除外する。必要な event attestation は別 REF の sealed content と concrete link で表す
+      native v3でseal-level message、created_at、actorをcanonical payloadとCLIから除外し、
+      format 4もその境界を維持する。必要なevent attestationは別REFのsealed contentとexact Cause Linkで表す
+
+problem P10:
+  "REF renameとalternative revisionをSeal identityを壊さずどう表すか"
+
+step S25:
+  premise PR10:
+    |
+      Link targetはexact Sealであり、Sealはgenerated materialとCauseをfreezeする。
+      REF owner nameをhashするとrenameがimmutable identityとhistoryを不必要に変更する
+
+step S26:
+  evidence EV7:
+    |
+      SealからREFとLink target_refを除きparent_revisionだけをhashすれば、同一parentからsame-material childと
+      updated childをsiblingsとして表し、REF path move後もLinkとhistoryを維持できる
+
+step S27:
+  decision D10 based_on P10, PR10, EV7:
+    |
+      format 4 Sealはschema、parent_revision、content、attachments、links、root、draftだけをcanonicalizeする。
+      parent_revisionはderivationだけをassertしone parentはmultiple childrenを持てる。
+      Linkはtarget_sealとmessageだけを保存しREF identityを保存しない
+
+problem P11:
+  "Git hookとmerge assistanceをsemantic approvalなしでどう提供するか"
+
+step S28:
+  premise PR11:
+    |
+      worktreeはindexと異なり得てmerge stage 1/2/3はcomplete repository treeではない。
+      Git lifecycleからSealを自動生成するとone-REF explicit publicationを破る
+
+step S29:
+  evidence EV8:
+    |
+      prospective staged result treeをsame native readerでvalidateし、merge conflict entriesをvalidated
+      BASE、OURS、THEIRS complete treesへ関連付ければ、automationなしにcommit予定stateとconflict evidenceを検査できる
+
+step S30:
+  decision D11 based_on P11, PR11, EV8:
+    |
+      sidecar hookはexplicit opt-in validation-onlyとしself-install、hook overwrite、stage、seal、REF advance、
+      relink、repair、commit、pushを禁止する。merge assistanceはexact alternativesを表示するがsibling選択、
+      child生成、semantic approvalを行わない
+
+pending PD4:
+  |
+    rename-safe tag namespace、git sealgraph setup policy、hook dispatcher coexistence、merge resolution transaction、
+    SDK SHA-1/SHA-256 capability matrixを各implementation boundary前に確定する

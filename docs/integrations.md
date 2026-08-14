@@ -4,58 +4,56 @@ Integrations are optional developer/product adapters. They must not become hidde
 
 ## 1. Git sidecar
 
-Git sidecar is the only product-level integration in the initial architecture.
-
-Executable:
+Git sidecar is a separate explicit product surface:
 
 ```text
-git-sealgraph
+executable: git-sealgraph
+invocation: git sealgraph ...
 ```
 
-User invocation:
+ADR 0011 fixes one native format for both entry points. The sidecar does not
+introduce Git-backed SealIDs, another Seal schema, or Git commit/branch meaning
+inside the revision/Cause DAG.
 
-```sh
-git sealgraph ...
-```
+The first integration seam is a read-only exact path/byte view of canonical
+`.sealgraph` files from:
 
-It may read:
+- outer worktree diagnostics;
+- the prospective staged result tree;
+- one immutable commit tree;
+- merge stage 1/2/3 conflict entries associated with validated
+  BASE/OURS/THEIRS complete trees.
 
-- Git blobs,
-- trees,
-- commits,
-- object database,
-- first-parent/history data where needed,
-- index stages for three-way conflict analysis,
-- merge state.
+These views feed the same native config/object/REF decoders and domain graph as
+standalone. Only the real worktree `.sealgraph` is mutable, through the same
+native writer and one-REF CAS publication protocol.
 
-Use a mature Git SDK for physical Git reading. Do not hand-roll packfile/delta/alternate/worktree support.
+Use a mature Git SDK for physical repository, index, tree, pack, alternate, and
+linked-worktree reading. Do not hand-roll packfiles/deltas or silently fall back
+to Git CLI. Pin an exact stable version only after one released binary proves
+its supported SHA-1/SHA-256 capability matrix. Current SDK-version selection is
+a deferred gate, not a native-domain API choice.
 
-Initial dependency candidate when implementation reaches this phase:
+Standalone Git compatibility does not require the SDK. It remains an explicit
+Git SHA-256 low-level loose-object conformance test and does not open
+`.sealgraph` as a Git repository, attach it to an outer ODB, or invoke Git
+maintenance.
 
-```text
-github.com/go-git/go-git/v5
-```
+Prospective staged-tree validation checks canonical layout, native object hash,
+REF/tag reachability, complete parent/Cause closure, and forbidden runtime
+paths. It captures/revalidates the complete index observation. Unsupported Git
+or native format, transformed canonical bytes, concurrent index change, or
+missing partial-clone object fails without native mutation, automatic fetch,
+dual reader, or repair.
 
-Pin an exact stable version when added.
+Hook integration is explicit, opt-in, and validation-only. It never
+self-installs, overwrites another hook, stages, seals, advances a REF, relinks,
+repairs, commits, or pushes. Exact hook setup/dispatch CLI is separately gated.
 
-Standalone Git compatibility does not require this dependency. Native
-conformance is limited to an explicit Git SHA-256 low-level loose-object test;
-it does not open `.sealgraph` as a Git repository or attach its object directory
-to an outer SHA-1 repository.
-
-The first SDK adoption point is the Git-sidecar `GitObjectReader`, where pack,
-alternate, repository object-format, and prefix lookup support justify a mature
-library. Native `.sealgraph/objects` keeps its small explicit loose-blob
-implementation and proves compatibility with bidirectional Git CLI conformance
-tests. Current go-git SHA-256 support requires its documented SHA-256 build
-mode; that build contract must be fixed and tested when the sidecar dependency
-is introduced.
-
-Before that product seam is implemented, an ADR must decide supported Git
-object formats, typed external identities, whether content is materialized or
-referenced, and which blob/tree/commit semantics are first-class. The current
-native `ObjectID` must not be generalized speculatively only to make room for an
-unselected sidecar design.
+Git source blob/tree/commit/tag material import is deferred. Later exact blob
+materialization can use the native ObjectWriter without changing format 4;
+zero-copy external references or type-specific projections require a separate
+persisted contract and ADR.
 
 ## 2. llmthink
 
@@ -81,6 +79,7 @@ llmthink dsl audit docs/decisions/2026-08-14-external-spec-review.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-candidate-lifecycle.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-seal-event-metadata.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-reseal-required.think --pretty
+llmthink dsl audit docs/decisions/2026-08-14-seal-revision-dag.think --pretty
 ```
 
 When a major architecture choice changes:

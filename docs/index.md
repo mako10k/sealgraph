@@ -25,11 +25,13 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0008-candidate-lifecycle-and-safe-output.md`](adr/0008-candidate-lifecycle-and-safe-output.md)
 - [`adr/0009-separate-seal-event-metadata.md`](adr/0009-separate-seal-event-metadata.md)
 - [`adr/0010-stale-review-frontier.md`](adr/0010-stale-review-frontier.md)
+- [`adr/0011-ref-independent-seals-and-branching-revisions.md`](adr/0011-ref-independent-seals-and-branching-revisions.md)
 
 ## Agent-auditable design
 
 - [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
+- [`decisions/2026-08-14-seal-revision-dag.think`](decisions/2026-08-14-seal-revision-dag.think)
 
 ## Planning
 
@@ -38,6 +40,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/dogfooding-plan.md`](process/dogfooding-plan.md)
 - [`process/release-checklist.md`](process/release-checklist.md)
 - [`process/reseal-required-proposal-2026-08-14.md`](process/reseal-required-proposal-2026-08-14.md)
+- [`process/seal-revision-dag-proposal-2026-08-14.md`](process/seal-revision-dag-proposal-2026-08-14.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
 - [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)
