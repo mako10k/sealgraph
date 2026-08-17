@@ -82,7 +82,7 @@ func TestCLILoadPublishesOnlyAfterCanonicalInput(t *testing.T) {
 	}
 }
 
-func TestCLIFormat3DumpAndTagSurfacesFailExplicitly(t *testing.T) {
+func TestCLIFormat3DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
 		t.Fatal(stderr)
@@ -95,8 +95,25 @@ func TestCLIFormat3DumpAndTagSurfacesFailExplicitly(t *testing.T) {
 			t.Fatalf("%v code=%d stderr=%s", args, code, stderr)
 		}
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "tag", "root"); code != 1 || stdout != "" || !strings.Contains(stderr, "tag namespace") {
-		t.Fatalf("tag code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	rootID := mustSealCLI(t, dir, "root")
+	if stdout := mustRunCLI(t, dir, "tag", "root", "reviewed/1.0"); !strings.Contains(stdout, rootID) {
+		t.Fatalf("tag create stdout=%s", stdout)
+	}
+	if code, stdout, stderr := runCLI(t, dir, nil, "tag", "@"+rootID[:12], "global"); code != 2 || stdout != "" || !strings.Contains(stderr, "no REF scope") {
+		t.Fatalf("unscoped tag code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if stdout := mustRunCLI(t, dir, "tag", "root"); !strings.Contains(stdout, `TAG root "reviewed/1.0" `+rootID) {
+		t.Fatalf("tag list stdout=%s", stdout)
+	}
+	if stdout := mustRunCLI(t, dir, "mv", "root", "archive/root"); !strings.Contains(stdout, "tags=1") {
+		t.Fatalf("mv stdout=%s", stdout)
+	}
+	if code, stdout, stderr := runCLI(t, dir, nil, "show", "root@reviewed/1.0"); code != 1 || stdout != "" || !strings.Contains(stderr, "REF not found") {
+		t.Fatalf("old tag scope code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if code, stdout, stderr := runCLI(t, dir, nil, "show", "archive/root@reviewed/1.0"); code != 0 || !strings.Contains(stdout, rootID) || stderr != "" {
+		t.Fatalf("moved tag scope code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 }
 

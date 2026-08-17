@@ -20,7 +20,7 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	if created, err := InitStandalone(insideGit); err != nil || !created {
 		t.Fatalf("inside Git init created=%t err=%v", created, err)
 	}
-	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), filepath.Join("refs", "tags"), "index", "locks"} {
+	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), "index", "locks"} {
 		plainInfo, plainErr := os.Stat(filepath.Join(plain, ".sealgraph", relative))
 		gitInfo, gitErr := os.Stat(filepath.Join(insideGit, ".sealgraph", relative))
 		if plainErr != nil || gitErr != nil || plainInfo.IsDir() != gitInfo.IsDir() {
@@ -66,6 +66,26 @@ func TestInitRejectsOlderFormatsWithoutMigration(t *testing.T) {
 		if _, err := InitStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
 			t.Fatalf("format-%s init error = %v", format, err)
 		}
+	}
+	if err := os.WriteFile(config, []byte("repository_format = 4\nobject_format = sha256\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InitStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
+		t.Fatalf("interim format-4 config error = %v", err)
+	}
+}
+
+func TestManifestFormatRejectsLegacyTagTree(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := InitStandalone(dir); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(dir, ".sealgraph", "refs", "tags")
+	if err := os.Mkdir(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenStandalone(dir); err == nil || !strings.Contains(err.Error(), "stores tags inside") {
+		t.Fatalf("legacy tag tree open error = %v", err)
 	}
 }
 

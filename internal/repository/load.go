@@ -38,10 +38,6 @@ func LoadLogicalV1(ctx context.Context, workDir string, input []byte) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if len(dump.Tags) != 0 {
-		return nil, fmt.Errorf("logical dump contains %d tag record(s): %w; no tag was dropped or deferred", len(dump.Tags), ErrTagContractPending)
-	}
-
 	staging, err := os.MkdirTemp(workDir, ".sealgraph-load-")
 	if err != nil {
 		return nil, fmt.Errorf("create format-4 load staging directory: %w", err)
@@ -56,10 +52,10 @@ func LoadLogicalV1(ctx context.Context, workDir string, input []byte) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if err := validateLoadedRepository(ctx, repo, dump.REFs, oldToNew); err != nil {
+	if err := validateLoadedRepository(ctx, repo, dump.REFs, dump.Tags, oldToNew); err != nil {
 		return nil, fmt.Errorf("validate staged format-4 repository: %w", err)
 	}
-	receipt := encodeLoadReceipt(input, mappings, dump.REFs, oldToNew)
+	receipt := encodeLoadReceipt(input, mappings, dump.REFs, dump.Tags, oldToNew)
 	if err := renameNoReplace(staging, target); err != nil {
 		return nil, fmt.Errorf("publish complete format-4 repository without replacement: %w", err)
 	}
@@ -89,6 +85,9 @@ func buildStagedRepository(ctx context.Context, staging string, dump migration.L
 		return nil, nil, nil, err
 	}
 	if err := publishMigratedREFs(ctx, repo, dump.REFs, oldToNew); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := publishMigratedTags(ctx, repo, dump.Tags, oldToNew); err != nil {
 		return nil, nil, nil, err
 	}
 	if err := resetStagedLocks(staging); err != nil {
@@ -176,6 +175,26 @@ func publishMigratedREFs(ctx context.Context, repo *Repository, refs []migration
 	return nil
 }
 
+func publishMigratedTags(ctx context.Context, repo *Repository, tags []migration.TagRecord, mapping map[string]domain.ObjectID) error {
+	for _, tag := range tags {
+		target, ok := mapping[tag.Target.String()]
+		if !ok {
+			return fmt.Errorf("tag %s@%s old target %s has no mapping", tag.REF, tag.Name, tag.Target)
+		}
+		if _, err := repo.LoadSeal(ctx, target); err != nil {
+			return fmt.Errorf("tag %s@%s mapped target %s is not a canonical Seal: %w", tag.REF, tag.Name, target, err)
+		}
+		head, err := repo.refs.Resolve(ctx, tag.REF)
+		if err != nil {
+			return fmt.Errorf("resolve migrated tag scope %s: %w", tag.REF, err)
+		}
+		if err := repo.tags.Create(ctx, tag.REF, tag.Name, target, head); err != nil {
+			return fmt.Errorf("publish migrated tag %s@%s: %w", tag.REF, tag.Name, err)
+		}
+	}
+	return nil
+}
+
 func resetStagedLocks(staging string) error {
 	if err := os.RemoveAll(filepath.Join(staging, "locks")); err != nil {
 		return fmt.Errorf("clear staged transient locks: %w", err)
@@ -200,7 +219,7 @@ func rejectAbandonedLoadStaging(workDir string) error {
 }
 
 func prepareRepositoryLayout(dir string) error {
-	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), filepath.Join("refs", "tags"), "index", "locks"} {
+	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), "index", "locks"} {
 		if err := os.MkdirAll(filepath.Join(dir, relative), 0o755); err != nil {
 			return fmt.Errorf("prepare format-4 repository layout: %w", err)
 		}
@@ -211,11 +230,15 @@ func prepareRepositoryLayout(dir string) error {
 	return nil
 }
 
-func validateLoadedRepository(ctx context.Context, repo *Repository, expected []migration.RefRecord, mapping map[string]domain.ObjectID) error {
+func validateLoadedRepository(ctx context.Context, repo *Repository, expectedRefs []migration.RefRecord, expectedTags []migration.TagRecord, mapping map[string]domain.ObjectID) error {
 	if err := validateLayout(repo.dir); err != nil {
 		return err
 	}
-	names, err := validateLoadedREFs(ctx, repo, expected, mapping)
+	names, err := validateLoadedREFs(ctx, repo, expectedRefs, mapping)
+	if err != nil {
+		return err
+	}
+	tagTargets, err := validateLoadedTags(ctx, repo, names, expectedTags, mapping)
 	if err != nil {
 		return err
 	}
@@ -227,7 +250,7 @@ func validateLoadedRepository(ctx context.Context, repo *Repository, expected []
 	for _, object := range objects {
 		objectSet[object.ID.String()] = struct{}{}
 	}
-	return validateLoadedGraph(ctx, repo, names, objectSet)
+	return validateLoadedGraph(ctx, repo, names, tagTargets, objectSet)
 }
 
 func validateLoadedREFs(ctx context.Context, repo *Repository, expected []migration.RefRecord, mapping map[string]domain.ObjectID) ([]string, error) {
@@ -253,6 +276,35 @@ func validateLoadedREFs(ctx context.Context, repo *Repository, expected []migrat
 	return names, nil
 }
 
+func validateLoadedTags(ctx context.Context, repo *Repository, refs []string, expected []migration.TagRecord, mapping map[string]domain.ObjectID) ([]domain.ObjectID, error) {
+	actual := make([]migration.TagRecord, 0, len(expected))
+	for _, ref := range refs {
+		tags, err := repo.tags.List(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range tags {
+			actual = append(actual, migration.TagRecord{REF: ref, Name: tag.Name, Target: tag.Seal})
+		}
+	}
+	if len(actual) != len(expected) {
+		return nil, fmt.Errorf("staged tag count is %d, expected %d", len(actual), len(expected))
+	}
+	targets := make([]domain.ObjectID, len(actual))
+	for i, tag := range actual {
+		want := expected[i]
+		mapped, ok := mapping[want.Target.String()]
+		if !ok || tag.REF != want.REF || tag.Name != want.Name || !tag.Target.Equal(mapped) {
+			return nil, fmt.Errorf("staged tag %d is %s@%s -> %s, expected %s@%s -> mapped %s", i, tag.REF, tag.Name, tag.Target, want.REF, want.Name, mapped)
+		}
+		if _, err := repo.LoadSeal(ctx, tag.Target); err != nil {
+			return nil, fmt.Errorf("staged tag %s@%s target %s is not a canonical Seal: %w", tag.REF, tag.Name, tag.Target, err)
+		}
+		targets[i] = tag.Target
+	}
+	return targets, nil
+}
+
 type loadedGraphValidator struct {
 	ctx       context.Context
 	repo      *Repository
@@ -260,12 +312,17 @@ type loadedGraphValidator struct {
 	state     map[string]uint8
 }
 
-func validateLoadedGraph(ctx context.Context, repo *Repository, names []string, objectSet map[string]struct{}) error {
+func validateLoadedGraph(ctx context.Context, repo *Repository, names []string, tagTargets []domain.ObjectID, objectSet map[string]struct{}) error {
 	validator := loadedGraphValidator{ctx: ctx, repo: repo, objectSet: objectSet, state: make(map[string]uint8)}
 	for _, name := range names {
 		head, _ := repo.refs.Resolve(ctx, name)
 		if err := validator.visit(head); err != nil {
 			return fmt.Errorf("REF %s: %w", name, err)
+		}
+	}
+	for _, target := range tagTargets {
+		if err := validator.visit(target); err != nil {
+			return fmt.Errorf("tag target %s: %w", target, err)
 		}
 	}
 	return nil
@@ -312,7 +369,7 @@ func (validator *loadedGraphValidator) validateMaterial(id domain.ObjectID, payl
 	return nil
 }
 
-func encodeLoadReceipt(input []byte, mappings []sealMapping, refs []migration.RefRecord, oldToNew map[string]domain.ObjectID) []byte {
+func encodeLoadReceipt(input []byte, mappings []sealMapping, refs []migration.RefRecord, tags []migration.TagRecord, oldToNew map[string]domain.ObjectID) []byte {
 	sort.Slice(mappings, func(i, j int) bool { return mappings[i].Old.String() < mappings[j].Old.String() })
 	byNew := make(map[string][]domain.ObjectID)
 	for _, mapping := range mappings {
@@ -371,7 +428,20 @@ func encodeLoadReceipt(input []byte, mappings []sealMapping, refs []migration.Re
 		b, _ = canonical.AppendString(b, oldToNew[ref.Head.String()].String())
 		b = append(b, '}')
 	}
-	b = append(b, `],"tags":[],"published_repository_format":4}`...)
+	b = append(b, `],"tags":[`...)
+	for i, tag := range tags {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, `{"ref":`...)
+		b, _ = canonical.AppendString(b, tag.REF)
+		b = append(b, `,"name":`...)
+		b, _ = canonical.AppendString(b, tag.Name)
+		b = append(b, `,"target":`...)
+		b, _ = canonical.AppendString(b, oldToNew[tag.Target.String()].String())
+		b = append(b, '}')
+	}
+	b = append(b, `],"published_repository_format":4}`...)
 	b = append(b, '\n')
 	return b
 }

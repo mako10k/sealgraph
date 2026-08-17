@@ -1,6 +1,6 @@
 //go:build linux && amd64
 
-package repository
+package fsatomic
 
 import (
 	"fmt"
@@ -14,7 +14,8 @@ const (
 	renameNoReplaceFlag = 1
 )
 
-func renameNoReplace(oldPath, newPath string) error {
+// RenameNoReplace atomically renames oldPath without replacing newPath.
+func RenameNoReplace(oldPath, newPath string) error {
 	oldPointer, err := syscall.BytePtrFromString(oldPath)
 	if err != nil {
 		return err

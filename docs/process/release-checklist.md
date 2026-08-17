@@ -1,7 +1,7 @@
 # Standalone alpha release checklist
 
-Status: release-blocked by the accepted ADR 0011 format-4 implementation and
-explicit dogfood conversion. Completing this document does not authorize a tag,
+Status: release-blocked by explicit format-4 dogfood conversion and the
+remaining product/Git gates. Completing this document does not authorize a tag,
 GitHub Release, package publication, or Git-sidecar release. Publication
 requires a separate explicit operator approval after an exact commit SHA and
 artifacts are frozen.
@@ -30,7 +30,7 @@ artifacts are frozen.
 - [x] Implement and validate active revision DAG, same-material sibling,
       active-leaf admission, stale cache/`--scan`, exact-Cause frontier, and
       bounded impact.
-- [ ] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit
+- [x] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit
       pre-1.0 storage decision and tests.
 - [ ] Explicitly convert tracked dogfood through dump/load after the tag
       contract and verify there is no tag loss, mixed-format state, or partial

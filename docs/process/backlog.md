@@ -341,7 +341,7 @@ complete repository inventory yet.
 
 ## SG-BL-010 — Resolve REF-scoped tag loose-path namespace collisions
 
-- Status: open
+- Status: done by ADR 0013 and `TAG_CONTRACT`
 - Priority: P2, resolve before tags become routine
 - PERT: `TAG_CONTRACT`
 
@@ -363,6 +363,15 @@ therefore depends on hierarchical namespace use.
   for experimental compatibility.
 - Test both creation orders and make any retained error name the conflicting
   scopes and next explicit action.
+
+### Resolution
+
+ADR 0013 adopts `.sealgraph/refs/seals/<REF>/.ref`, one canonical manifest
+containing HEAD and sorted immutable tag bindings. The reserved terminal marker
+allows prefix REFs to coexist and makes `mv` one atomic no-replace manifest
+rename. Candidate and lock files use their own runtime terminal markers. There
+is no dual lookup, automatic migration, old-name alias, tag retarget/delete, or
+candidate move.
 
 ## SG-BL-011 — Make distinct dependency messages atomic and ergonomic
 
@@ -396,8 +405,8 @@ Before Git sidecar:
    runtime reader changes.
 2. `FORMAT4_NATIVE_CORE` and `FORMAT4_REVISION_GRAPH` are complete without a
    dual reader or owner-relative graph checks.
-3. `TAG_CONTRACT`: SG-BL-010 selects a rename-safe format-4 namespace and
-   narrow `mv` transaction without compatibility scaffolding.
+3. `TAG_CONTRACT` is complete: ADR 0013 selects a rename-safe format-4
+   manifest and narrow `mv` transaction without compatibility scaffolding.
 4. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise
    sibling revision behavior without dropping format-3 tags.
 5. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.

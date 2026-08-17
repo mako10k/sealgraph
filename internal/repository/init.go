@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-const configBytes = "repository_format = 4\nobject_format = sha256\n"
+const configBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
 
 // InitStandalone initializes only workDir/.sealgraph. It never probes Git or
 // searches parent directories.
@@ -35,7 +35,7 @@ func InitStandalone(workDir string) (bool, error) {
 		return false, fmt.Errorf("create initialization staging directory: %w", err)
 	}
 	defer os.RemoveAll(staging)
-	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), filepath.Join("refs", "tags"), "index", "locks"} {
+	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), "index", "locks"} {
 		if err := os.MkdirAll(filepath.Join(staging, relative), 0o755); err != nil {
 			return false, fmt.Errorf("prepare repository layout: %w", err)
 		}
@@ -80,9 +80,18 @@ func validateCanonicalLayout(repositoryDir string) error {
 	if string(config) != configBytes {
 		return fmt.Errorf("unsupported or malformed config")
 	}
-	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals"), filepath.Join("refs", "tags")} {
+	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals")} {
 		if err := validateRealDirectory(filepath.Join(repositoryDir, relative), relative); err != nil {
 			return err
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(repositoryDir, "refs"))
+	if err != nil {
+		return fmt.Errorf("list canonical refs directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != "seals" {
+			return fmt.Errorf("unexpected canonical refs entry %q; format 4 manifest-v1 stores tags inside refs/seals/<REF>/.ref", entry.Name())
 		}
 	}
 	return nil

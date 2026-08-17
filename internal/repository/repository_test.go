@@ -49,7 +49,7 @@ func TestFormat4RootIdentityIsIndependentOfREF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(config) != "repository_format = 4\nobject_format = sha256\n" {
+	if string(config) != "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n" {
 		t.Fatalf("config = %q", config)
 	}
 	show, err := repo.Show(context.Background(), "@"+first.ID.String()[:12])
@@ -168,8 +168,11 @@ func TestFormat4SelectorsEnforceScopeAncestry(t *testing.T) {
 	if _, err := repo.ResolveSelector(context.Background(), "line@"+other.ID.String()[:12]); err == nil || !strings.Contains(err.Error(), "outside the current parent ancestry") {
 		t.Fatalf("scoped sibling selector error = %v", err)
 	}
-	if _, err := repo.ResolveSelector(context.Background(), "line@release"); !errors.Is(err, ErrTagContractPending) {
-		t.Fatalf("tag selector error = %v", err)
+	if _, err := repo.CreateTag(context.Background(), "line@"+first.ID.String()[:12], "release"); err != nil {
+		t.Fatalf("create historical tag: %v", err)
+	}
+	if resolved, err := repo.ResolveSelector(context.Background(), "line@release"); err != nil || !resolved.ID.Equal(first.ID) {
+		t.Fatalf("tag selector = %v err=%v", resolved.ID, err)
 	}
 }
 
@@ -181,6 +184,27 @@ func TestFormat4RuntimeRejectsFormat3Repository(t *testing.T) {
 	}
 	if _, err := OpenStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
 		t.Fatalf("format-3 open error = %v", err)
+	}
+}
+
+func TestPrefixREFsAndCandidatesCoexistAndMoveRejectsCandidate(t *testing.T) {
+	_, repo := newFormat4Repository(t)
+	sealRoot(t, repo, "design", []byte("design"))
+	sealRoot(t, repo, "design/api", []byte("api"))
+	if refs, err := repo.refs.List(context.Background()); err != nil || len(refs) != 2 || refs[0] != "design" || refs[1] != "design/api" {
+		t.Fatalf("prefix REFs = %v err=%v", refs, err)
+	}
+	if _, err := repo.Add(context.Background(), AddOptions{REF: "design", Content: []byte("next design"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(context.Background(), AddOptions{REF: "design/api", Content: []byte("next api"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.MoveREF(context.Background(), "design", "renamed"); err == nil || !strings.Contains(err.Error(), "candidate design blocks") {
+		t.Fatalf("move with candidate error = %v", err)
+	}
+	if _, err := repo.ResolveSelector(context.Background(), "design"); err != nil {
+		t.Fatalf("blocked move changed source: %v", err)
 	}
 }
 

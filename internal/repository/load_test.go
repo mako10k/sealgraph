@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -93,7 +92,7 @@ func TestLoadLogicalV1PublishesCompleteFormat4RepositoryAndReceipt(t *testing.T)
 	if !bytes.Equal(root.Content, []byte{'r', 0, '\r', '\n', 0xff}) {
 		t.Fatalf("binary root content changed: %v", root.Content)
 	}
-	for _, relative := range []string{"index", "locks", filepath.Join("refs", "tags")} {
+	for _, relative := range []string{"index", "locks"} {
 		entries, err := os.ReadDir(filepath.Join(workDir, ".sealgraph", relative))
 		if err != nil || len(entries) != 0 {
 			t.Fatalf("runtime/deferred directory %s entries=%v err=%v", relative, entries, err)
@@ -147,7 +146,7 @@ func TestLoadLogicalV1ReportsManyToOneCollapse(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsTagsAndExistingTargetWithoutMutation(t *testing.T) {
+func TestLoadPreservesTagsAndRejectsExistingTargetWithoutMutation(t *testing.T) {
 	fixture := loadFixture(t)
 	fixture.Tags = []migration.TagRecord{{REF: "ROOT", Name: "accepted", Target: fixture.REFs[1].Head}}
 	input, err := migration.EncodeLogicalDumpV1(fixture)
@@ -155,21 +154,33 @@ func TestLoadRejectsTagsAndExistingTargetWithoutMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	workDir := t.TempDir()
-	if _, err := LoadLogicalV1(context.Background(), workDir, input); !errors.Is(err, ErrTagContractPending) {
-		t.Fatalf("tag-bearing load error = %v", err)
+	receipt, err := LoadLogicalV1(context.Background(), workDir, input)
+	if err != nil || !bytes.Contains(receipt, []byte(`"tags":[{"ref":"ROOT","name":"accepted"`)) {
+		t.Fatalf("tag-bearing load receipt=%s err=%v", receipt, err)
 	}
-	if _, err := os.Lstat(filepath.Join(workDir, ".sealgraph")); !os.IsNotExist(err) {
-		t.Fatalf("tag rejection published target: %v", err)
-	}
-	if created, err := InitStandalone(workDir); err != nil || !created {
+	repo, err := OpenStandalone(workDir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	before, _ := os.ReadFile(filepath.Join(workDir, ".sealgraph", "config"))
+	resolved, err := repo.ResolveSelector(context.Background(), "ROOT@accepted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _ := repo.ResolveSelector(context.Background(), "ROOT")
+	if !resolved.ID.Equal(root.ID) {
+		t.Fatalf("loaded tag target=%s root=%s", resolved.ID, root.ID)
+	}
+
+	existingDir := t.TempDir()
+	if created, err := InitStandalone(existingDir); err != nil || !created {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(existingDir, ".sealgraph", "config"))
 	tagless, _ := migration.EncodeLogicalDumpV1(loadFixture(t))
-	if _, err := LoadLogicalV1(context.Background(), workDir, tagless); err == nil || !strings.Contains(err.Error(), "already exists") {
+	if _, err := LoadLogicalV1(context.Background(), existingDir, tagless); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("existing target load error = %v", err)
 	}
-	after, _ := os.ReadFile(filepath.Join(workDir, ".sealgraph", "config"))
+	after, _ := os.ReadFile(filepath.Join(existingDir, ".sealgraph", "config"))
 	if !bytes.Equal(before, after) {
 		t.Fatal("existing repository changed")
 	}

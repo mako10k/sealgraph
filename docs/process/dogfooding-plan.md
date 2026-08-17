@@ -1,8 +1,9 @@
 # Sealgraph dogfooding plan
 
 Status: R0, R1, native-v2, candidate-lifecycle, and native-v3 material-identity
-rounds passed on 2026-08-14 and remain historical evidence. ADR 0011 now
-accepts format 4; the next tracked round must use explicit logical dump/load,
+rounds passed on 2026-08-14 and remain historical evidence. ADRs 0011 through
+0013 now accept the format-4 graph and tag-manifest contracts; the next tracked
+round must use explicit tag-preserving logical dump/load,
 must not rewrite format-3 dogfood in place, and must not claim migration before
 the new runtime passes. The tracked project repository currently contains only
 approved canonical format-3 standalone `.sealgraph` state; runtime-only paths

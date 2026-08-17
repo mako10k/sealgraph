@@ -69,6 +69,10 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runLink(ctx, workDir, args[1:], stdout, stderr), true
 	case "unlink":
 		return runUnlink(ctx, workDir, args[1:], stdout, stderr), true
+	case "tag":
+		return runTag(ctx, workDir, args[1:], stdout, stderr), true
+	case "mv":
+		return runMove(ctx, workDir, args[1:], stdout, stderr), true
 	case "candidate":
 		return runCandidate(ctx, workDir, args[1:], stdout, stderr), true
 	case "seal":
@@ -79,8 +83,6 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 
 func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
-	case "tag":
-		return runTag(ctx, workDir, args[1:], stdout, stderr)
 	case "show":
 		return runShow(ctx, workDir, args[1:], stdout, stderr)
 	case "log":
@@ -344,14 +346,71 @@ func runTag(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if len(args) != 1 && len(args) != 2 {
 		return usageError(stderr, "tag requires REF [TAGNAME] or SELECTOR TAGNAME")
 	}
-	if _, err := repository.ParseSelector(args[0]); err != nil {
+	if len(args) == 1 {
+		return runTagList(ctx, workDir, args[0], stdout, stderr)
+	}
+	selector, err := repository.ParseSelector(args[0])
+	if err != nil {
 		return usageError(stderr, "invalid tag selector: %v", err)
 	}
-	_, err := repository.OpenStandalone(workDir)
+	if selector.Kind == repository.SelectorGlobalSeal {
+		return usageError(stderr, "tag target %q has no REF scope; use REF, REF@SEAL, or REF@TAG", args[0])
+	}
+	if err := domain.ValidateTagName(args[1]); err != nil {
+		return usageError(stderr, "invalid TAGNAME: %v", err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "tag", err)
 	}
-	return commandError(stderr, "tag", repository.ErrTagContractPending)
+	result, err := repo.CreateTag(ctx, args[0], args[1])
+	if err != nil {
+		return commandError(stderr, "tag", err)
+	}
+	fmt.Fprintf(stdout, "TAGGED %s %s %s\n", result.REF, strconv.Quote(result.Name), result.Seal)
+	return 0
+}
+
+func runTagList(ctx context.Context, workDir, ref string, stdout, stderr io.Writer) int {
+	if err := domain.ValidateREF(ref); err != nil {
+		return usageError(stderr, "invalid tag REF: %v", err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "tag", err)
+	}
+	tags, err := repo.Tags(ctx, ref)
+	if err != nil {
+		return commandError(stderr, "tag", err)
+	}
+	for _, tag := range tags {
+		fmt.Fprintf(stdout, "TAG %s %s %s\n", ref, strconv.Quote(tag.Name), tag.Seal)
+	}
+	return 0
+}
+
+func runMove(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 2 {
+		return usageError(stderr, "mv requires exactly OLD_REF NEW_REF")
+	}
+	for _, ref := range args {
+		if err := domain.ValidateREF(ref); err != nil {
+			return usageError(stderr, "invalid mv REF %q: %v", ref, err)
+		}
+	}
+	if args[0] == args[1] {
+		return usageError(stderr, "mv source and destination are both %s; choose a different absent destination", args[0])
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "mv", err)
+	}
+	result, err := repo.MoveREF(ctx, args[0], args[1])
+	if err != nil {
+		return commandError(stderr, "mv", err)
+	}
+	fmt.Fprintf(stdout, "MOVED %s %s %s tags=%d\n", result.OldREF, result.NewREF, result.Head, result.Tags)
+	return 0
 }
 
 func runSeal(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -1049,6 +1108,9 @@ Usage:
   sealgraph derive NEW_REF --from SOURCE_SELECTOR
   sealgraph link REF --depend-on SELECTOR... [-m LINK_MESSAGE]
   sealgraph unlink REF --upstream SELECTOR
+  sealgraph tag REF [TAGNAME]
+  sealgraph tag REF@SEAL_OR_TAG TAGNAME
+  sealgraph mv OLD_REF NEW_REF
   sealgraph candidate show REF [--raw-content]
   sealgraph candidate diff REF
   sealgraph candidate discard REF
@@ -1064,10 +1126,9 @@ Usage:
   sealgraph graph
   sealgraph load --format logical-v1 < repository.dump.json
 
-Each seal operation advances exactly one logical REF.
-
-Format-4 tags remain explicitly unavailable until their separately sequenced
-rename-safe namespace contract is complete.
+Each seal operation advances exactly one logical REF. Tags are immutable, and
+mv moves one REF manifest with its complete tag namespace without moving a
+candidate or creating an old-name alias.
 `)
 }
 

@@ -21,7 +21,7 @@ func newRefStoreForTest(t *testing.T) *RefStore {
 	return NewRefStore(dir)
 }
 
-func TestHierarchicalREFAndPrefixConflictsInEitherOrder(t *testing.T) {
+func TestPrefixREFsCoexistInEitherCreationOrder(t *testing.T) {
 	ctx := context.Background()
 	id := ObjectID([]byte("seal"))
 
@@ -30,8 +30,11 @@ func TestHierarchicalREFAndPrefixConflictsInEitherOrder(t *testing.T) {
 		if err := refs.Update(ctx, "design", nil, &id); err != nil {
 			t.Fatal(err)
 		}
-		if err := refs.Update(ctx, "design/api", nil, &id); !errors.Is(err, store.ErrPrefixConflict) {
-			t.Fatalf("error = %v, want prefix conflict", err)
+		if err := refs.Update(ctx, "design/api", nil, &id); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := refs.List(ctx); err != nil || len(got) != 2 || got[0] != "design" || got[1] != "design/api" {
+			t.Fatalf("REFs = %v err=%v", got, err)
 		}
 	})
 
@@ -40,10 +43,68 @@ func TestHierarchicalREFAndPrefixConflictsInEitherOrder(t *testing.T) {
 		if err := refs.Update(ctx, "design/api", nil, &id); err != nil {
 			t.Fatal(err)
 		}
-		if err := refs.Update(ctx, "design", nil, &id); !errors.Is(err, store.ErrPrefixConflict) {
-			t.Fatalf("error = %v, want prefix conflict", err)
+		if err := refs.Update(ctx, "design", nil, &id); err != nil {
+			t.Fatal(err)
 		}
 	})
+}
+
+func TestRefManifestIsCanonicalAndMoveIsAtomicNoReplace(t *testing.T) {
+	ctx := context.Background()
+	refs := newRefStoreForTest(t)
+	one := ObjectID([]byte("one"))
+	two := ObjectID([]byte("two"))
+	if err := refs.Update(ctx, "design", nil, &one); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(refs.manifestPath("design"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"schema":"sealgraph/ref/v1","head":"` + one.String() + `","tags":[]}`
+	if string(data) != want {
+		t.Fatalf("manifest = %s, want %s", data, want)
+	}
+	if err := refs.Move(ctx, "design", "design/api"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := refs.Resolve(ctx, "design"); !errors.Is(err, store.ErrRefNotFound) {
+		t.Fatalf("old REF resolve error = %v", err)
+	}
+	if got, err := refs.Resolve(ctx, "design/api"); err != nil || !got.Equal(one) {
+		t.Fatalf("moved REF = %s err=%v", got, err)
+	}
+	if err := refs.Update(ctx, "occupied", nil, &two); err != nil {
+		t.Fatal(err)
+	}
+	if err := refs.Move(ctx, "design/api", "occupied"); err == nil {
+		t.Fatal("move replaced an existing destination")
+	}
+	if got, err := refs.Resolve(ctx, "occupied"); err != nil || !got.Equal(two) {
+		t.Fatalf("occupied destination changed to %s err=%v", got, err)
+	}
+	if got, err := refs.Resolve(ctx, "design/api"); err != nil || !got.Equal(one) {
+		t.Fatalf("failed move consumed source %s err=%v", got, err)
+	}
+}
+
+func TestRefManifestCanonicalDecoderRejectsVariants(t *testing.T) {
+	id := ObjectID([]byte("head"))
+	canonical := `{"schema":"sealgraph/ref/v1","head":"` + id.String() + `","tags":[]}`
+	if _, err := decodeRefManifest([]byte(canonical)); err != nil {
+		t.Fatalf("canonical manifest: %v", err)
+	}
+	variants := []string{
+		canonical + "\n",
+		`{"head":"` + id.String() + `","schema":"sealgraph/ref/v1","tags":[]}`,
+		`{"schema":"sealgraph/ref/v1","head":"` + id.String() + `","tags":[],"extra":true}`,
+		`{"schema":"sealgraph/ref/v1","head":"` + id.String() + `","tags":[{"name":"release","target":"` + id.String() + `"},{"name":"release","target":"` + id.String() + `"}]}`,
+	}
+	for _, variant := range variants {
+		if _, err := decodeRefManifest([]byte(variant)); err == nil {
+			t.Fatalf("noncanonical manifest accepted: %s", variant)
+		}
+	}
 }
 
 func TestRefUpdateCompareAndSwap(t *testing.T) {

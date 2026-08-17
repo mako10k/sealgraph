@@ -2,7 +2,8 @@
 
 Status: the checked-in runtime implements the format-4 canonical/candidate,
 selector, atomic load, active revision/Cause graph, history, and impact core.
-Tags, tracked dogfood conversion, and Git views remain separately sequenced.
+REF manifests, scoped tags, and atomic move are also implemented. Tracked
+dogfood conversion and Git views remain separately sequenced.
 
 ## 1. Design center
 
@@ -103,8 +104,8 @@ exist only inside this migration-document boundary.
 Native storage capabilities:
 
 - immutable `ObjectReader` / `ObjectWriter`;
-- loose `RefStore` with expected-old CAS;
-- tag storage after the rename-safe namespace decision;
+- one-manifest-per-REF `RefStore` with expected-old CAS and atomic move;
+- immutable tag bindings stored in the scoped REF manifest;
 - exact repository path/file reading needed by native validation.
 
 The real filesystem implementation owns atomic write, lock, no-clobber, fsync,
@@ -156,8 +157,9 @@ Coordinates:
 - normal Cause-closure admission;
 - canonical Seal creation;
 - one-REF CAS publication;
+- scoped immutable tag creation and single-manifest REF move;
 - coherent multi-REF observations;
-- disposable revision/Cause cache orchestration.
+- disposable revision/Cause cache orchestration;
 - read-only format-3 logical dump capture, graph closure, and final complete
   observation revalidation during the explicit migration slice.
 
@@ -196,7 +198,8 @@ Format 4 retains:
 - Git-compatible SHA-256 blob envelope and path where practical;
 - full 64-character lower-case native IDs;
 - user-input unique prefixes only;
-- one loose mutable file per REF;
+- one loose mutable manifest per REF, containing HEAD and immutable tag
+  bindings;
 - no canonical packs or packed refs.
 
 Low-level Git compatibility is forensic/storage compatibility only. An

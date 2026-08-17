@@ -16,12 +16,11 @@ import (
 	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
-var ErrTagContractPending = errors.New("format-4 tag namespace is not implemented; wait for the accepted rename-safe tag contract")
-
 type Repository struct {
 	dir        string
 	objects    *native.ObjectStore
 	refs       store.RefStore
+	tags       store.TagStore
 	candidates candidateStore
 	writer     writerGuard
 }
@@ -39,6 +38,7 @@ func newRepository(dir string) *Repository {
 		dir:        dir,
 		objects:    native.NewObjectStore(dir),
 		refs:       native.NewRefStore(dir),
+		tags:       native.NewTagStore(dir),
 		candidates: candidateStore{root: filepath.Join(dir, "index")},
 		writer:     newWriterGuard(filepath.Join(dir, "locks")),
 	}
@@ -466,7 +466,7 @@ func (r *Repository) ResolveSelector(ctx context.Context, text string) (Resolved
 	case SelectorGlobalSeal, SelectorScopedSeal:
 		id, err = r.objects.ResolvePrefix(ctx, selector.Token)
 	case SelectorScopedTag:
-		return ResolvedSelector{}, fmt.Errorf("cannot resolve %q: %w", text, ErrTagContractPending)
+		id, err = r.tags.Resolve(ctx, selector.REF, selector.Token)
 	}
 	if err != nil {
 		return ResolvedSelector{}, fmt.Errorf("resolve selector %q: %w", text, err)

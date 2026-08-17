@@ -12,13 +12,14 @@ import (
 
 	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/store"
 )
 
 var (
 	ErrCandidateNotFound = errors.New("candidate not found")
 	ErrCandidateChanged  = errors.New("candidate changed after it was loaded")
 )
+
+const candidateFile = ".candidate"
 
 type candidateStore struct{ root string }
 
@@ -36,17 +37,25 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return candidateSnapshot{}, err
 	}
-	if err := s.checkPrefixConflict(ref); err != nil {
+	if err := s.inspectDirectory(ref); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return candidateSnapshot{}, fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
+		}
 		return candidateSnapshot{}, err
 	}
-	data, err := os.ReadFile(s.path(ref))
+	path := s.path(ref)
+	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return candidateSnapshot{}, fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
 	}
 	if err != nil {
-		if pathIsDirectory(s.path(ref)) || isNotDirectoryError(err) {
-			return candidateSnapshot{}, fmt.Errorf("%w: candidate %s collides with a hierarchical candidate", store.ErrPrefixConflict, ref)
-		}
+		return candidateSnapshot{}, fmt.Errorf("inspect candidate %s: %w", ref, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return candidateSnapshot{}, fmt.Errorf("candidate %s is not a regular non-symlink file", ref)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("read candidate %s: %w", ref, err)
 	}
 	candidate, err := canonical.DecodeCandidate(data)
@@ -75,21 +84,15 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 	if err := domain.ValidateCandidate(candidate); err != nil {
 		return err
 	}
-	if err := s.checkPrefixConflict(candidate.REF); err != nil {
-		return err
-	}
-	path := s.path(candidate.REF)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		if isNotDirectoryError(err) {
-			return fmt.Errorf("%w: existing candidate is a prefix of %s", store.ErrPrefixConflict, candidate.REF)
-		}
-		return fmt.Errorf("create candidate directory: %w", err)
+	if err := s.ensureDirectory(candidate.REF); err != nil {
+		return fmt.Errorf("prepare candidate %s directory: %w", candidate.REF, err)
 	}
 	data, err := canonical.EncodeCandidate(candidate)
 	if err != nil {
 		return fmt.Errorf("encode candidate %s: %w", candidate.REF, err)
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".tmp-candidate-")
+	dir := s.directory(candidate.REF)
+	temp, err := os.CreateTemp(dir, ".tmp-candidate-")
 	if err != nil {
 		return fmt.Errorf("create candidate temporary file: %w", err)
 	}
@@ -105,7 +108,7 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 	if err != nil {
 		return fmt.Errorf("write candidate %s: %w", candidate.REF, err)
 	}
-	if err := os.Rename(tempPath, path); err != nil {
+	if err := os.Rename(tempPath, s.path(candidate.REF)); err != nil {
 		return fmt.Errorf("publish candidate %s atomically: %w", candidate.REF, err)
 	}
 	return nil
@@ -114,6 +117,9 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 func (s candidateStore) RemoveIfUnchanged(ref string, expected []byte) error {
 	if err := domain.ValidateREF(ref); err != nil {
 		return err
+	}
+	if err := s.inspectDirectory(ref); err != nil {
+		return fmt.Errorf("re-read sealed candidate %s: %w", ref, err)
 	}
 	path := s.path(ref)
 	current, err := os.ReadFile(path)
@@ -137,7 +143,10 @@ func (s candidateStore) Discard(ref string) error {
 	if err := domain.ValidateREF(ref); err != nil {
 		return err
 	}
-	if err := s.checkPrefixConflict(ref); err != nil {
+	if err := s.inspectDirectory(ref); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: %s", ErrCandidateNotFound, ref)
+		}
 		return err
 	}
 	path := s.path(ref)
@@ -168,26 +177,8 @@ func (s candidateStore) removeEmptyParents(path string) {
 
 func (s candidateStore) List() ([]string, error) {
 	var refs []string
-	err := filepath.WalkDir(s.root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == s.root || entry.IsDir() {
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
-			return fmt.Errorf("unexpected non-regular candidate entry %s", path)
-		}
-		relative, err := filepath.Rel(s.root, path)
-		if err != nil {
-			return err
-		}
-		ref := filepath.ToSlash(relative)
-		if err := domain.ValidateREF(ref); err != nil {
-			return fmt.Errorf("invalid candidate path %q: %w", ref, err)
-		}
-		refs = append(refs, ref)
-		return nil
+	err := filepath.WalkDir(s.root, func(path string, entry fs.DirEntry, walkErr error) error {
+		return s.collect(path, entry, walkErr, &refs)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list candidates: %w", err)
@@ -196,36 +187,74 @@ func (s candidateStore) List() ([]string, error) {
 	return refs, nil
 }
 
-func (s candidateStore) checkPrefixConflict(ref string) error {
-	components := strings.Split(ref, "/")
-	path := s.root
-	for i, component := range components {
-		path = filepath.Join(path, component)
-		info, err := os.Lstat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
+func (s candidateStore) collect(path string, entry fs.DirEntry, walkErr error, refs *[]string) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("candidate namespace contains a symbolic link at %s", path)
+	}
+	if entry.IsDir() {
+		return nil
+	}
+	if entry.Name() != candidateFile || !entry.Type().IsRegular() {
+		return fmt.Errorf("unexpected candidate entry %s; expected only %s files", path, candidateFile)
+	}
+	relative, err := filepath.Rel(s.root, filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	ref := filepath.ToSlash(relative)
+	if err := domain.ValidateREF(ref); err != nil {
+		return fmt.Errorf("invalid candidate path %q: %w", ref, err)
+	}
+	if _, err := s.LoadSnapshot(ref); err != nil {
+		return err
+	}
+	*refs = append(*refs, ref)
+	return nil
+}
+
+func (s candidateStore) inspectDirectory(ref string) error {
+	current := s.root
+	for _, component := range strings.Split(ref, "/") {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
 		if err != nil {
-			return fmt.Errorf("inspect candidate namespace: %w", err)
+			return err
 		}
-		last := i == len(components)-1
-		if !last && !info.IsDir() {
-			return fmt.Errorf("%w: existing candidate %q is a prefix of %q", store.ErrPrefixConflict, strings.Join(components[:i+1], "/"), ref)
-		}
-		if last && info.IsDir() {
-			return fmt.Errorf("%w: candidate %q is a prefix of an existing hierarchical candidate", store.ErrPrefixConflict, ref)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("candidate namespace contains a symbolic link at %s", path)
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("candidate namespace component %s is not a real directory", current)
 		}
 	}
 	return nil
 }
 
-func (s candidateStore) path(ref string) string {
+func (s candidateStore) ensureDirectory(ref string) error {
+	current := s.root
+	for _, component := range strings.Split(ref, "/") {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			if err := os.Mkdir(current, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+				return err
+			}
+			info, err = os.Lstat(current)
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("candidate namespace component %s is not a real directory", current)
+		}
+	}
+	return nil
+}
+
+func (s candidateStore) directory(ref string) string {
 	return filepath.Join(s.root, filepath.FromSlash(ref))
 }
-func pathIsDirectory(path string) bool { info, err := os.Stat(path); return err == nil && info.IsDir() }
-func isNotDirectoryError(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "not a directory")
+
+func (s candidateStore) path(ref string) string {
+	return filepath.Join(s.directory(ref), candidateFile)
 }

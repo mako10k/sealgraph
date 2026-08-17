@@ -133,8 +133,9 @@ type Candidate struct {
 	Draft           bool         `json:"draft"`
 }
 
-// ValidateREF applies Git check-ref-format-compatible rules to the full name
-// refs/seals/<logical-ref>, without invoking Git or normalizing the input.
+// ValidateREF applies Git check-ref-format-compatible rules to the logical REF
+// portion stored above the reserved .ref marker, without invoking Git or
+// normalizing the input.
 func ValidateREF(ref string) error {
 	if ref == "" {
 		return errors.New("REF is empty; provide a logical name")

@@ -5,6 +5,9 @@ Status: accepted on 2026-08-14.
 The seal-level event-message behavior described below is superseded by ADR 0009.
 ADR 0009 retains edge-specific link messages but removes seal-level `message`
 and `created_at` from native v3.
+The `refs/tags/<REF>/<ENCODED_TAGNAME>` storage layout is superseded for format
+4 by ADR 0013's tags-inside-REF-manifest contract. TAGNAME grammar, immutable
+binding semantics, and selector forms remain applicable.
 
 ## Context
 

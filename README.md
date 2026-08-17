@@ -14,16 +14,17 @@ The checked-in standalone runtime now implements the format-4 native core and
 active revision graph: REF-independent Seal and Link identity, separated
 candidate revision/CAS state, exact selectors, atomic logical-v1 load,
 branching parents, active-leaf admission, stale/frontier, history, and bounded
-impact.
+impact, plus collision-free REF manifests, immutable scoped tags, atomic REF
+move, and tag-preserving logical load.
 The prior format-3 dump remains available from commit `5b24d47` for explicit
 source export. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-ADR 0011, and ADR 0012.
+ADR 0011, ADR 0012, and ADR 0013.
 
-Tags and REF move are the next separately sequenced slice. The tracked project
-`.sealgraph` intentionally remains format 3 until the tag contract allows
-lossless dogfood conversion; the format-4 runtime does not open it directly.
+The tracked project `.sealgraph` intentionally remains format 3 until the next
+explicit dogfood-conversion slice; the format-4 runtime does not open it
+directly or migrate it in place.
 
 ## Two product surfaces
 
@@ -35,6 +36,8 @@ sealgraph add REQ-001 --root --content 'Authentication is required.'
 sealgraph seal REQ-001
 
 sealgraph show REQ-001
+sealgraph tag REQ-001 reviewed/1.0
+sealgraph mv REQ-001 requirements/REQ-001
 
 # Explicit conversion into a different directory with no .sealgraph target:
 sealgraph load --format logical-v1 < repository.dump.json
@@ -112,6 +115,8 @@ sealgraph add --parent
 sealgraph derive
 sealgraph link
 sealgraph unlink
+sealgraph tag
+sealgraph mv
 sealgraph candidate
 sealgraph seal
 sealgraph show
@@ -128,7 +133,8 @@ sealgraph load --format logical-v1
 The format-4 binary consumes, but never directly opens, a format-3 migration
 source. Load requires an absent `.sealgraph`, stages and validates the complete
 repository, publishes it with atomic no-replace semantics, and emits every
-old-to-new SealID mapping. Tag-bearing input fails closed until `TAG_CONTRACT`.
+old-to-new SealID mapping while preserving rewritten tags inside REF
+manifests.
 
 Later phases retain the following planned surface:
 
@@ -136,7 +142,6 @@ Later phases retain the following planned surface:
 sealgraph attach
 sealgraph detach
 sealgraph fsck
-sealgraph tag
 ```
 
 Git-only helpers are intentionally separate:

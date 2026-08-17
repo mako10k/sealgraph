@@ -13,18 +13,20 @@ format-4 runtime.
 │   └── aa/
 │       └── bbbbb...                 # remaining 62 lower-hex characters
 ├── refs/
-│   ├── seals/
-│   │   └── <REF>
-│   └── tags/                        # exact format-4 mapping is deferred
+│   └── seals/
+│       └── <REF>/
+│           └── .ref                 # HEAD plus immutable scoped tags
 ├── index/
-│   └── <REF candidate>              # mutable, unsealed, runtime
+│   └── <REF>/
+│       └── .candidate               # mutable, unsealed, runtime
 ├── cache/                           # disposable derived graph index
 ├── logs/                            # optional/local/rebuildable
 └── locks/                           # runtime coordination only
 ```
 
-Canonical state consists of `config`, immutable objects, current loose Seal
-REF files, and immutable tags once their rename-safe mapping is approved.
+Canonical state consists of `config`, immutable objects, and one current REF
+manifest per logical REF. Each manifest contains its HEAD and immutable scoped
+tag bindings.
 Candidate/index, cache, logs, locks, and temporary files are not canonical
 provenance and must not be tracked by an outer Git repository.
 
@@ -39,11 +41,13 @@ Format 4 fixes at least:
 ```text
 repository_format = 4
 object_format     = sha256
+ref_format        = manifest-v1
 ```
 
-The format-4 runtime rejects repository formats 1, 2, and 3. It has no dual
-reader, ignored legacy fields, compatibility mode, in-place conversion, or
-automatic repair.
+The format-4 runtime rejects repository formats 1, 2, and 3 and the interim
+format-4 config without `ref_format = manifest-v1`. It has no dual reader,
+ignored legacy fields, compatibility mode, in-place conversion, or automatic
+repair.
 
 Before the runtime reader changes, the format-3 binary gains a versioned
 read-only logical dump. Format-4 load accepts only an empty repository, rebuilds
@@ -68,9 +72,10 @@ their bytes. Any candidate or corruption rejects the dump.
 
 The load target is stricter than an initialized empty repository:
 `.sealgraph` must be absent so a complete sibling staging directory can be
-validated and published atomically without replacement. Tag-bearing load
-remains blocked until the rename-safe format-4 tag layout is accepted. The
-format-4 runtime still never opens a format-3 repository directly.
+validated and published atomically without replacement. Tag records are
+rewritten through the complete SealID map and stored in their scoped REF
+manifests. The format-4 runtime still never opens a format-3 repository
+directly.
 
 ## 3. Native object identity and Git ODB compatibility
 
@@ -174,17 +179,21 @@ persistence. Direct IDs commit transitively Merkle-DAG style; flattened
 ancestor lists are not stored. Cause cycles are corruption. Parent edges are
 not traversed as Cause edges.
 
-## 6. REF files and path grammar
+## 6. REF manifests and path grammar
 
-A logical current HEAD is stored at:
+A logical current HEAD and its complete scoped tag namespace are stored at:
 
 ```text
-.sealgraph/refs/seals/<REF>
+.sealgraph/refs/seals/<REF>/.ref
 ```
 
-The file contains exactly one full 64-character lower-case SealID plus LF. Its
-target must decode as a canonical Seal, but the Seal contains no owner name.
-Multiple REF files may point to the same Seal.
+The compact canonical JSON schema is `sealgraph/ref/v1`, with no trailing LF.
+Exact member order is `schema, head, tags`; each tag uses `name, target`.
+`head` and every tag target are full 64-character lower-case SealIDs that must
+decode as canonical Seals. Tags are sorted by raw TAGNAME using bytewise UTF-8
+order and names are unique. Unknown members, noncanonical bytes/order,
+malformed IDs, non-regular entries, and symbolic links fail closed. Multiple
+REF manifests may point to the same Seal.
 
 REF paths map byte-for-byte and component-for-component with no cleaning,
 escaping, Unicode normalization, or case folding. The constructed path follows
@@ -192,12 +201,13 @@ escaping, Unicode normalization, or case folding. The constructed path follows
 normalization, and additionally forbids `@` for selector syntax. One-level and
 hierarchical REFs are valid.
 
-File/directory prefix conflicts such as `design` and `design/api` are rejected
-in either creation order. Intermediate directories are implicit.
+`.ref` is a reserved terminal marker rather than a REF component. A REF and a
+slash-prefixed REF such as `design` and `design/api` can therefore coexist.
+The spelling implies no hierarchy, inheritance, or recursive operation.
 
-Updates use validated paths, expected-old value, per-REF lock,
-same-directory temporary file, durability steps, and atomic replacement. CAS,
-lock, prefix-conflict, or durability failures are reported without repair.
+HEAD and tag updates use validated paths, expected-old state, a shared per-REF
+lock, same-directory temporary file, durability steps, and atomic replacement.
+CAS, lock, corruption, or durability failures are reported without repair.
 
 ## 7. Selectors and unique prefixes
 
@@ -235,15 +245,24 @@ and `_` remain literal; every other byte becomes `%` plus two upper-case hex
 digits. Raw lower-case hex names of length 4 through 64 remain reserved for
 object prefixes.
 
-The old `refs/tags/<REF>/<ENCODED_TAGNAME>` layout is not accepted as the final
-format-4 rename-safe mapping. External stable namespace, manifest, or crash-safe
-multi-path transaction details must be approved before format-4 tag creation or
-`sealgraph mv` implementation. No namespace is inferred from a Seal.
+Raw TAGNAMEs and full targets are stored in the REF manifest. Percent encoding
+remains the injective interchange/display contract but is not a canonical path
+leaf. Creating a tag requires an observed unchanged REF HEAD, so a concurrent
+HEAD update cannot silently lose a binding. CLI creation requires a current or
+REF-scoped selector; unscoped `@SEAL_TOKEN` has no tag scope.
+
+`sealgraph mv OLD_REF NEW_REF` validates the source manifest, HEAD, and every
+tag target, rejects an existing destination or exact source/destination
+candidate, and commits with one same-filesystem atomic no-replace rename of the
+`.ref` file. HEAD and tags move together. The old name is not retained as an
+alias. Candidate state is never moved or rewritten. A post-commit directory
+sync error reports that the move may already be visible and requires explicit
+inspection before retry.
 
 ## 9. Candidate state
 
-Candidate files remain mutable JSON under `.sealgraph/index/<REF>` and use
-schema `sealgraph/candidate/v4`. The destination REF may remain in the body as
+Candidate files remain mutable JSON under `.sealgraph/index/<REF>/.candidate`
+and use schema `sealgraph/candidate/v4`. The destination REF may remain in the body as
 path-validation/orchestration state; it is never copied into a Seal.
 
 Required candidate members are:
@@ -312,7 +331,7 @@ recorded canonical Seal and verifies its parent before graph results are used.
 and never followed; failure to refresh is a warning, not canonical repair.
 
 An outer Git repository tracks canonical `.sealgraph/config`, `objects/**`,
-`refs/seals/**`, and the eventual accepted tag files as ordinary exact-byte
-files. It must not stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or
+and `refs/seals/**/.ref` manifests as ordinary exact-byte files. It must not
+stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or
 temporary paths. LFS, clean/smudge filters, working-tree encoding, and
 line-ending transformation over canonical paths are unsupported.

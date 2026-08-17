@@ -27,6 +27,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0010-stale-review-frontier.md`](adr/0010-stale-review-frontier.md)
 - [`adr/0011-ref-independent-seals-and-branching-revisions.md`](adr/0011-ref-independent-seals-and-branching-revisions.md)
 - [`adr/0012-format3-logical-dump-and-load-boundary.md`](adr/0012-format3-logical-dump-and-load-boundary.md)
+- [`adr/0013-ref-manifest-tags-and-atomic-move.md`](adr/0013-ref-manifest-tags-and-atomic-move.md)
 
 ## Agent-auditable design
 
@@ -48,6 +49,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/format3-logical-dump-acceptance-2026-08-17.md`](process/format3-logical-dump-acceptance-2026-08-17.md)
 - [`process/format4-native-core-acceptance-2026-08-17.md`](process/format4-native-core-acceptance-2026-08-17.md)
 - [`process/format4-revision-graph-acceptance-2026-08-17.md`](process/format4-revision-graph-acceptance-2026-08-17.md)
+- [`process/format4-tag-contract-acceptance-2026-08-17.md`](process/format4-tag-contract-acceptance-2026-08-17.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
 - [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)

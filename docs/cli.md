@@ -1,8 +1,7 @@
 # CLI contract
 
 Status: the checked-in runtime implements the format-4 native core, load, and
-active revision/Cause graph commands. The tag namespace alone remains blocked
-until its separately sequenced rename-safe contract is implemented.
+active revision/Cause graph commands, plus REF-manifest tags and atomic move.
 
 ## 1. Common selector grammar
 
@@ -164,6 +163,51 @@ expected-old REF CAS is publication. Candidate cleanup removes only the exact
 version sealed; a newer candidate is retained and reported. Dangling immutable
 objects after failed CAS are reported, not deleted.
 
+### `sealgraph tag`
+
+```sh
+sealgraph tag REF
+sealgraph tag REF TAGNAME
+sealgraph tag REF@SEAL_OR_TAG TAGNAME
+```
+
+The one-argument form lists the REF's tags in bytewise TAGNAME order as:
+
+```text
+TAG REF "TAGNAME" FULL_SEAL_ID
+```
+
+An empty namespace emits zero bytes and succeeds. Names use quoted escaped
+presentation; the manifest retains the exact raw UTF-8 TAGNAME.
+
+The two-argument forms create one immutable binding. Bare REF tags its current
+HEAD. A hexadecimal scoped token must select the current HEAD or one of its
+`parent_revision` ancestors; an existing tag may select its exact historical
+target. An unscoped `@SEAL_TOKEN` is rejected because it provides no REF UI
+scope. Repeating the same binding is idempotent. Retarget, delete, force, and
+automatic tag creation do not exist. Success is:
+
+```text
+TAGGED REF "TAGNAME" FULL_SEAL_ID
+```
+
+### `sealgraph mv`
+
+```sh
+sealgraph mv OLD_REF NEW_REF
+```
+
+Moves exactly one REF manifest, including its HEAD and complete tag namespace,
+to an absent destination with one atomic no-replace rename. Both names must be
+valid and different. Exact candidate state at either name blocks the command;
+the operator seals or discards it explicitly. `mv` never recursively moves a
+prefix REF, rewrites a candidate, creates an old-name alias, modifies a Seal or
+Link, or infers hierarchy from slash spelling. Success is:
+
+```text
+MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N
+```
+
 ## 3. Immutable inspection
 
 ```sh
@@ -313,8 +357,8 @@ The target `.sealgraph` must be absent. Load stages and validates a complete
 format-4 repository, rewrites all
 parent/Link/REF/tag targets through a complete old-to-new mapping, and uses one
 atomic no-replace directory publication. It never merges with or replaces an
-existing repository. Non-empty tags reject load until the format-4 tag
-namespace contract is implemented.
+existing repository. Non-empty tags are rewritten to full format-4 SealIDs and
+published inside their REF manifests; none are dropped or privately deferred.
 
 A platform without atomic no-replace directory publication rejects load before
 target publication; it does not weaken the boundary to check-then-rename.
@@ -322,7 +366,7 @@ target publication; it does not weaken the boundary to check-then-rename.
 Successful stdout is the canonical compact
 `sealgraph/logical-load-receipt/v1` document plus LF. It includes the exact
 source dump SHA-256, every old-to-new mapping, every many-to-one collapse,
-rewritten REF records, an empty tag list, and published format `4`. A prior
+rewritten REF and tag records, and published format `4`. A prior
 `.sealgraph-load-*` staging path is reported for explicit inspection and is
 never adopted or deleted automatically.
 

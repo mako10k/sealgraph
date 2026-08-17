@@ -68,6 +68,7 @@ milestone REVISION_DAG:
 
 milestone TAG_READY:
   title "Rename-safe format-4 tag namespace works"
+  state reached
 
 milestone FORMAT4_DOGFOOD:
   title "Tracked dogfood is explicitly converted to format 4"
@@ -152,6 +153,7 @@ task FORMAT4_REVISION_GRAPH FORMAT4_RUNTIME -> REVISION_DAG:
 task TAG_CONTRACT REVISION_DAG -> TAG_READY:
   title "Resolve rename-safe format-4 tag namespace and REF mv transaction (SG-BL-010)"
   duration 2p
+  status done
 
 task FORMAT4_DOGFOOD_LOAD TAG_READY -> FORMAT4_DOGFOOD:
   title "Convert tracked dogfood by explicit dump/load and exercise a sibling revision"

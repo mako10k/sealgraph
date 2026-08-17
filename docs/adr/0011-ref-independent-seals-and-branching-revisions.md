@@ -2,10 +2,13 @@
 
 Status: accepted on 2026-08-14.
 
-This ADR accepts the format-4 design contract. The checked-in Go runtime still
-implements native format 3 until the separately sequenced implementation and
-dump/load work is completed; acceptance does not authorize silent in-place
-migration or partial format-4 publication.
+ADR 0013 resolves the tag-creation, rename-safe storage, and `mv` decisions
+that this ADR deliberately left open.
+
+This ADR accepts the format-4 design contract. Its separately sequenced native,
+dump/load, revision-graph, and tag-manifest implementation slices are now
+complete; that completion still does not authorize silent in-place migration,
+tracked dogfood conversion, or partial publication.
 
 ## Context
 

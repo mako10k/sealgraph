@@ -1,5 +1,8 @@
 # ADR 0005: Native v1 canonical storage contract
 
+The direct `refs/seals/<REF>` file layout and its prefix-conflict behavior are
+superseded for format 4 by ADR 0013's terminal REF manifest.
+
 Status: accepted for native v1; superseded by ADR 0006 for experimental native
 v2. This ADR remains the historical record of the v1 decision.
 

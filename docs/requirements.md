@@ -2,7 +2,7 @@
 
 Status: normative format-4 contract accepted by ADR 0011. The checked-in Go
 runtime implements the canonical/candidate, selector, explicit load, active
-revision/Cause graph, history, and impact core; tags remain gated.
+revision/Cause graph, history, impact, REF manifest, scoped-tag, and move core.
 
 ## 1. Purpose
 
@@ -32,6 +32,13 @@ Each REF has at most one current HEAD seal.
 
 Multiple REFs MAY point to the same Seal. Moving or renaming a REF MUST NOT
 rewrite a Seal or Link.
+
+One canonical REF manifest stores that REF's current HEAD and complete
+immutable tag namespace. Path-form REFs, including a REF and another REF for
+which it is a slash-prefix, MAY coexist; spelling does not imply hierarchy or
+recursive behavior. `mv OLD_REF NEW_REF` moves exactly one manifest to an
+absent destination. It MUST NOT move candidate state, retain an old-name alias,
+or rewrite a Seal, Link, HEAD, or tag target.
 
 ### 2.2 Blob
 
@@ -101,8 +108,9 @@ SealID is persisted.
 
 A tag is an immutable external alias for one exact Seal. It is not part of
 Seal or Link bytes and MUST NOT become a dynamic link, movable branch, or
-approval claim. Rename-safe tag namespace storage remains a separately gated
-format-4 detail.
+approval claim. Tags are stored in the scoped REF manifest and move atomically
+with that REF. Recreating the same binding is idempotent; retarget, delete,
+force, and unscoped tag creation are absent.
 
 ### 2.5 Root
 
@@ -419,5 +427,5 @@ plausible stdout. Candidate state is neither omitted nor translated.
 The format-4 load MUST use only an absent `.sealgraph` target, complete
 staging validation, atomic no-replace publication, and an explicit complete
 old-to-new SealID receipt. It MUST NOT merge, replace, repair, or silently drop
-tags. A non-empty tag set remains unloadable until the rename-safe format-4 tag
-namespace is approved and implemented.
+tags. Every logical tag record is rewritten through the same complete SealID
+mapping and published inside its REF manifest.
