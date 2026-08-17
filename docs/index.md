@@ -32,6 +32,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0015-operator-inspection-contract.md`](adr/0015-operator-inspection-contract.md)
 - [`adr/0016-standalone-beta-integrity-and-release.md`](adr/0016-standalone-beta-integrity-and-release.md)
 - [`adr/0017-generic-link-metadata-and-query-boundary.md`](adr/0017-generic-link-metadata-and-query-boundary.md)
+- [`adr/0018-local-ref-recovery-journal.md`](adr/0018-local-ref-recovery-journal.md)
 
 ## Agent-auditable design
 
@@ -40,6 +41,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`decisions/2026-08-14-seal-revision-dag.think`](decisions/2026-08-14-seal-revision-dag.think)
 - [`decisions/2026-08-17-format3-logical-dump.think`](decisions/2026-08-17-format3-logical-dump.think)
 - [`decisions/2026-08-17-link-metadata-sealgraphql.think`](decisions/2026-08-17-link-metadata-sealgraphql.think)
+- [`decisions/2026-08-17-local-ref-recovery.think`](decisions/2026-08-17-local-ref-recovery.think)
 
 ## Proposals
 
@@ -61,6 +63,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/format4-tag-contract-acceptance-2026-08-17.md`](process/format4-tag-contract-acceptance-2026-08-17.md)
 - [`process/content-ingest-acceptance-2026-08-17.md`](process/content-ingest-acceptance-2026-08-17.md)
 - [`process/operator-contract-acceptance-2026-08-17.md`](process/operator-contract-acceptance-2026-08-17.md)
+- [`process/local-ref-recovery-contract-acceptance-2026-08-17.md`](process/local-ref-recovery-contract-acceptance-2026-08-17.md)
 - [`process/standalone-beta-acceptance-2026-08-17.md`](process/standalone-beta-acceptance-2026-08-17.md)
 - [`process/release-v0.1.0-beta.2-receipt.md`](process/release-v0.1.0-beta.2-receipt.md)
 - [`process/dogfooding-receipts/2026-08-17-format4-load.md`](process/dogfooding-receipts/2026-08-17-format4-load.md)

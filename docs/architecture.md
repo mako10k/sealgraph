@@ -163,11 +163,24 @@ Coordinates:
 - scoped immutable tag creation and single-manifest REF move;
 - coherent multi-REF observations;
 - disposable revision/Cause cache orchestration;
+- local non-canonical recovery-journal orchestration and operation-specific
+  exact-state restoration;
 - read-only format-3 logical dump capture, graph closure, and final complete
   observation revalidation during the explicit migration slice.
 
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.
+
+### `internal/recovery` (accepted, not yet implemented)
+
+- strict versioned PREPARED/COMMITTED operation records;
+- exact present/absent REF-manifest before/after transitions;
+- safe local journal inventory and crash-state classification;
+- no canonical repository, provenance, graph, or intent semantics.
+
+The repository package owns eligibility and mutation sequencing. The recovery
+package does not write canonical REFs directly or select an operation for the
+operator.
 
 ### `internal/cli`
 

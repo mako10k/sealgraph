@@ -1,10 +1,10 @@
 project SEALGRAPH:
   version 5
   title "Sealgraph initial implementation"
-  as_of 2026-08-14
+  as_of 2026-08-17
   duration_unit point
   velocity 1p/1d
-  finish READY
+  finish RECOVERY_READY
 
 milestone START:
   title "Architecture scaffold exists"
@@ -82,6 +82,18 @@ milestone DOGFOOD_R2:
 
 milestone READY:
   title "Standalone beta is ready for separately approved publication"
+
+milestone RECOVERY_DESIGN:
+  title "Local REF recovery contract accepted"
+
+milestone RECOVERY_JOURNAL:
+  title "Recovery journal and exact manifest primitives work"
+
+milestone RECOVERY_RUNTIME:
+  title "Seal tag and move recovery work"
+
+milestone RECOVERY_READY:
+  title "Issue 12 local recovery acceptance passes"
 
 task FORMAT_SPEC START -> FORMAT:
   title "Lock canonical payload, REF grammar, and object IDs"
@@ -181,7 +193,37 @@ task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
 task RELEASE_GATE DOGFOOD_R2 -> READY:
   title "Close standalone-only v0.1.0-beta.1 with fsck and release checks"
   duration 3p
-  status active
+  status done
+
+task RECOVERY_CONTRACT READY -> RECOVERY_DESIGN:
+  title "Accept ADR 0018 and freeze the recovery acceptance matrix"
+  duration 2p
+  status done
+  source "Issue 12 and ADR 0018"
+
+task RECOVERY_CORE RECOVERY_DESIGN -> RECOVERY_JOURNAL:
+  title "Implement exact manifest CAS and crash-safe local recovery journal"
+  duration 5p
+  status planned
+  source "ADR 0018 manifest transitions and publication"
+
+task RECOVERY_SEAL_TAG RECOVERY_JOURNAL -> RECOVERY_RUNTIME:
+  title "Integrate and recover single-manifest seal and tag operations"
+  duration 4p
+  status planned
+  source "Issue 12 seal tag and intervening mutation acceptance"
+
+task RECOVERY_MOVE RECOVERY_JOURNAL -> RECOVERY_RUNTIME:
+  title "Integrate and recover atomic REF move operations"
+  duration 3p
+  status planned
+  source "ADR 0018 atomicity limit"
+
+task RECOVERY_ACCEPTANCE RECOVERY_RUNTIME -> RECOVERY_READY:
+  title "Add recovery CLI JSON fault tests and complete Issue 12 acceptance"
+  duration 3p
+  status planned
+  source "ADR 0018 acceptance gate"
 
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
   model 1
@@ -202,3 +244,15 @@ work_event WE-08390f259a6d1ba089e15b252f6113362a83caaefb6afd04cca3f90c2c56f119:
   kind start
   occurred_at 2026-08-17T13:32:13+09:00
   planned_value 3p
+
+work_event WE-044be35c7314a297333060f38b3aeab4fa9bd595f784a02eac7646d25e6c0796:
+  model 1
+  task RELEASE_GATE
+  kind finish
+  occurred_at 2026-08-17T15:23:49+09:00
+
+work_event WE-41ce5b74eaec85767ac1742a2958169a07b5a48202e41ebb1adf486e2f9dbebf:
+  model 1
+  task RECOVERY_CONTRACT
+  kind finish
+  occurred_at 2026-08-17T17:20:14+09:00

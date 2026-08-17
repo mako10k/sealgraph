@@ -515,3 +515,24 @@ it does not compare working files. A REF is a movable logical identity, impact
 is structural rather than stale-only, root is a provenance boundary rather
 than trust, and Seal/link history is not Git commit/reflog history. Standalone
 commands do not discover or inspect Git.
+
+## 10. Accepted recovery surface (not yet implemented)
+
+The initial explicit local-recovery surface is:
+
+```sh
+sealgraph recover show
+sealgraph recover show OPERATION_ID
+sealgraph recover OPERATION_ID
+```
+
+Inspection distinguishes prepared-not-applied, recoverable, intervened,
+already-recovered, and corrupt local-record state. Recovery requires one exact
+full operation ID and verifies every complete logged post-operation manifest
+before mutation. Human and `sealgraph/recover/v1` JSON output are buffered and
+never report partial success.
+
+There is no `recover last`, `recover REF`, ID-prefix selection, reset, reflog,
+checkout, undo/redo, object deletion, or implicit corrective Seal. `link` and
+`unlink` are candidate edits; recovery applies only if their candidate was
+published by a subsequently selected `seal` operation.

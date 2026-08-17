@@ -1,0 +1,176 @@
+framework LocalREFRecovery:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain SealGraph:
+  description "format-4 local operational recovery without provenance rewriting"
+
+problem P1:
+  "semantic correctionとlocal operational recoveryを同じ操作として扱えるか"
+
+step S1:
+  premise PR1:
+    |
+      meaningfulだったSealの訂正はimmutableな新Sealで表す必要があり、操作自体がlocal mistakeだった場合だけ
+      mutable REF stateを戻しても既存Sealの意味は変わらない
+
+step S2:
+  evidence EV1:
+    |
+      format 4はSeal identityからREF ownershipを除き、active revision graphをcurrent REF headsとparent ancestryから導出する。
+      REFから外れたSealはhistoricalまたはdetachedとしてvalidなまま残る
+
+step S3:
+  decision D1 based_on P1, PR1, EV1:
+    |
+      recoveryをlocal operational mistakeに対するREF manifest restorationへ限定する。semantic correctionは新Sealとし、
+      recoveryはSeal、Cause Link、parent_revisionを変更せずcorrective Sealを暗黙生成しない
+
+problem P2:
+  "recoveryはHEADだけを記録すれば十分か"
+
+step S4:
+  premise PR2:
+    |
+      format 4の一つのREF manifestはHEADとcomplete scoped immutable tag namespaceを同じcanonical fileに保持する
+
+step S5:
+  evidence EV2:
+    |
+      sealはHEAD、tagはtag集合、mvはmanifest locationを変更し、HEADだけの復元はtag lossまたはretarget相当の
+      unintended stateを作り得る
+
+step S6:
+  decision D2 based_on P2, PR2, EV2:
+    |
+      recovery transitionはREFごとのpresentまたはabsent状態とexact canonical manifest bytesのbefore/afterを記録し、
+      recovery前にcomplete after stateのCAS一致とbefore stateの全Seal target integrityを検証する
+
+problem P3:
+  "候補編集とREF publicationのどちらをrecovery journalへ記録するか"
+
+step S7:
+  premise PR3:
+    |
+      add、derive、link、unlinkはmutable candidateだけを編集し、candidate discardが既に明示的に存在する。
+      canonical REF mutationはseal、tag、mvのpublication pointでのみ起きる
+
+step S8:
+  evidence EV3:
+    |
+      Issueの事故例にあるwrong linkは、candidate段階ではdiscardまたは再編集でき、immutable SealとREF HEADへ影響するのは
+      sealが成功した時だけである
+
+step S9:
+  decision D3 based_on P3, PR3, EV3:
+    |
+      recovery v1はsuccessful seal、tag、mvだけを記録する。link/unlinkを含む誤操作はそのcandidateを公開したseal operationの
+      recoveryとして扱い、candidate、candidate discard、failed mutationはREF recovery対象にしない
+
+problem P4:
+  "任意個のREF manifest replacementをformat 4のままatomic recoveryできるか"
+
+step S10:
+  premise PR4:
+    |
+      filesystem atomic renameは一つのpath transitionをcommitできるが、独立した複数manifest replacementには
+      all-or-nothing commit pointがない
+
+step S11:
+  evidence EV4:
+    |
+      current seal/tagは一つのmanifest atomic replace、mvは一つのsame-filesystem no-replace renameであり、
+      format 4 canonical layoutにはtransaction rootまたはgeneration pointerがない
+
+step S12:
+  decision D4 based_on P4, PR4, EV4:
+    |
+      journal modelはgrouped transitionsを表現できるが、recovery v1 executorはcurrent atomic shapes、すなわち
+      single-manifest restorationとmvのinverse no-replace renameだけを許可する。arbitrary multi-file recoveryは
+      canonical transaction modelとformat decisionを要する別gateとする
+
+problem P5:
+  "canonical mutationとjournal commitの間のcrash ambiguityをどう閉じるか"
+
+step S13:
+  premise PR5:
+    |
+      journalをmutation後だけに書くとmutation直後のcrashでrecovery evidenceを失い、mutation前だけに書くと
+      未実行operationをcommittedと誤認し得る
+
+step S14:
+  evidence EV5:
+    |
+      repository-wide writer guardはcooperative mutationsを直列化し、REF manifestのbefore/after exact bytesは
+      mutationが実行されたかを判定できる
+
+step S15:
+  decision D5 based_on P5, PR5, EV5:
+    |
+      durable PREPARED recordをcanonical mutation前に書き、成功後にCOMMITTEDへatomic replaceする。read時は
+      current==beforeをnot-applied、current==afterをrecoverable、それ以外をintervening mutationとして分類し、
+      ambiguous durability errorはinspectionを要求してblind retryしない
+
+problem P6:
+  "recovery metadataのlossまたはcorruptionはcanonical validityへ影響するか"
+
+step S16:
+  premise PR6:
+    |
+      recovery capabilityはlocal convenienceであり、Seal identity、REF manifest identity、stale、impact、fsck truthの
+      入力にするとoptional runtime stateがprovenance semanticsへ昇格する
+
+step S17:
+  evidence EV6:
+    |
+      storage-formatはlogsをouter Gitから除外するnoncanonical runtime pathとし、cache lossもcanonical scan resultを
+      変えない契約を持つ
+
+step S18:
+  decision D6 based_on P6, PR6, EV6:
+    |
+      versioned recovery recordsを.sealgraph/logs/recovery配下のnoncanonical local metadataとする。missing、expired、
+      removed、corrupt logはrecovery commandだけを失敗させ、repository open、normal commands、canonical fsckを
+      失敗させずSeal/provenance meaningを変えない
+
+problem P7:
+  "operation recordへcommand line、timestamp、actorを保存するべきか"
+
+step S19:
+  premise PR7:
+    |
+      argvやenvironmentはsecretまたはprivate pathを含み得て、trusted timeやactor authorityもcoreには存在しない
+
+step S20:
+  evidence EV7:
+    |
+      current safe-output contractはarbitrary bytesをbounded escapingし、Seal identityからactor、time、operation rationaleを
+      排除している
+
+step S21:
+  decision D7 based_on P7, PR7, EV7:
+    |
+      recordはrandom operation ID、fixed operation kind、state、REF transitionsだけを必須とし、raw argv、content、cwd、
+      environment、actorを保存しない。timestampを採用する場合も表示補助に限定し、identity、ordering、eligibilityへ使わず
+      clockをtest injectionする
+
+problem P8:
+  "user-facing surfaceをGit reflog/resetと同じ抽象にするべきか"
+
+step S22:
+  premise PR8:
+    |
+      implicit last/ref selectionやredo stackはoperator intentをguessし、general-purpose history manipulationへ拡張しやすい
+
+step S23:
+  evidence EV8:
+    |
+      SealGraph coreはcheckout、branch、reset、rebaseを持たず、mutation errorはexplicit next actionを要求して
+      selectorやrepairを自動選択しない
+
+step S24:
+  decision D8 based_on P8, PR8, EV8:
+    |
+      recovery v1 CLIはrecover show、recover show OPERATION_ID、recover OPERATION_IDのexplicit ID surfaceに限定し、
+      reset、reflog、checkout、undo/redo、automatic last selectionを導入しない。recover lastとrecover REFは別decisionとする

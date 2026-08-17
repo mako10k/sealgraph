@@ -335,3 +335,23 @@ and `refs/seals/**/.ref` manifests as ordinary exact-byte files. It must not
 stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or
 temporary paths. LFS, clean/smudge filters, working-tree encoding, and
 line-ending transformation over canonical paths are unsupported.
+
+## 12. Non-canonical local recovery journal
+
+The accepted recovery boundary reserves `.sealgraph/logs/recovery/` for
+versioned local operation records. This directory is not canonical repository
+state and is excluded from outer Git, logical dump/load, Seal identity, REF
+identity, graph derivation, and canonical `fsck` validity.
+
+One record stores a fixed operation kind plus bytewise-REF-sorted transitions.
+Each transition stores one exact logical REF and `before`/`after` states, where
+each state is either absent or the exact canonical `sealgraph/ref/v1` bytes.
+Readers reject duplicate REFs, equal before/after states, malformed present
+manifests, and unknown schema members.
+
+A durable `PREPARED` record precedes canonical mutation and an atomic record
+replacement marks `COMMITTED` afterward. Exact current state equal to before,
+after, or neither classifies not-applied/already-restored, recoverable, or
+intervened state. Journal status alone is never sufficient to mutate a REF.
+The runtime schema bytes and fixed limits are frozen with the implementation
+slice before any journal writer is enabled.

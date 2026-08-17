@@ -447,3 +447,26 @@ metadata. It emits a versioned deterministic path/size/SHA-256 claim, not an
 attachment or proof that the named files were imported. Input order MUST NOT
 affect bytes; file bytes, semantic paths, and source identity MUST affect the
 resulting manifest blob identity.
+
+## 15. Local operational recovery
+
+Sealgraph MUST distinguish semantic correction from local operational
+recovery. A semantic correction creates a new immutable Seal. Recovery MAY
+restore the exact prior mutable REF-manifest state of an explicitly selected
+locally recorded operation, but MUST NOT modify or reinterpret any Seal, Link,
+`parent_revision`, content, attachment, or Seal ID, and MUST NOT create a
+corrective Seal implicitly.
+
+Recovery records are versioned non-canonical local metadata. Their absence,
+expiration, removal, or corruption MUST NOT change repository validity,
+canonical `fsck`, Seal identity, provenance semantics, or derived active,
+stale, frontier, or impact results. Records MUST NOT retain raw argv, content,
+cwd, environment values, credentials, or an actor/trusted-time assertion.
+
+Recovery eligibility requires exact current state to equal the complete logged
+post-operation REF-manifest state. Any intervening mutation rejects automatic
+recovery without partial writes. V1 covers successful `seal`, `tag`, and `mv`
+REF mutations using only an existing atomic shape: one-manifest restoration or
+inverse no-replace rename for one move. Candidate edits, arbitrary multi-file
+rollback, implicit most-recent selection, reset/reflog/undo semantics, object
+deletion, and garbage collection remain absent.
