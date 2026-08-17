@@ -1,9 +1,10 @@
 # Initial implementation plan
 
-Status: phases through the format-4 native core, active revision/Cause graph,
-tag/REF-move contract, explicit tracked dogfood conversion, and content-ingest
-contract are completed. `PLAN.pert` is the current perttool projection; the
-next frontier is the operator contract, not Git or release.
+Status: historical execution plan through the standalone beta. The checked-in
+runtime now uses format 4 and has completed the format-4 native, migration,
+operator-contract, full-inventory `fsck`, and recurring-dogfood slices.
+`PLAN.pert` is the current perttool projection. Attachment mutation and the
+separately gated Git sidecar remain future work.
 
 ## Current format-4 frontier
 

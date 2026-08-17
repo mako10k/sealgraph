@@ -145,7 +145,7 @@ candidate. It resolves an exact revision parent, inherits no material, records
 `expected_ref_head = null`, and fails publication if the destination appears.
 An existing REF update records observed current HEAD as both
 `parent_revision` and `expected_ref_head`; alternate-parent override is rejected
-in the first format-4 slice.
+by the current format-4 CLI.
 
 ### `sealgraph derive`
 
@@ -193,10 +193,13 @@ stored target after the REF advances. Candidate inspection prints the exact
 selector required. Missing or ambiguous target edges are errors. Unlink never
 changes content, attachments, root/draft, another Link, REF HEAD, or a Seal.
 
-### `sealgraph attach` / `sealgraph detach`
+### Planned `sealgraph attach` / `sealgraph detach`
 
-Changes named immutable attachment material in one candidate. Attachment names
-are unique. Attachments and Cause Links remain semantically distinct.
+These mutation commands are not exposed by the current standalone beta. Their
+planned contract changes named immutable attachment material in one candidate;
+attachment names are unique, and attachments remain semantically distinct from
+Cause Links. Attachment-bearing repositories are still readable, inspectable,
+and loadable.
 
 ### `sealgraph candidate`
 

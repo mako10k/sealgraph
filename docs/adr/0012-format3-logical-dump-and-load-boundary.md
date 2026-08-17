@@ -2,6 +2,11 @@
 
 Status: accepted on 2026-08-17.
 
+Implementation status: complete. Commit `5b24d47` is the final format-3 dump
+binary; the checked-in format-4 runtime implements the separately gated load,
+including tag-preserving REF manifests. “Future” and “later” below describe the
+sequencing at decision time, not missing work in the current runtime.
+
 ## Context
 
 ADR 0011 removes owner REF names and Link `target_ref` from format-4 Seal

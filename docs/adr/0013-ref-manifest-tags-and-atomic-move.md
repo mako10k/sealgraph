@@ -2,6 +2,10 @@
 
 Status: accepted on 2026-08-17.
 
+Implementation status: complete. The checked-in runtime and tracked
+`.sealgraph/` use the accepted format-4 REF manifest; the pre-load wording in
+the context below records the decision-time migration state.
+
 ## Context
 
 ADR 0005 maps one logical REF directly to

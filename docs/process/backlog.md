@@ -36,7 +36,7 @@ and any future tracker migration.
 
 ## SG-BL-001 — Exact content input from a file or stdin
 
-- Status: completed locally on 2026-08-17; external Issue state unchanged
+- Status: complete; GitHub Issue #1 closed on 2026-08-17
 - Priority: P1
 - PERT: `CONTENT_INGEST`
 - Implementation: `--content-file PATH|-`, exact-byte ingestion, mutual
@@ -73,7 +73,7 @@ documents or arbitrary blob bytes.
 
 ## SG-BL-002 — Deterministic multi-file manifest builder
 
-- Status: completed locally on 2026-08-17; external Issue state unchanged
+- Status: complete; GitHub Issue #2 closed on 2026-08-17
 - Priority: P1
 - PERT: `CONTENT_INGEST`
 - Depends on: SG-BL-001 for direct file-to-candidate flow
@@ -191,7 +191,7 @@ content unchanged while changing a concrete link.
 
 ## SG-BL-005 — Clarify `CLEAN`, REF, impact, root, and Git boundaries
 
-- Status: complete (ADR 0015 and implementation, 2026-08-17)
+- Status: complete; GitHub Issue #5 closed on 2026-08-17
 - Priority: P1
 - PERT: `OPERATOR_CONTRACT`
 
@@ -230,7 +230,7 @@ Several familiar Git terms invite a materially wrong interpretation:
 
 ## SG-BL-006 — Versioned machine-readable inspection output
 
-- Status: complete (ADR 0015 and implementation, 2026-08-17)
+- Status: complete; GitHub Issue #6 closed on 2026-08-17
 - Priority: P1
 - PERT: `OPERATOR_CONTRACT`
 - Depends on: SG-BL-003 and SG-BL-004 for final history/diff shapes
@@ -263,7 +263,7 @@ to whitespace and presentation changes.
 
 ## SG-BL-007 — Report runtime bootstrap distinctly from idempotent init
 
-- Status: complete (ADR 0015 and implementation, 2026-08-17)
+- Status: complete; GitHub Issue #7 closed on 2026-08-17
 - Priority: P2, small
 - PERT: `OPERATOR_CONTRACT`
 
@@ -284,7 +284,7 @@ was safe and correct, but the message concealed a real local mutation.
 
 ## SG-BL-008 — Recurring dogfood workflow and self-reference runbook
 
-- Status: complete (R2 recurring receipt, 2026-08-17)
+- Status: complete; GitHub Issue #8 closed on 2026-08-17
 - Priority: P2
 - PERT: `DOGFOOD_RECURRING`
 - Depends on: SG-BL-001 through SG-BL-007
@@ -316,7 +316,7 @@ sealing itself would be a self-referential and misleading claim.
 
 ## SG-BL-009 — Full `fsck` and checkout-mode integrity explanation
 
-- Status: complete locally for standalone beta (2026-08-17); external Issue state unchanged
+- Status: complete for standalone beta; GitHub Issue #9 closed on 2026-08-17
 - Priority: P3, required by `RELEASE_GATE`
 - PERT: `RELEASE_GATE`
 
@@ -325,8 +325,8 @@ sealing itself would be a self-referential and misleading claim.
 R0 tested one known corrupted object through `show`, while R1 validated only
 objects reachable from the five current heads. Outer Git stores only an
 executable bit, so checkout did not preserve the original `0444` loose-object
-mode. Hash validation still enforced semantic immutability, but there is no
-complete repository inventory yet.
+mode. Hash validation still enforced semantic immutability; the completed
+`fsck` slice now provides the previously missing complete inventory.
 
 ### Required design
 
@@ -350,7 +350,7 @@ complete repository inventory yet.
 
 ## SG-BL-010 — Resolve REF-scoped tag loose-path namespace collisions
 
-- Status: done by ADR 0013 and `TAG_CONTRACT`
+- Status: complete; GitHub Issue #10 closed on 2026-08-17
 - Priority: P2, resolve before tags become routine
 - PERT: `TAG_CONTRACT`
 
@@ -384,7 +384,7 @@ candidate move.
 
 ## SG-BL-011 — Make distinct dependency messages atomic and ergonomic
 
-- Status: complete (repeated-command contract retained by ADR 0015, 2026-08-17)
+- Status: complete; GitHub Issue #11 closed on 2026-08-17
 - Priority: P2
 - PERT: `OPERATOR_CONTRACT`
 
@@ -406,7 +406,7 @@ and not atomic as a two-edge candidate edit.
 - Continue to distinguish Link-message changes from target repoints. Format 4
   has no whole-Seal event message.
 
-## Proposed execution order
+## Completed execution order
 
 Before Git sidecar:
 
@@ -421,12 +421,13 @@ Before Git sidecar:
    format-3 tags.
 5. `CONTENT_INGEST` is complete: SG-BL-001 and SG-BL-002 provide exact
    file/stdin ingestion and deterministic explicit-path manifests.
-6. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
+6. `HISTORY_INSPECTION` is complete: SG-BL-003 and SG-BL-004 were revalidated against
    `parent_revision` and exact target SealIDs.
-7. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the
-   final history and diff data shapes.
-8. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
+7. `OPERATOR_CONTRACT` is complete: SG-BL-005 through SG-BL-007 and SG-BL-011
+   use the final history and diff data shapes.
+8. `DOGFOOD_RECURRING` is complete: SG-BL-008 validated the combined operator
+   workflow.
 
-SG-BL-009 remains in the standalone beta release gate. Git sidecar adoption is
-outside this plan and requires a separate product decision; it is not a beta
-prerequisite.
+SG-BL-001 through SG-BL-011 are complete and reconciled with their GitHub
+Issues. Git sidecar adoption is outside this plan and requires a separate
+product decision; it is not a beta prerequisite.

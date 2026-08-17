@@ -1,8 +1,11 @@
 # Standalone beta release checklist
 
-Status: preparing `v0.1.0-beta.1`; release-blocked until the exact-SHA and
-publication gates pass. Git sidecar is not a beta dependency. Completing this
-document does not authorize a tag, push, GitHub Release, or package publication.
+Status: archived `v0.1.0-beta.1` preparation checklist. It is retained as the
+gate template and must not be read as current release state. Both beta.1 and
+beta.2 have been published; the current independently read-back evidence is in
+[`release-v0.1.0-beta.2-receipt.md`](release-v0.1.0-beta.2-receipt.md). Git
+sidecar remains outside the beta product. Reusing this checklist for another
+release requires a new version-specific freeze and explicit publication gate.
 
 ## 1. Release identity and scope
 
@@ -47,7 +50,7 @@ document does not authorize a tag, push, GitHub Release, or package publication.
 - [x] Run the controlled recurring manifest/one-REF Seal/history/diff workflow
       from a fresh checkout without claiming self-sealing.
 - [x] Run beta `fsck` from a fresh canonical checkout and record full inventory.
-- [ ] Reconcile implemented backlog Issues with executable acceptance evidence;
+- [x] Reconcile implemented backlog Issues with executable acceptance evidence;
       do not close partially implemented Issues merely to make the release look
       complete.
 
