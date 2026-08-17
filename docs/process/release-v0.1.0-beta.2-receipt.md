@@ -1,7 +1,6 @@
 # v0.1.0-beta.2 release receipt
 
-Status: source and artifacts validated; publication evidence is appended only
-after independently reading back the one-time external writes.
+Status: released and independently read back on 2026-08-17.
 
 ## Frozen publication record
 
@@ -49,4 +48,30 @@ metadata commit and must remain byte-identical before tagging.
 
 ## Publication readback
 
-Pending one-time tag and GitHub prerelease creation.
+The immutable lightweight tag and GitHub prerelease were each created once.
+No retry, force move, replacement, or duplicate release write was used.
+
+```text
+release metadata/tag commit: dfb62b9d720cc17a62af1890805e524aad3f5990
+remote main: dfb62b9d720cc17a62af1890805e524aad3f5990
+remote tag v0.1.0-beta.2: dfb62b9d720cc17a62af1890805e524aad3f5990
+prerelease: true
+published_at: 2026-08-17T06:23:49Z
+archive size: 1377299
+checksums size: 108
+```
+
+Release URL:
+
+https://github.com/mako10k/sealgraph/releases/tag/v0.1.0-beta.2
+
+The GitHub asset API reported the same archive and checksum digests as the
+frozen record. Both assets were downloaded into a fresh temporary directory,
+hashed independently, and the downloaded archive passed
+`scripts/artifact-smoke.sh` for version `0.1.0-beta.2`. The smoke covers
+version output, standalone initialization, root/dependent publication, stale
+frontier, and corruption refusal.
+
+The remote tag SHA was read directly after publication. The tag remains fixed
+at the release metadata commit; this later receipt-only commit does not move
+the tag or alter the released archive.
