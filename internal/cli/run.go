@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -45,8 +46,18 @@ func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
 }
 
 func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 || isHelp(args[0]) {
-		printStandaloneHelp(stdout)
+	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
+		printRootHelp(stdout)
+		return 0
+	}
+	if args[0] == "help" {
+		if printHelpTopic(stdout, args[1:]) {
+			return 0
+		}
+		return unknownHelpTopic(stderr, args[1:])
+	}
+	if topic, ok := commandLocalHelpTopic(args); ok {
+		printHelpTopic(stdout, topic)
 		return 0
 	}
 	if args[0] == "--version" || args[0] == "version" {
@@ -109,19 +120,19 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 	case "load":
 		return runLoad(ctx, workDir, args[1:], stdin, stdout, stderr)
 	default:
-		return usageError(stderr, "unknown command %q", args[0])
+		return unknownCommandError(stderr, args[0])
 	}
 }
 
 func runManifest(workDir string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("manifest", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var source singleString
 	var files stringList
 	flags.Var(&source, "source", "required explicit source identity")
 	flags.Var(&files, "file", "explicit relative semantic/read path (repeatable)")
 	if err := flags.Parse(args); err != nil {
-		return 2
+		return flagUsageError(stderr, "manifest", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "manifest accepts no positional arguments; unexpected argument %q", flags.Arg(0))
@@ -163,11 +174,11 @@ func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
 
 func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("load", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var format singleString
 	flags.Var(&format, "format", "required versioned dump format")
 	if err := flags.Parse(args); err != nil {
-		return 2
+		return flagUsageError(stderr, "load", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "load accepts no positional arguments; unexpected argument %q", flags.Arg(0))
@@ -198,7 +209,7 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	}
 	ref := args[0]
 	flags := flag.NewFlagSet("add", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var content trackedString
 	var contentFile trackedString
 	var depends stringList
@@ -210,7 +221,7 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	root := flags.Bool("root", false, "declare a provenance root")
 	draft := flags.Bool("draft", false, "mark the candidate draft")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "add", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "add accepts exactly one REF; unexpected argument %q", flags.Arg(0))
@@ -256,11 +267,11 @@ func runDerive(ctx context.Context, workDir string, args []string, stdout, stder
 	}
 	ref := args[0]
 	flags := flag.NewFlagSet("derive", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var source singleString
 	flags.Var(&source, "from", "required source Seal selector")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "derive", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "derive accepts exactly one destination REF; unexpected argument %q", flags.Arg(0))
@@ -318,13 +329,13 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	}
 	ref := args[0]
 	flags := flag.NewFlagSet("link", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var depends stringList
 	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
 	var message trackedString
 	flags.Var(&message, "m", "optional rationale for each dependency in this invocation")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "link", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "link accepts exactly one REF; unexpected argument %q", flags.Arg(0))
@@ -354,11 +365,11 @@ func runUnlink(ctx context.Context, workDir string, args []string, stdout, stder
 	}
 	ref := args[0]
 	flags := flag.NewFlagSet("unlink", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var upstream singleString
 	flags.Var(&upstream, "upstream", "upstream REF or guarded REF@SEAL_OR_TAG")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "unlink", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "unlink accepts exactly one candidate REF; unexpected argument %q", flags.Arg(0))
@@ -485,16 +496,16 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	}
 	selector := args[0]
 	flags := flag.NewFlagSet("show", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	rawContent := flags.Bool("raw-content", false, "write exact content bytes only")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "show", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "show accepts exactly one REF or REF@SEAL; unexpected argument %q", flags.Arg(0))
 	}
 	if _, err := repository.ParseSelector(selector); err != nil {
-		return usageError(stderr, "invalid selector: %v", err)
+		return usageDiagnostic(stderr, "show", fmt.Sprintf("invalid selector: %v", err), "use REF, @SEAL_TOKEN, or REF@TOKEN; inspect the exact grammar with `sealgraph help selectors`")
 	}
 	if outputJSON && *rawContent {
 		return usageError(stderr, "show --format json and --raw-content are mutually exclusive")
@@ -561,10 +572,10 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 		return usageError(stderr, "invalid candidate REF: %v", err)
 	}
 	flags := flag.NewFlagSet("candidate show", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	rawContent := flags.Bool("raw-content", false, "write exact candidate content bytes only")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "candidate show", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "candidate show accepts exactly one REF; unexpected argument %q", flags.Arg(0))
@@ -697,11 +708,11 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 		return usageError(stderr, "invalid linklog REF: %v", err)
 	}
 	flags := flag.NewFlagSet("linklog", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var upstream singleString
 	flags.Var(&upstream, "upstream", "show changes involving one exact upstream Seal selector")
 	if err := flags.Parse(args[1:]); err != nil {
-		return 2
+		return flagUsageError(stderr, "linklog", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "linklog accepts exactly one REF; unexpected argument %q", flags.Arg(0))
@@ -969,7 +980,7 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 		return usageError(stderr, "%v", formatErr)
 	}
 	flags := flag.NewFlagSet("stale", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var frontier singleBool
 	var refsOnly singleBool
 	var scan singleBool
@@ -977,7 +988,7 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 	flags.Var(&refsOnly, "refs-only", "emit one logical REF per line")
 	flags.Var(&scan, "scan", "bypass cache and rebuild the canonical revision index")
 	if err := flags.Parse(args); err != nil {
-		return 2
+		return flagUsageError(stderr, "stale", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "stale accepts no positional arguments; unexpected argument %q", flags.Arg(0))
@@ -1015,13 +1026,13 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 		return usageError(stderr, "%v", formatErr)
 	}
 	flags := flag.NewFlagSet("impact", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	var allPaths singleBool
 	var maxPaths singleString
 	flags.Var(&allPaths, "all-paths", "show bounded distinct simple Cause paths")
 	flags.Var(&maxPaths, "max-paths", "positive path limit per downstream Seal; valid only with --all-paths")
 	if err := flags.Parse(args); err != nil {
-		return 2
+		return flagUsageError(stderr, "impact", err)
 	}
 	if flags.NArg() != 1 {
 		return usageError(stderr, "impact requires exactly one Seal selector")
@@ -1032,7 +1043,11 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	}
 	limit, err := parseImpactLimit(allPaths.value, maxPaths)
 	if err != nil {
-		return usageError(stderr, "%v", err)
+		hint := "add --all-paths before --max-paths, or omit --max-paths"
+		if maxPaths.set && selector != "" {
+			hint = fmt.Sprintf("use `sealgraph impact --all-paths --max-paths %s %s`", maxPaths.value, selector)
+		}
+		return usageDiagnostic(stderr, "impact", err.Error(), hint)
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
@@ -1220,64 +1235,152 @@ func (v *stringList) String() string         { return strings.Join(*v, ",") }
 func (v *stringList) Set(value string) error { *v = append(*v, value); return nil }
 
 func commandError(stderr io.Writer, command string, err error) int {
-	fmt.Fprintf(stderr, "sealgraph %s: %v\n", command, err)
+	message := err.Error()
+	fmt.Fprintf(stderr, "error: sealgraph %s: %s\n", command, message)
+	reason, hints := domainNavigation(command, message)
+	if reason != "" {
+		fmt.Fprintf(stderr, "reason: %s\n", reason)
+	}
+	for _, hint := range hints {
+		fmt.Fprintf(stderr, "hint: %s\n", hint)
+	}
+	fmt.Fprintf(stderr, "help: sealgraph help %s\n", command)
 	return 1
 }
 
 func usageError(stderr io.Writer, format string, args ...any) int {
-	fmt.Fprintf(stderr, "sealgraph: %s\n", fmt.Sprintf(format, args...))
+	message := fmt.Sprintf(format, args...)
+	topic := inferUsageTopic(message)
+	return usageDiagnostic(stderr, topic, message, "construct the invocation from the command help; no value or REF was inferred")
+}
+
+func usageDiagnostic(stderr io.Writer, topic, message, hint string) int {
+	fmt.Fprintf(stderr, "error: %s\n", message)
+	if topic != "" {
+		fmt.Fprintf(stderr, "usage: %s\n", commandUsage(topic))
+	}
+	if hint != "" {
+		fmt.Fprintf(stderr, "hint: %s\n", hint)
+	}
+	fmt.Fprintf(stderr, "help: sealgraph help%s\n", helpSuffix(topic))
 	return 2
 }
 
-func isHelp(value string) bool { return value == "help" || value == "--help" || value == "-h" }
-
-func printStandaloneHelp(w io.Writer) {
-	fprintf := fmt.Fprintf
-	fprintf(w, `sealgraph — standalone provenance sealing CLI
-
-Usage:
-  sealgraph init
-  sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
-  sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]...
-  sealgraph derive NEW_REF --from SOURCE_SELECTOR
-  sealgraph link REF --depend-on SELECTOR... [-m LINK_MESSAGE]
-  sealgraph unlink REF --upstream SELECTOR
-  sealgraph tag REF [TAGNAME]
-  sealgraph tag REF@SEAL_OR_TAG TAGNAME
-  sealgraph mv OLD_REF NEW_REF
-  sealgraph candidate show REF [--raw-content]
-  sealgraph candidate diff REF
-  sealgraph candidate discard REF
-  sealgraph seal REF
-  sealgraph show SELECTOR [--raw-content] [--format human|json]
-  sealgraph log REF [--format human|json]
-  sealgraph linklog REF [--upstream SELECTOR] [--format human|json]
-  sealgraph diff REF [--format human|json]
-  sealgraph diff SELECTOR SELECTOR [--format human|json]
-  sealgraph status [REF] [--format human|json]
-  sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]
-  sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]
-  sealgraph graph [--format human|json]
-  sealgraph fsck [--format human|json]
-  sealgraph load --format logical-v1 < repository.dump.json
-
-manifest emits a path/digest claim only; it does not write repository state or
-store named files as attachments. Each seal operation advances exactly one
-logical REF. Tags are immutable, and
-mv moves one REF manifest with its complete tag namespace without moving a
-candidate or creating an old-name alias.
-
-Semantic legend:
-  CLEAN does not compare working files; it means no candidate and no derived
-  stale relation for the selected sealed state.
-  REF is a movable logical identity, not a branch or checkout target.
-  STRUCTURAL_IMPACT is provenance reachability; stale is current review state.
-  root marks a provenance boundary, not truth or trust.
-  log/linklog are Seal revision/Cause histories, not commit/reflog histories.
-  Standalone commands use only explicit inputs and .sealgraph; standalone init
-  does not discover or inspect Git.
-`)
+func flagUsageError(stderr io.Writer, topic string, err error) int {
+	return usageDiagnostic(stderr, topic, err.Error(), "check the option spelling, value, repeatability, and positional argument order")
 }
+
+func helpSuffix(topic string) string {
+	if topic == "" {
+		return ""
+	}
+	return " " + topic
+}
+
+func inferUsageTopic(message string) string {
+	paths := make([]string, 0, len(commandHelpRegistry))
+	for path := range commandHelpRegistry {
+		paths = append(paths, path)
+	}
+	sort.Slice(paths, func(i, j int) bool { return len(paths[i]) > len(paths[j]) })
+	for _, path := range paths {
+		if strings.HasPrefix(message, path+" ") || strings.Contains(message, " "+path+" ") {
+			return path
+		}
+	}
+	return ""
+}
+
+func commandLocalHelpTopic(args []string) ([]string, bool) {
+	if len(args) >= 2 && isHelp(args[1]) {
+		if _, ok := commandHelpRegistry[args[0]]; ok {
+			return []string{args[0]}, true
+		}
+	}
+	if len(args) >= 3 && isHelp(args[2]) {
+		if _, ok := commandHelpRegistry[args[0]+" "+args[1]]; ok {
+			return []string{args[0], args[1]}, true
+		}
+	}
+	return nil, false
+}
+
+func unknownHelpTopic(stderr io.Writer, path []string) int {
+	text := strings.Join(path, " ")
+	if text == "" {
+		return usageDiagnostic(stderr, "", "help topic is empty", "list commands and topics with `sealgraph help`")
+	}
+	return usageDiagnostic(stderr, "", fmt.Sprintf("unknown help topic %q", text), "list commands and topics with `sealgraph help`")
+}
+
+func unknownCommandError(stderr io.Writer, command string) int {
+	hint := "list available commands with `sealgraph help`"
+	if suggestion := nearestCommand(command); suggestion != "" {
+		fmt.Fprintf(stderr, "error: unknown command %q\n", command)
+		fmt.Fprintf(stderr, "hint: possible command: %s (review it before running; it was not executed)\n", suggestion)
+		fmt.Fprintf(stderr, "help: sealgraph help %s\n", suggestion)
+		return 2
+	}
+	return usageDiagnostic(stderr, "", fmt.Sprintf("unknown command %q", command), hint)
+}
+
+func nearestCommand(input string) string {
+	best, bestDistance := "", 3
+	for path := range commandHelpRegistry {
+		if strings.Contains(path, " ") {
+			continue
+		}
+		distance := editDistance(input, path)
+		if distance < bestDistance || (distance == bestDistance && path < best) {
+			best, bestDistance = path, distance
+		}
+	}
+	return best
+}
+
+func editDistance(left, right string) int {
+	previous := make([]int, len(right)+1)
+	for index := range previous {
+		previous[index] = index
+	}
+	for i := 1; i <= len(left); i++ {
+		current := make([]int, len(right)+1)
+		current[0] = i
+		for j := 1; j <= len(right); j++ {
+			cost := 1
+			if left[i-1] == right[j-1] {
+				cost = 0
+			}
+			current[j] = min(current[j-1]+1, previous[j]+1, previous[j-1]+cost)
+		}
+		previous = current
+	}
+	return previous[len(right)]
+}
+
+func domainNavigation(command, message string) (string, []string) {
+	switch {
+	case strings.Contains(message, "has no working candidate") || strings.Contains(message, "candidate not found"):
+		if command == "candidate discard" {
+			return "discard requires one existing candidate and never treats absence as successful", []string{"inspect current candidate and REF state with `sealgraph status` before choosing an explicit action"}
+		}
+		return "the operation requires explicit mutable candidate state for that REF", []string{"create or update it with `sealgraph add` or `sealgraph link`, or inspect the intended REF first"}
+	case strings.Contains(message, "REF not found") || strings.Contains(message, "has no head or candidate"):
+		return "the selected logical REF has no current repository state", []string{"inspect current state with `sealgraph status` or select an existing REF or explicit Seal selector"}
+	case strings.Contains(message, "active current revision leaf") || strings.Contains(message, "non-draft Cause") || strings.Contains(message, "Cause closure"):
+		return "normal non-draft publication requires every reachable Cause to be a non-draft active revision leaf", []string{"inspect the named target with `sealgraph show @SEAL_ID` and current review state with `sealgraph stale --frontier`", "relink and review explicitly from upstream to downstream; if historical provenance is intentional, keep the candidate draft"}
+	case strings.Contains(message, "open standalone repository"):
+		return "this command requires a valid standalone .sealgraph repository", []string{"run `sealgraph init` only when initializing this directory; otherwise inspect and repair repository state explicitly"}
+	case strings.Contains(message, "outside the current parent ancestry"):
+		return "REF@hex is scoped to the REF's current parent_revision ancestry", []string{"use the reported unscoped @SEAL_TOKEN only when a sibling or detached Seal is intentionally selected"}
+	case strings.Contains(message, "changed while deriving") || strings.Contains(message, "changed or became unreadable"):
+		return "the coherent repository observation changed before output could be committed", []string{"inspect current state and rerun the read-only command; no partial result is authoritative"}
+	default:
+		return "the requested operation could not satisfy its repository or provenance contract", []string{fmt.Sprintf("inspect the failure and the contract in `sealgraph help %s`; no repair was performed", command)}
+	}
+}
+
+func isHelp(value string) bool { return value == "help" || value == "--help" || value == "-h" }
 
 func printStaleHelp(w io.Writer) {
 	fmt.Fprint(w, `Usage:

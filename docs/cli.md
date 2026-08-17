@@ -3,6 +3,53 @@
 Status: the checked-in runtime implements the format-4 native core, load, and
 active revision/Cause graph commands, plus REF-manifest tags and atomic move.
 
+## 0. CLI discovery and diagnostics
+
+The standalone binary is self-describing without opening `.sealgraph` or
+inspecting Git:
+
+```sh
+sealgraph --help
+sealgraph help
+sealgraph help add
+sealgraph add --help
+sealgraph help candidate show
+sealgraph candidate show --help
+sealgraph help selectors
+sealgraph help concepts
+sealgraph help usecases
+```
+
+Root help is a compact command/topic index. Command help is the invocation
+contract: purpose, Usage, positional operands, required/optional/repeatable
+options, defaults, dependencies or conflicts, important invariants, examples,
+and related next actions. `help concepts` explains the domain model;
+`help selectors` is the exact selector grammar; and `help usecases` contains
+copyable multi-command review workflows. These views are generated from one
+runtime help registry rather than independent command-local prose.
+
+Human diagnostics use a stable navigation shape where applicable:
+
+```text
+error: <failed operation>
+reason: <violated contract or invariant>
+usage: <accepted invocation shape>
+hint: <one or more explicit inspection or correction steps>
+help: sealgraph help <topic>
+```
+
+Usage errors exit 2 before repository traversal. Operational, integrity, and
+domain-invariant failures retain their existing nonzero behavior and add only
+human navigation. Hints never select a REF, relink, reseal, repair, or invent a
+`--force` bypass. Typo suggestions are display-only and require the operator to
+review and execute a command explicitly.
+
+This slice does not introduce stable diagnostic codes or a JSON error schema.
+`--format human|json` continues to select successful inspection output only;
+errors remain on stderr and successful command-specific JSON schemas are
+unchanged. A future machine diagnostic contract requires an independently
+versioned schema and compatibility decision.
+
 ## 1. Common selector grammar
 
 Commands that resolve an immutable Seal use:

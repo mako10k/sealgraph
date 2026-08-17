@@ -50,6 +50,122 @@ func TestCLIHelpDefinesOperatorSemanticsWithoutGitDiscovery(t *testing.T) {
 	}
 }
 
+func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(dir, ".git"), 0o700) })
+	tests := []struct {
+		args    []string
+		markers []string
+	}{
+		{[]string{"--help"}, []string{"Commands:", "Topics:", "sealgraph help candidate show"}},
+		{[]string{"help"}, []string{"Commands:", "Navigation explains explicit next actions"}},
+		{[]string{"help", "add"}, []string{"sealgraph add REF", "--depend-on SELECTOR", "repeatable", "mutually exclusive"}},
+		{[]string{"add", "--help"}, []string{"sealgraph add REF", "--content-file PATH|-"}},
+		{[]string{"help", "candidate"}, []string{"Subcommands:", "show", "diff", "discard"}},
+		{[]string{"help", "candidate", "show"}, []string{"sealgraph candidate show REF", "--raw-content"}},
+		{[]string{"candidate", "show", "--help"}, []string{"expected REF-head relations", "sealgraph candidate show REF"}},
+		{[]string{"help", "selectors"}, []string{"@SEAL_TOKEN", "4 through 64 lower-case hex", "There is no @latest", "full 64-character SealID"}},
+		{[]string{"help", "concepts"}, []string{"parent_revision", "CLEAN means", "never searches for Git"}},
+		{[]string{"help", "concepts", "root"}, []string{"not mean true, trusted, or approved"}},
+		{[]string{"help", "usecases"}, []string{"Create the first root", "Review stale provenance upstream-first", "not automatic repair procedures"}},
+		{[]string{"help", "impact"}, []string{"--max-paths N", "requires --all-paths", "default 100", "never removes impact membership"}},
+	}
+	for _, test := range tests {
+		code, stdout, stderr := runCLI(t, dir, nil, test.args...)
+		if code != 0 || stderr != "" {
+			t.Fatalf("%v code=%d stderr=%q", test.args, code, stderr)
+		}
+		for _, marker := range test.markers {
+			if !strings.Contains(stdout, marker) {
+				t.Fatalf("%v lacks %q:\n%s", test.args, marker, stdout)
+			}
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".sealgraph")); !os.IsNotExist(err) {
+		t.Fatalf("help created repository state: %v", err)
+	}
+}
+
+func TestCLIUsageAndUnknownNavigation(t *testing.T) {
+	tests := []struct {
+		args    []string
+		markers []string
+	}{
+		{[]string{"impcat", "x"}, []string{`error: unknown command "impcat"`, "possible command: impact", "sealgraph help impact"}},
+		{[]string{"candidate", "foo"}, []string{`unknown candidate operation "foo"`, "sealgraph candidate <show|diff|discard>", "sealgraph help candidate"}},
+		{[]string{"show"}, []string{"show requires exactly one", "usage: sealgraph show SELECTOR", "help: sealgraph help show"}},
+		{[]string{"impact", "--unknown", "root"}, []string{"flag provided but not defined", "usage: sealgraph impact", "help: sealgraph help impact"}},
+		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
+		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
+		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
+	}
+	for _, test := range tests {
+		code, stdout, stderr := runCLI(t, t.TempDir(), nil, test.args...)
+		if code != 2 || stdout != "" {
+			t.Fatalf("%v code=%d stdout=%q stderr=%q", test.args, code, stdout, stderr)
+		}
+		for _, marker := range test.markers {
+			if !strings.Contains(stderr, marker) {
+				t.Fatalf("%v lacks %q:\n%s", test.args, marker, stderr)
+			}
+		}
+	}
+}
+
+func TestCLIDomainInvariantFailureNavigatesWithoutMutation(t *testing.T) {
+	fixture := newCLIRevisionFixture(t)
+	mustRunCLI(t, fixture.dir, "add", "middle", "--content", "review", "--depend-on", "@"+fixture.root1, "--depend-on", "root")
+	candidatePath := filepath.Join(fixture.dir, ".sealgraph", "index", "middle", ".candidate")
+	before, err := os.ReadFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := runCLI(t, fixture.dir, nil, "seal", "middle")
+	if code != 1 || stdout != "" {
+		t.Fatalf("seal code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, marker := range []string{"reason: normal non-draft publication requires", "sealgraph stale --frontier", "keep the candidate draft", "help: sealgraph help seal"} {
+		if !strings.Contains(stderr, marker) {
+			t.Fatalf("missing %q:\n%s", marker, stderr)
+		}
+	}
+	after, err := os.ReadFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("failed seal changed candidate state")
+	}
+}
+
+func TestCLIHelpUseCaseInvocationsAreAcceptedByTheRuntime(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "design.md"), []byte("API design"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "premise", "--root", "--content", "External premise")
+	mustSealCLI(t, dir, "premise")
+	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--content", "API requirement")
+	requirementID := mustSealCLI(t, dir, "requirements/api")
+	mustRunCLI(t, dir, "tag", "requirements/api", "reviewed/1.0")
+	mustRunCLI(t, dir, "add", "design/api", "--content-file", "design.md", "--depend-on", "requirements/api")
+	mustRunCLI(t, dir, "candidate", "show", "design/api")
+	mustRunCLI(t, dir, "candidate", "diff", "design/api")
+	mustSealCLI(t, dir, "design/api")
+	mustRunCLI(t, dir, "show", "requirements/api@reviewed/1.0")
+	mustRunCLI(t, dir, "show", "@"+requirementID[:12])
+	mustRunCLI(t, dir, "impact", "requirements/api")
+	mustRunCLI(t, dir, "impact", "--all-paths", "--max-paths", "20", "requirements/api")
+	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--content", "API requirement v2")
+	mustSealCLI(t, dir, "requirements/api")
+	mustRunCLI(t, dir, "stale", "--frontier")
+	mustRunCLI(t, dir, "status", "design/api")
+}
+
 func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 	fixture := newCLIRevisionFixture(t)
 	commands := []struct {

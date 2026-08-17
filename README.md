@@ -48,7 +48,7 @@ sealgraph load --format logical-v1 < repository.dump.json
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
 
-`v0.1.0-beta.1` is standalone-only. It has no file synchronization, watcher,
+`v0.1.0-beta.2` is standalone-only. It has no file synchronization, watcher,
 working-tree reconciliation, Git discovery, or Git sidecar. `manifest` reads
 only explicitly named files and emits a deterministic path/digest claim; it
 does not track or synchronize those files. The `git-sealgraph` source entry
@@ -102,6 +102,25 @@ exact subject seal.
 The design is Merkle-DAG-like: a downstream seal includes direct upstream seal identities; those upstream seals already commit to their own upstream dependencies.
 
 ## Core CLI
+
+Discover the complete invocation contract from the binary itself:
+
+```sh
+sealgraph --help
+sealgraph help add
+sealgraph add --help
+sealgraph help candidate show
+sealgraph help selectors
+sealgraph help concepts
+sealgraph help usecases
+```
+
+Command help includes argument cardinality, option repeatability and conflicts,
+important provenance invariants, examples, and related explicit next actions.
+Usage and domain errors point back to the same help topics. Navigation detects,
+explains, and suggests inspection or explicit review; it never repairs,
+relinks, reseals, or chooses a REF automatically. Help is repository-independent
+and does not inspect Git.
 
 ```text
 sealgraph init
