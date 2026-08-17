@@ -41,7 +41,7 @@ explicit operator approval after an exact commit SHA and artifacts are frozen.
 - [ ] Complete SG-BL-007's distinct initialized/runtime-bootstrap/already-ready
       result reporting.
 - [ ] Implement the read-only full-inventory `fsck` slice from SG-BL-009.
-- [ ] Run a controlled recurring standalone dogfood from a fresh checkout,
+- [x] Run a controlled recurring standalone dogfood from a fresh checkout,
       including manifest construction, one-REF sealing, stale frontier,
       sequential downstream repair, history/diff inspection, and `fsck`.
 - [ ] Reconcile implemented backlog Issues with executable acceptance evidence;

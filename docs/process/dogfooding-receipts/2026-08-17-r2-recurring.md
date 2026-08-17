@@ -2,15 +2,16 @@
 
 Date: 2026-08-17
 
-Result: canonical Seal metadata committed; fresh-checkout verification is
-recorded in the follow-up acceptance section below.
+Result: PASS. Canonical Seal metadata was committed and reproduced from a
+fresh detached checkout before the PERT milestone was closed.
 
 ## Identity boundary
 
 - `SOURCE_COMMIT`:
   `41440e97d586f32db2aa415a59c2ee7e2f5cc7c4`
-- `SEAL_METADATA_COMMIT`: the first parent commit containing this receipt,
-  object `2b0b458f...`, and the new REF manifest. It identifies
+- `SEAL_METADATA_COMMIT`:
+  `955e02148b9a11510df0a3eb87fe1ee52a56cdb7`; it contains this receipt,
+  object `2b0b458f...`, and the new REF manifest and identifies
   `SOURCE_COMMIT`; it is not claimed as sealed source.
 - current outer checkout during sealing: `SOURCE_COMMIT` plus only uncommitted
   canonical Seal metadata and this receipt.
@@ -88,7 +89,22 @@ release action was used.
 
 ## Fresh-checkout acceptance
 
-Pending until `SEAL_METADATA_COMMIT` exists. The follow-up verification must
-name that exact SHA, bootstrap runtime directories explicitly, regenerate the
-manifest from `SOURCE_COMMIT`, compare exact bytes, and read back the Seal and
-status from the fresh checkout. A failure blocks `DOGFOOD_R2` completion.
+A detached worktree of exact `SEAL_METADATA_COMMIT`
+`955e02148b9a11510df0a3eb87fe1ee52a56cdb7` initially lacked ignored runtime
+directories. Explicit init reported exactly:
+
+```text
+BOOTSTRAPPED_RUNTIME index,locks
+```
+
+The binary built from the separate `SOURCE_COMMIT` export regenerated the
+manifest byte-for-byte (`cmp` success, SHA-256 `713d1f...538b3`). Read-only
+`show --format json` and `status --format json` in the fresh checkout reproduced
+the original SHA-256 values `144cd9...c224` and `9b44ef...dfc`. All six heads
+were clean, including exact workflow Seal `2b0b458f...eca7`.
+
+The current outer checkout while recording this acceptance is the later
+follow-up commit candidate containing only the verified receipt, backlog,
+checklist, and PERT closure. It is neither `SOURCE_COMMIT` nor
+`SEAL_METADATA_COMMIT` and is not claimed by the Seal. `DOGFOOD_R2` is accepted;
+Git sidecar and release remain separate gates.

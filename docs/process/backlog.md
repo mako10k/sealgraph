@@ -284,7 +284,7 @@ was safe and correct, but the message concealed a real local mutation.
 
 ## SG-BL-008 — Recurring dogfood workflow and self-reference runbook
 
-- Status: open
+- Status: complete (R2 recurring receipt, 2026-08-17)
 - Priority: P2
 - PERT: `DOGFOOD_RECURRING`
 - Depends on: SG-BL-001 through SG-BL-007

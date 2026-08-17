@@ -1,7 +1,8 @@
 # Sealgraph dogfooding plan
 
 Status: R0, R1, native-v2, candidate-lifecycle, and native-v3 material-identity
-rounds passed on 2026-08-14 and remain historical evidence. The explicit
+rounds passed on 2026-08-14 and remain historical evidence. Recurring R2 passed
+on 2026-08-17 using the two-commit source/Seal-metadata boundary below. The explicit
 tag-preserving format-3 dump/format-4 load and same-material sibling round
 passed on 2026-08-17. The tracked project repository now contains canonical
 format-4 standalone `.sealgraph` state; runtime-only paths remain ignored. See
