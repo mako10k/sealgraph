@@ -191,7 +191,7 @@ content unchanged while changing a concrete link.
 
 ## SG-BL-005 — Clarify `CLEAN`, REF, impact, root, and Git boundaries
 
-- Status: open
+- Status: complete (ADR 0015 and implementation, 2026-08-17)
 - Priority: P1
 - PERT: `OPERATOR_CONTRACT`
 
@@ -230,7 +230,7 @@ Several familiar Git terms invite a materially wrong interpretation:
 
 ## SG-BL-006 — Versioned machine-readable inspection output
 
-- Status: open
+- Status: complete (ADR 0015 and implementation, 2026-08-17)
 - Priority: P1
 - PERT: `OPERATOR_CONTRACT`
 - Depends on: SG-BL-003 and SG-BL-004 for final history/diff shapes
@@ -263,7 +263,7 @@ to whitespace and presentation changes.
 
 ## SG-BL-007 — Report runtime bootstrap distinctly from idempotent init
 
-- Status: open
+- Status: complete (ADR 0015 and implementation, 2026-08-17)
 - Priority: P2, small
 - PERT: `OPERATOR_CONTRACT`
 
@@ -384,7 +384,7 @@ candidate move.
 
 ## SG-BL-011 — Make distinct dependency messages atomic and ergonomic
 
-- Status: open
+- Status: complete (repeated-command contract retained by ADR 0015, 2026-08-17)
 - Priority: P2
 - PERT: `OPERATOR_CONTRACT`
 

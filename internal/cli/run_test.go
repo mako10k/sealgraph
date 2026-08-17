@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,81 @@ import (
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/migration"
 )
+
+func decodeCLIJSON(t *testing.T, output string) map[string]any {
+	t.Helper()
+	var value map[string]any
+	if err := json.Unmarshal([]byte(output), &value); err != nil {
+		t.Fatalf("decode JSON %q: %v", output, err)
+	}
+	return value
+}
+
+func TestCLIInitReportsAllThreeOutcomesWithoutPaths(t *testing.T) {
+	dir := t.TempDir()
+	if output := mustRunCLI(t, dir, "init"); output != "INITIALIZED standalone repository runtime=index,locks\n" || strings.Contains(output, dir) {
+		t.Fatalf("initial output=%q", output)
+	}
+	if output := mustRunCLI(t, dir, "init"); output != "ALREADY_COMPLETE\n" {
+		t.Fatalf("complete output=%q", output)
+	}
+	if err := os.Remove(filepath.Join(dir, ".sealgraph", "locks")); err != nil {
+		t.Fatal(err)
+	}
+	if output := mustRunCLI(t, dir, "init"); output != "BOOTSTRAPPED_RUNTIME locks\n" || strings.Contains(output, dir) {
+		t.Fatalf("bootstrap output=%q", output)
+	}
+}
+
+func TestCLIHelpDefinesOperatorSemanticsWithoutGitDiscovery(t *testing.T) {
+	code, stdout, stderr := runCLI(t, t.TempDir(), nil, "help")
+	if code != 0 || stderr != "" {
+		t.Fatalf("help code=%d stderr=%q", code, stderr)
+	}
+	for _, phrase := range []string{"CLEAN does not compare working files", "REF is a movable logical identity", "STRUCTURAL_IMPACT", "root marks a provenance boundary", "does not discover or inspect Git"} {
+		if !strings.Contains(stdout, phrase) {
+			t.Fatalf("help lacks %q: %s", phrase, stdout)
+		}
+	}
+}
+
+func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
+	fixture := newCLIRevisionFixture(t)
+	commands := []struct {
+		name, schema string
+		args         []string
+	}{
+		{"show", "sealgraph/show/v1", []string{"show", "root", "--format", "json"}},
+		{"status", "sealgraph/status/v1", []string{"status", "--format=json"}},
+		{"stale", "sealgraph/stale/v1", []string{"stale", "--format", "json", "--frontier"}},
+		{"graph", "sealgraph/graph/v1", []string{"graph", "--format", "json"}},
+		{"impact", "sealgraph/impact/v1", []string{"impact", "@" + fixture.root2, "--format", "json"}},
+		{"log", "sealgraph/log/v1", []string{"log", "root", "--format", "json"}},
+		{"linklog", "sealgraph/linklog/v1", []string{"linklog", "middle", "--format", "json"}},
+		{"diff", "sealgraph/diff/v1", []string{"diff", "root", "--format", "json"}},
+	}
+	for _, test := range commands {
+		t.Run(test.name, func(t *testing.T) {
+			output := mustRunCLI(t, fixture.dir, test.args...)
+			value := decodeCLIJSON(t, output)
+			if value["schema"] != test.schema {
+				t.Fatalf("schema=%v output=%s", value["schema"], output)
+			}
+		})
+	}
+	impact := decodeCLIJSON(t, mustRunCLI(t, fixture.dir, "impact", "@"+fixture.root2, "--format", "json"))
+	items := impact["impacts"].([]any)
+	if len(items) == 0 {
+		t.Fatal("missing impact")
+	}
+	paths := items[0].(map[string]any)["paths"].([]any)
+	if _, ok := paths[0].([]any); !ok {
+		t.Fatalf("path is not a structured array: %#v", paths[0])
+	}
+	if code, stdout, stderr := runCLI(t, fixture.dir, nil, "stale", "--refs-only", "--format", "json"); code != 2 || stdout != "" || !strings.Contains(stderr, "mutually exclusive") {
+		t.Fatalf("mixed format code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
 
 func TestCLIExactContentFileAndStdinRoundTripWithoutSeal(t *testing.T) {
 	dir := t.TempDir()

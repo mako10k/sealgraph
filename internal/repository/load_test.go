@@ -172,7 +172,7 @@ func TestLoadPreservesTagsAndRejectsExistingTargetWithoutMutation(t *testing.T) 
 	}
 
 	existingDir := t.TempDir()
-	if created, err := InitStandalone(existingDir); err != nil || !created {
+	if result, err := InitStandalone(existingDir); err != nil || result.Outcome != InitInitialized {
 		t.Fatal(err)
 	}
 	before, _ := os.ReadFile(filepath.Join(existingDir, ".sealgraph", "config"))

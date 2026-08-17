@@ -174,6 +174,7 @@ task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
 task OPERATOR_CONTRACT FORMAT4_DOGFOOD -> USABLE:
   title "Clarify semantics, output, and link-message editing (SG-BL-005/006/007/011)"
   duration 3p
+  status done
 
 task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
   title "Exercise recurring tracked workflow (SG-BL-008)"

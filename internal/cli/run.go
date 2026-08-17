@@ -142,14 +142,17 @@ func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) != 0 {
 		return usageError(stderr, "init accepts no arguments")
 	}
-	created, err := repository.InitStandalone(workDir)
+	result, err := repository.InitStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "init", err)
 	}
-	if created {
-		fmt.Fprintf(stdout, "Initialized standalone sealgraph repository in %s/.sealgraph\n", workDir)
-	} else {
-		fmt.Fprintf(stdout, "Standalone sealgraph repository already initialized in %s/.sealgraph\n", workDir)
+	switch result.Outcome {
+	case repository.InitInitialized:
+		fmt.Fprintln(stdout, "INITIALIZED standalone repository runtime=index,locks")
+	case repository.InitRuntimeBootstrapped:
+		fmt.Fprintf(stdout, "BOOTSTRAPPED_RUNTIME %s\n", strings.Join(result.RuntimeDirectories, ","))
+	case repository.InitAlreadyComplete:
+		fmt.Fprintln(stdout, "ALREADY_COMPLETE")
 	}
 	return 0
 }
@@ -469,6 +472,10 @@ func runSeal(ctx context.Context, workDir string, args []string, stdout, stderr 
 }
 
 func runShow(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) == 0 {
 		return usageError(stderr, "show requires exactly one REF or REF@SEAL")
 	}
@@ -485,6 +492,9 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if _, err := repository.ParseSelector(selector); err != nil {
 		return usageError(stderr, "invalid selector: %v", err)
 	}
+	if outputJSON && *rawContent {
+		return usageError(stderr, "show --format json and --raw-content are mutually exclusive")
+	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "show", err)
@@ -495,6 +505,9 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	}
 	if *rawContent {
 		return writeRawContent(stdout, stderr, "show", result.Content)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "show", showJSON(result))
 	}
 	fmt.Fprintf(stdout, "SEAL %s\n", result.ID)
 	if len(result.REFNames) == 0 {
@@ -643,6 +656,10 @@ func printCandidateDiff(stdout io.Writer, result repository.CandidateDiffResult)
 }
 
 func runLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) != 1 {
 		return usageError(stderr, "log requires exactly one current logical REF")
 	}
@@ -657,11 +674,18 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "log", err)
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "log", logJSON(args[0], entries))
+	}
 	printLog(stdout, args[0], entries)
 	return 0
 }
 
 func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) == 0 {
 		return usageError(stderr, "linklog requires exactly one current logical REF")
 	}
@@ -691,11 +715,18 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "linklog", err)
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "linklog", linkLogJSON(args[0], target, entries))
+	}
 	printLinkLog(stdout, args[0], target, entries)
 	return 0
 }
 
 func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) != 1 && len(args) != 2 {
 		return usageError(stderr, "diff requires one current REF or two Seal selectors")
 	}
@@ -720,6 +751,9 @@ func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr 
 	}
 	if err != nil {
 		return commandError(stderr, "diff", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "diff", diffJSON(result))
 	}
 	printSealDiff(stdout, result)
 	return 0
@@ -890,6 +924,10 @@ func writeRawContent(stdout io.Writer, stderr io.Writer, command string, content
 }
 
 func runStatus(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) > 1 {
 		return usageError(stderr, "status accepts at most one REF")
 	}
@@ -905,6 +943,10 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "status", err)
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v1", statuses, nil))
+	}
+	fmt.Fprintln(stdout, "SEALED_STATE")
 	if len(statuses) == 0 {
 		fmt.Fprintln(stdout, "CLEAN")
 		return 0
@@ -917,6 +959,10 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 	if len(args) == 1 && isHelp(args[0]) {
 		printStaleHelp(stdout)
 		return 0
+	}
+	args, outputJSON, formatErr := extractInspectionFormat(args)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
 	}
 	flags := flag.NewFlagSet("stale", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -931,6 +977,9 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "stale accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if outputJSON && refsOnly.value {
+		return usageError(stderr, "stale --format json and --refs-only are mutually exclusive")
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
@@ -949,11 +998,18 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 		}
 		return 0
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "stale", statusesJSON("sealgraph/stale/v1", statuses, map[string]any{"frontier": frontier.value, "scan": scan.value}))
+	}
 	printStatuses(stdout, statuses)
 	return 0
 }
 
 func runImpact(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, formatErr := extractInspectionFormat(args)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
 	flags := flag.NewFlagSet("impact", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	var allPaths singleBool
@@ -982,11 +1038,19 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "impact", err)
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "impact", impactJSON(source, impacts, allPaths.value, limit))
+	}
+	fmt.Fprintln(stdout, "STRUCTURAL_IMPACT")
 	printImpacts(stdout, source, impacts, limit)
 	return 0
 }
 
 func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
 	if len(args) != 0 {
 		return usageError(stderr, "graph accepts no arguments")
 	}
@@ -998,6 +1062,10 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 	if err != nil {
 		return commandError(stderr, "graph", err)
 	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "graph", graphJSON(nodes))
+	}
+	fmt.Fprintln(stdout, "REVISION_CAUSE_GRAPH")
 	printGraph(stdout, nodes)
 	return 0
 }
@@ -1148,15 +1216,15 @@ Usage:
   sealgraph candidate diff REF
   sealgraph candidate discard REF
   sealgraph seal REF
-  sealgraph show SELECTOR [--raw-content]
-  sealgraph log REF
-  sealgraph linklog REF [--upstream SELECTOR]
-  sealgraph diff REF
-  sealgraph diff SELECTOR SELECTOR
-  sealgraph status [REF]
-  sealgraph stale [--frontier] [--refs-only] [--scan]
-  sealgraph impact [--all-paths] [--max-paths N] SELECTOR
-  sealgraph graph
+  sealgraph show SELECTOR [--raw-content] [--format human|json]
+  sealgraph log REF [--format human|json]
+  sealgraph linklog REF [--upstream SELECTOR] [--format human|json]
+  sealgraph diff REF [--format human|json]
+  sealgraph diff SELECTOR SELECTOR [--format human|json]
+  sealgraph status [REF] [--format human|json]
+  sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]
+  sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]
+  sealgraph graph [--format human|json]
   sealgraph load --format logical-v1 < repository.dump.json
 
 manifest emits a path/digest claim only; it does not write repository state or
@@ -1164,15 +1232,26 @@ store named files as attachments. Each seal operation advances exactly one
 logical REF. Tags are immutable, and
 mv moves one REF manifest with its complete tag namespace without moving a
 candidate or creating an old-name alias.
+
+Semantic legend:
+  CLEAN does not compare working files; it means no candidate and no derived
+  stale relation for the selected sealed state.
+  REF is a movable logical identity, not a branch or checkout target.
+  STRUCTURAL_IMPACT is provenance reachability; stale is current review state.
+  root marks a provenance boundary, not truth or trust.
+  log/linklog are Seal revision/Cause histories, not commit/reflog histories.
+  Standalone commands use only explicit inputs and .sealgraph; standalone init
+  does not discover or inspect Git.
 `)
 }
 
 func printStaleHelp(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  sealgraph stale [--frontier] [--refs-only] [--scan]
+  sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]
 
 The result is a coherent current-head observation. --scan bypasses the
 disposable revision cache; no form repairs, relinks, or seals provenance.
+--refs-only is a separate stable line protocol and cannot be combined with JSON.
 `)
 }
 

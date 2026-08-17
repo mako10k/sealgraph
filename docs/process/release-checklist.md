@@ -37,7 +37,7 @@ explicit operator approval after an exact commit SHA and artifacts are frozen.
 - [x] Complete SG-BL-002's deterministic explicit-path manifest builder.
 - [x] Complete remaining SG-BL-001 acceptance coverage for unsafe file kinds
       and prove failure before candidate mutation.
-- [ ] Complete SG-BL-005's compact operator semantic legend.
+- [x] Complete SG-BL-005's compact operator semantic legend (ADR 0015).
 - [ ] Complete SG-BL-007's distinct initialized/runtime-bootstrap/already-ready
       result reporting.
 - [ ] Implement the read-only full-inventory `fsck` slice from SG-BL-009.

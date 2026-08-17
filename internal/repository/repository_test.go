@@ -12,8 +12,8 @@ import (
 func newFormat4Repository(t *testing.T) (string, *Repository) {
 	t.Helper()
 	dir := t.TempDir()
-	if created, err := InitStandalone(dir); err != nil || !created {
-		t.Fatalf("init created=%t err=%v", created, err)
+	if result, err := InitStandalone(dir); err != nil || result.Outcome != InitInitialized {
+		t.Fatalf("init result=%+v err=%v", result, err)
 	}
 	repo, err := OpenStandalone(dir)
 	if err != nil {

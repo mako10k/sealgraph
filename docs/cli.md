@@ -32,6 +32,11 @@ and `refs`, explicit `init` may recreate missing empty runtime `index` and
 `locks` directories. It never creates, changes, deletes, migrates, or repairs a
 canonical object or REF. Read commands do not bootstrap implicitly.
 
+Successful output distinguishes all outcomes without exposing the checkout
+path: `INITIALIZED standalone repository runtime=index,locks`,
+`BOOTSTRAPPED_RUNTIME index,locks` (only labels actually created), or
+`ALREADY_COMPLETE`.
+
 ### `sealgraph add`
 
 Creates or updates one destination REF's candidate:
@@ -435,3 +440,16 @@ Git blob/tree/commit/tag material import is not in the initial sidecar.
 
 Structured machine-readable outputs must be versioned before external use.
 `stale --refs-only` is the intentionally narrow stable line exception.
+
+`show`, `status`, `stale`, `graph`, `impact`, `log`, `linklog`, and `diff`
+accept `--format human|json` in any argument position. Human is the default;
+JSON uses a command-specific `sealgraph/<command>/v1` schema. Raw content and
+the REF-only line protocol cannot be combined with JSON. JSON contains full
+ObjectID strings and arrays of ObjectIDs for paths, not presentation strings.
+
+Human output uses `SEALED_STATE`, `STRUCTURAL_IMPACT`, and
+`REVISION_CAUSE_GRAPH` headings. `CLEAN` describes candidate/stale state only;
+it does not compare working files. A REF is a movable logical identity, impact
+is structural rather than stale-only, root is a provenance boundary rather
+than trust, and Seal/link history is not Git commit/reflog history. Standalone
+commands do not discover or inspect Git.

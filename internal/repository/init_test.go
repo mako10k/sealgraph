@@ -14,11 +14,11 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(insideGit, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if created, err := InitStandalone(plain); err != nil || !created {
-		t.Fatalf("plain init created=%t err=%v", created, err)
+	if result, err := InitStandalone(plain); err != nil || result.Outcome != InitInitialized {
+		t.Fatalf("plain init result=%+v err=%v", result, err)
 	}
-	if created, err := InitStandalone(insideGit); err != nil || !created {
-		t.Fatalf("inside Git init created=%t err=%v", created, err)
+	if result, err := InitStandalone(insideGit); err != nil || result.Outcome != InitInitialized {
+		t.Fatalf("inside Git init result=%+v err=%v", result, err)
 	}
 	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), "index", "locks"} {
 		plainInfo, plainErr := os.Stat(filepath.Join(plain, ".sealgraph", relative))
@@ -27,8 +27,8 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 			t.Fatalf("layout differs at %s: plain=%v/%v git=%v/%v", relative, plainInfo, plainErr, gitInfo, gitErr)
 		}
 	}
-	if created, err := InitStandalone(insideGit); err != nil || created {
-		t.Fatalf("idempotent init created=%t err=%v", created, err)
+	if result, err := InitStandalone(insideGit); err != nil || result.Outcome != InitAlreadyComplete {
+		t.Fatalf("idempotent init result=%+v err=%v", result, err)
 	}
 }
 
@@ -38,8 +38,8 @@ func TestInitDoesNotReadDotGit(t *testing.T) {
 	if err := os.Symlink(".git", filepath.Join(dir, ".git")); err != nil {
 		t.Fatal(err)
 	}
-	if created, err := InitStandalone(dir); err != nil || !created {
-		t.Fatalf("init with unreadable .git created=%t err=%v", created, err)
+	if result, err := InitStandalone(dir); err != nil || result.Outcome != InitInitialized {
+		t.Fatalf("init with unreadable .git result=%+v err=%v", result, err)
 	}
 }
 
@@ -91,8 +91,8 @@ func TestManifestFormatRejectsLegacyTagTree(t *testing.T) {
 
 func TestExplicitInitBootstrapsOnlyMissingRuntimeDirectories(t *testing.T) {
 	dir := t.TempDir()
-	if created, err := InitStandalone(dir); err != nil || !created {
-		t.Fatalf("initial init created=%t err=%v", created, err)
+	if result, err := InitStandalone(dir); err != nil || result.Outcome != InitInitialized {
+		t.Fatalf("initial init result=%+v err=%v", result, err)
 	}
 	repositoryDir := filepath.Join(dir, ".sealgraph")
 	configBefore, err := os.ReadFile(filepath.Join(repositoryDir, "config"))
@@ -104,8 +104,8 @@ func TestExplicitInitBootstrapsOnlyMissingRuntimeDirectories(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if created, err := InitStandalone(dir); err != nil || created {
-		t.Fatalf("bootstrap init created=%t err=%v", created, err)
+	if result, err := InitStandalone(dir); err != nil || result.Outcome != InitRuntimeBootstrapped || strings.Join(result.RuntimeDirectories, ",") != "index,locks" {
+		t.Fatalf("bootstrap init result=%+v err=%v", result, err)
 	}
 	for _, relative := range []string{"index", "locks"} {
 		info, err := os.Lstat(filepath.Join(repositoryDir, relative))
