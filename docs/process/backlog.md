@@ -36,12 +36,12 @@ and any future tracker migration.
 
 ## SG-BL-001 — Exact content input from a file or stdin
 
-- Status: open
+- Status: completed locally on 2026-08-17; external Issue state unchanged
 - Priority: P1
 - PERT: `CONTENT_INGEST`
 - Implementation: `--content-file PATH|-`, exact-byte ingestion, mutual
-  exclusion, and binary round-trip exist. Keep the Issue open until explicit
-  unsafe-file-kind fixtures prove every acceptance boundary before mutation.
+  exclusion, binary round-trip, and explicit missing/directory/symlink/FIFO/
+  device no-mutation fixtures are complete.
 
 ### Dogfood observation
 
@@ -73,7 +73,7 @@ documents or arbitrary blob bytes.
 
 ## SG-BL-002 — Deterministic multi-file manifest builder
 
-- Status: open
+- Status: completed locally on 2026-08-17; external Issue state unchanged
 - Priority: P1
 - PERT: `CONTENT_INGEST`
 - Depends on: SG-BL-001 for direct file-to-candidate flow
@@ -106,6 +106,15 @@ this error-prone step.
   manifest identity.
 - The output says that it is a path/digest claim, not a claim that sealgraph
   stored the named files as attachments.
+
+### Resolution
+
+ADR 0014 defines `sealgraph manifest --source SOURCE --file PATH...` and the
+canonical `sealgraph/path-manifest/v1` document. Paths are explicit portable
+relative semantic/read paths; no Git discovery, glob, recursion, mapping, or
+automatic candidate/seal action occurs. Entries are bytewise path-sorted,
+each exact file uses SHA-256, and the aggregate hashes the canonical entries
+array.
 
 ## SG-BL-003 — Implement `log` and `linklog` as seal history, not Git history
 
@@ -410,7 +419,8 @@ Before Git sidecar:
 4. `FORMAT4_DOGFOOD_LOAD` is complete: tracked provenance was explicitly
    converted and sibling revision behavior was exercised without dropping
    format-3 tags.
-5. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
+5. `CONTENT_INGEST` is complete: SG-BL-001 and SG-BL-002 provide exact
+   file/stdin ingestion and deterministic explicit-path manifests.
 6. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
    `parent_revision` and exact target SealIDs.
 7. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the

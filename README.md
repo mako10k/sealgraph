@@ -15,7 +15,8 @@ active revision graph: REF-independent Seal and Link identity, separated
 candidate revision/CAS state, exact selectors, atomic logical-v1 load,
 branching parents, active-leaf admission, stale/frontier, history, and bounded
 impact, plus collision-free REF manifests, immutable scoped tags, atomic REF
-move, and tag-preserving logical load.
+move, tag-preserving logical load, exact file/stdin content ingestion, and a
+deterministic explicit-path digest manifest builder.
 The prior format-3 dump remains available from commit `5b24d47` for explicit
 source export. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
@@ -112,6 +113,7 @@ The design is Merkle-DAG-like: a downstream seal includes direct upstream seal i
 
 ```text
 sealgraph init
+sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
 sealgraph add
 sealgraph add --parent
 sealgraph derive
@@ -137,6 +139,10 @@ source. Load requires an absent `.sealgraph`, stages and validates the complete
 repository, publishes it with atomic no-replace semantics, and emits every
 old-to-new SealID mapping while preserving rewritten tags inside REF
 manifests.
+
+`manifest` is a read-only deterministic path/size/SHA-256 claim builder. It
+uses only explicit relative files and an explicit source identity, performs no
+Git discovery, and does not store the named files or create a candidate/seal.
 
 Later phases retain the following planned surface:
 

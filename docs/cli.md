@@ -58,6 +58,31 @@ stdin inputs preserve exact bytes. Filesystem input accepts one regular
 non-symlink file; directories, devices, and symlinks fail before candidate
 state changes. The source path is not persisted.
 
+### `sealgraph manifest`
+
+```sh
+sealgraph manifest --source SOURCE \
+  --file docs/requirements.md \
+  --file docs/architecture.md
+```
+
+This read-only command emits one canonical `sealgraph/path-manifest/v1` JSON
+document plus LF. `SOURCE` is required exact caller input and is never inferred
+from Git or the environment. Each `--file PATH` uses the same explicit
+working-directory-relative slash path as both the read source and the semantic
+manifest path. Entries are sorted bytewise, exact file bytes use SHA-256, and
+the aggregate is SHA-256 over the exact canonical JSON `entries` array.
+
+Paths are valid UTF-8 portable relative paths with no empty, `.`, `..`,
+backslash, control, or DEL component. Duplicate, missing, directory, symlink
+in any component, FIFO, socket, and device inputs reject the complete output.
+There is no glob expansion, recursive walk, normalization, Git discovery, path
+mapping, object write, candidate mutation, Link, or seal.
+
+The fixed `claim` value is `path-digest-only`: named files are not stored as
+attachments merely because their paths and digests appear. The resulting bytes
+may be reviewed and then supplied explicitly to `add --content-file -`.
+
 Each ordinary `add` updates content and explicitly sets root/draft from that
 invocation. Existing dependencies are retained unless one or more
 `--depend-on` arguments replace the set. Changing root never edits Links

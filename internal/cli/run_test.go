@@ -2,12 +2,143 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/migration"
 )
+
+func TestCLIExactContentFileAndStdinRoundTripWithoutSeal(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	content := []byte{'A', 0, '\r', '\n', 0xff, 'Z'}
+	path := filepath.Join(dir, "content.bin")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expectedID := domain.ComputeNativeBlobID(content).String()
+	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content-file", "content.bin")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
+		t.Fatalf("file add code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	code, stdout, stderr = runCLI(t, dir, nil, "candidate", "show", "root", "--raw-content")
+	if code != 0 || stderr != "" || !bytes.Equal([]byte(stdout), content) {
+		t.Fatalf("file raw code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if code, stdout, stderr = runCLI(t, dir, nil, "show", "root"); code != 1 || stdout != "" || !strings.Contains(stderr, "REF not found") {
+		t.Fatalf("add sealed unexpectedly code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	mustRunCLI(t, dir, "candidate", "discard", "root")
+	code, stdout, stderr = runCLI(t, dir, content, "add", "root", "--root", "--content-file", "-")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
+		t.Fatalf("stdin add code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestCLIUnsafeContentFilesFailBeforeCandidateMutation(t *testing.T) {
+	tests := map[string]func(*testing.T, string) string{
+		"missing": func(_ *testing.T, _ string) string { return "missing" },
+		"directory": func(t *testing.T, dir string) string {
+			t.Helper()
+			if err := os.Mkdir(filepath.Join(dir, "directory"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			return "directory"
+		},
+		"symlink": func(t *testing.T, dir string) string {
+			t.Helper()
+			if err := os.Symlink("target", filepath.Join(dir, "symlink")); err != nil {
+				t.Fatal(err)
+			}
+			return "symlink"
+		},
+		"fifo": func(t *testing.T, dir string) string {
+			t.Helper()
+			if err := syscall.Mkfifo(filepath.Join(dir, "fifo"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return "fifo"
+		},
+		"device": func(t *testing.T, _ string) string {
+			t.Helper()
+			info, err := os.Lstat(os.DevNull)
+			if err != nil || info.Mode().IsRegular() {
+				t.Skip("platform has no non-regular os.DevNull")
+			}
+			return os.DevNull
+		},
+	}
+	for name, prepare := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			mustRunCLI(t, dir, "init")
+			mustRunCLI(t, dir, "add", "root", "--root", "--content", "stable")
+			candidatePath := filepath.Join(dir, ".sealgraph", "index", "root", ".candidate")
+			before, err := os.ReadFile(candidatePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := prepare(t, dir)
+			code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content-file", source)
+			if code != 2 || stdout != "" || !strings.Contains(stderr, "not a regular non-symlink file") && name != "missing" {
+				t.Fatalf("unsafe add code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+			after, err := os.ReadFile(candidatePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatal("unsafe content input changed the existing candidate")
+			}
+		})
+	}
+}
+
+func TestCLIContentSourceConflictFailsBeforeCandidateMutation(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content", "a", "--content-file", "missing")
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "exactly one") {
+		t.Fatalf("conflict code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".sealgraph", "index", "root", ".candidate")); !os.IsNotExist(err) {
+		t.Fatalf("conflicting content flags created candidate: %v", err)
+	}
+}
+
+func TestCLIManifestFeedsAddWithoutRepositoryMutation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, first, stderr := runCLI(t, dir, nil, "manifest", "--source", "git:abc", "--file", "b.txt", "--file", "a.txt")
+	if code != 0 || stderr != "" {
+		t.Fatalf("manifest code=%d stdout=%q stderr=%q", code, first, stderr)
+	}
+	code, second, stderr := runCLI(t, dir, nil, "manifest", "--file", "a.txt", "--source", "git:abc", "--file", "b.txt")
+	if code != 0 || stderr != "" || first != second {
+		t.Fatalf("reordered manifest code=%d equal=%t stderr=%q", code, first == second, stderr)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".sealgraph")); !os.IsNotExist(err) {
+		t.Fatalf("manifest created repository state: %v", err)
+	}
+	mustRunCLI(t, dir, "init")
+	expectedID := domain.ComputeNativeBlobID([]byte(first)).String()
+	code, stdout, stderr := runCLI(t, dir, []byte(first), "add", "manifest", "--root", "--content-file", "-")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
+		t.Fatalf("manifest add code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if code, stdout, stderr = runCLI(t, dir, nil, "show", "manifest"); code != 1 || stdout != "" || !strings.Contains(stderr, "REF not found") {
+		t.Fatalf("manifest add sealed unexpectedly code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
 
 func runCLI(t *testing.T, dir string, stdin []byte, args ...string) (int, string, string) {
 	t.Helper()

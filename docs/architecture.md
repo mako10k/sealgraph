@@ -2,8 +2,9 @@
 
 Status: the checked-in runtime implements the format-4 canonical/candidate,
 selector, atomic load, active revision/Cause graph, history, and impact core.
-REF manifests, scoped tags, and atomic move are also implemented. Tracked
-dogfood conversion and Git views remain separately sequenced.
+REF manifests, scoped tags, atomic move, and tracked format-4 dogfood
+conversion are also implemented. Explicit path manifests are implemented;
+operator-contract usability and Git views remain separately sequenced.
 
 ## 1. Design center
 
@@ -175,6 +176,16 @@ Parsing and presentation only:
 - deterministic status/stale/impact rendering;
 - stable narrow line protocols;
 - explicit error and next-action text.
+
+### `internal/pathmanifest`
+
+- validates explicit portable relative semantic paths;
+- reads only caller-named regular files without following symlink components;
+- sorts entries and emits `sealgraph/path-manifest/v1` canonical bytes;
+- computes exact file SHA-256 and the canonical-entry aggregate.
+
+It does not open `.sealgraph`, inspect Git, expand globs, walk directories,
+write objects/candidates, or approve/seal its output.
 
 ### Later Git view adapter
 

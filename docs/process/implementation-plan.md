@@ -1,9 +1,9 @@
 # Initial implementation plan
 
 Status: phases through the format-4 native core, active revision/Cause graph,
-tag/REF-move contract, and explicit tracked dogfood conversion are completed.
-`PLAN.pert` is the current perttool projection; the next frontier is the
-parallel content-ingest and operator-contract work, not Git or release.
+tag/REF-move contract, explicit tracked dogfood conversion, and content-ingest
+contract are completed. `PLAN.pert` is the current perttool projection; the
+next frontier is the operator contract, not Git or release.
 
 ## Current format-4 frontier
 

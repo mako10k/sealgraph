@@ -34,8 +34,8 @@ explicit operator approval after an exact commit SHA and artifacts are frozen.
 - [x] Explicitly convert tracked dogfood through dump/load after the tag
       contract and verify there is no tag loss, mixed-format state, or partial
       owner-check behavior.
-- [ ] Complete SG-BL-002's deterministic explicit-path manifest builder.
-- [ ] Complete remaining SG-BL-001 acceptance coverage for unsafe file kinds
+- [x] Complete SG-BL-002's deterministic explicit-path manifest builder.
+- [x] Complete remaining SG-BL-001 acceptance coverage for unsafe file kinds
       and prove failure before candidate mutation.
 - [ ] Complete SG-BL-005's compact operator semantic legend.
 - [ ] Complete SG-BL-007's distinct initialized/runtime-bootstrap/already-ready

@@ -164,6 +164,7 @@ task FORMAT4_DOGFOOD_LOAD TAG_READY -> FORMAT4_DOGFOOD:
 task CONTENT_INGEST FORMAT4_DOGFOOD -> USABLE:
   title "Add exact file input and deterministic manifests (SG-BL-001/002)"
   duration 3p
+  status done
 
 task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
   title "Add log, linklog, and semantic diff (SG-BL-003/004)"

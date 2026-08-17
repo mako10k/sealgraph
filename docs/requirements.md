@@ -429,3 +429,19 @@ staging validation, atomic no-replace publication, and an explicit complete
 old-to-new SealID receipt. It MUST NOT merge, replace, repair, or silently drop
 tags. Every logical tag record is rewritten through the same complete SealID
 mapping and published inside its REF manifest.
+
+## 14. Exact content input and explicit path manifests
+
+`add --content-file PATH|-` MUST preserve exact bytes. File input accepts only
+a regular non-symlink file; stdin is read exactly. Conflicting content sources,
+missing paths, directories, symlinks, devices, sockets, and FIFOs MUST fail
+before candidate mutation. The source path is not persisted automatically and
+`add` never seals automatically.
+
+The standalone manifest builder accepts only explicit caller-supplied relative
+paths and one explicit source identity. It MUST NOT infer Git identity,
+repository root, file sets, globs, directory recursion, or environment-derived
+metadata. It emits a versioned deterministic path/size/SHA-256 claim, not an
+attachment or proof that the named files were imported. Input order MUST NOT
+affect bytes; file bytes, semantic paths, and source identity MUST affect the
+resulting manifest blob identity.

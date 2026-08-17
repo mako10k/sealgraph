@@ -14,6 +14,7 @@ import (
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/graph"
 	"github.com/mako10k/sealgraph/internal/history"
+	"github.com/mako10k/sealgraph/internal/pathmanifest"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
@@ -83,6 +84,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 
 func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
+	case "manifest":
+		return runManifest(workDir, args[1:], stdout, stderr)
 	case "show":
 		return runShow(ctx, workDir, args[1:], stdout, stderr)
 	case "log":
@@ -104,6 +107,35 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 	default:
 		return usageError(stderr, "unknown command %q", args[0])
 	}
+}
+
+func runManifest(workDir string, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("manifest", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var source singleString
+	var files stringList
+	flags.Var(&source, "source", "required explicit source identity")
+	flags.Var(&files, "file", "explicit relative semantic/read path (repeatable)")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "manifest accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if !source.set || source.value == "" {
+		return usageError(stderr, "manifest requires exactly one non-empty --source SOURCE")
+	}
+	if len(files) == 0 {
+		return usageError(stderr, "manifest requires at least one --file PATH")
+	}
+	output, err := pathmanifest.Build(workDir, source.value, files)
+	if err != nil {
+		return commandError(stderr, "manifest", err)
+	}
+	if _, err := stdout.Write(output); err != nil {
+		return commandError(stderr, "manifest", fmt.Errorf("write path manifest: %w", err))
+	}
+	return 0
 }
 
 func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
@@ -1104,6 +1136,7 @@ func printStandaloneHelp(w io.Writer) {
 
 Usage:
   sealgraph init
+  sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
   sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]...
   sealgraph derive NEW_REF --from SOURCE_SELECTOR
   sealgraph link REF --depend-on SELECTOR... [-m LINK_MESSAGE]
@@ -1126,7 +1159,9 @@ Usage:
   sealgraph graph
   sealgraph load --format logical-v1 < repository.dump.json
 
-Each seal operation advances exactly one logical REF. Tags are immutable, and
+manifest emits a path/digest claim only; it does not write repository state or
+store named files as attachments. Each seal operation advances exactly one
+logical REF. Tags are immutable, and
 mv moves one REF manifest with its complete tag namespace without moving a
 candidate or creating an old-name alias.
 `)
