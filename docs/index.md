@@ -29,6 +29,9 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0012-format3-logical-dump-and-load-boundary.md`](adr/0012-format3-logical-dump-and-load-boundary.md)
 - [`adr/0013-ref-manifest-tags-and-atomic-move.md`](adr/0013-ref-manifest-tags-and-atomic-move.md)
 - [`adr/0014-explicit-path-manifest.md`](adr/0014-explicit-path-manifest.md)
+- [`adr/0015-operator-inspection-contract.md`](adr/0015-operator-inspection-contract.md)
+- [`adr/0016-standalone-beta-integrity-and-release.md`](adr/0016-standalone-beta-integrity-and-release.md)
+- [`adr/0017-generic-link-metadata-and-query-boundary.md`](adr/0017-generic-link-metadata-and-query-boundary.md)
 
 ## Agent-auditable design
 
@@ -36,6 +39,11 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
 - [`decisions/2026-08-14-seal-revision-dag.think`](decisions/2026-08-14-seal-revision-dag.think)
 - [`decisions/2026-08-17-format3-logical-dump.think`](decisions/2026-08-17-format3-logical-dump.think)
+- [`decisions/2026-08-17-link-metadata-sealgraphql.think`](decisions/2026-08-17-link-metadata-sealgraphql.think)
+
+## Proposals
+
+- [`proposals/link-metadata-and-sealgraphql.md`](proposals/link-metadata-and-sealgraphql.md)
 
 ## Planning
 

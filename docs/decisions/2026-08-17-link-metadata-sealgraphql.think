@@ -1,0 +1,170 @@
+framework LinkMetadataSealGraphQL:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain SealGraph:
+  description "domain-neutral Link Metadata and deterministic read-only graph query"
+
+problem P1:
+  "Linkへdomain-specific factsを追加しながらcoreがその意味論を所有しないための構造は何か"
+
+step S1:
+  premise PR1:
+    |
+      core-defined Link kindはapplication vocabularyをprovenance engineへ固定し、同じkind名の
+      衝突またはhidden stale/admissibility semanticsを招く
+
+step S2:
+  evidence EV1:
+    |
+      format 4 Linkはexact target SealIDとmessageだけを持ち、全Linkを同一Cause edgeとして
+      cycle、closure、stale、impactへ適用している
+
+step S3:
+  decision D1 based_on P1, PR1, EV1:
+    |
+      Cause Linkの意味は変更せず、Linkへnamespace、optional schema identifier、canonical valueからなる
+      sorted metadata entry集合を追加する。domain meaningはnamespace ownerに委ねる
+
+problem P2:
+  "metadata valueを言語間で同一identityとしてcanonicalizeするには何を許すか"
+
+step S4:
+  premise PR2:
+    |
+      JSON floating point、NaN、exponent、negative zero、implicit coercionはruntime間で異なるidentityや
+      query resultを作り得る
+
+step S5:
+  evidence EV2:
+    |
+      current canonical SealはUTF-8、fixed member order、bytewise sort、duplicate rejection、
+      decode/re-encode equalityでdeterministic identityを保証する
+
+step S6:
+  decision D2 based_on P2, PR2, EV2:
+    |
+      null、boolean、signed 64-bit integer、UTF-8 string、ordered array、bytewise-key-sorted objectだけを
+      canonical valueとし、floatとimplicit normalizationを禁止する。depth、node、string、Link、Seal sizeを固定する
+
+problem P3:
+  "Link Metadataをschemaで必須検証するべきか"
+
+step S7:
+  premise PR3:
+    |
+      mandatory schema validationはschema resolution、availability、trust、validator version、network、resource limitを
+      canonical readとfsckのhidden prerequisiteにする
+
+step S8:
+  evidence EV3:
+    |
+      SealGraphはoptional integrationsをcore prerequisiteにせず、hash identityだけでactor authority、trusted time、
+      domain truthを主張しない
+
+step S9:
+  decision D3 based_on P3, PR3, EV3:
+    |
+      structural validationは必須、schema identifier declarationはoptional、schema conformance validationはdeferredな
+      explicit operationとする。coreはidentifierをdereferenceせずvalidation済みと主張しない
+
+problem P4:
+  "metadataを検索する初期SealGraphQLはmutationを含むべきか"
+
+step S10:
+  premise PR4:
+    |
+      immutable Link Metadataの変更はCandidate編集、新Seal作成、one-REF expected-old CAS publicationであり、
+      simple field updateではない
+
+step S11:
+  evidence EV4:
+    |
+      current coreはquery/inspectionをread-onlyとし、mutationをexplicit Candidate lifecycleとone-seal operationへ分離する
+
+step S12:
+  decision D4 based_on P4, PR4, EV4:
+    |
+      initial SealGraphQLはversioned query ASTを持つread-only selection、traversal、predicate、projectionに限定する。
+      mutationは別proposalとし、既存Candidate/CAS protocolを迂回させない
+
+problem P5:
+  "query結果をhistorical inventoryとcurrent REF factsの両方でdeterministicにするには何が必要か"
+
+step S13:
+  premise PR5:
+    |
+      active leaf、detached、stale、frontier、impactはimmutable Sealだけでなくcomplete current REF/head observationに依存する
+
+step S14:
+  evidence EV5:
+    |
+      current stale/impact contractはcoherent snapshot、final revalidation、no partial stdout、disposable cache equivalenceを要求する
+
+step S15:
+  decision D5 based_on P5, PR5, EV5:
+    |
+      historical inventory rootとcoherent current-REF rootを区別し、current derived factsを含むqueryはcomplete snapshotを
+      final revalidateする。Cause/revision directionをexplicitにし、cacheとscanのlogical resultを同一にする
+
+problem P6:
+  "format 4へmetadata memberを追加する互換性境界は何か"
+
+step S16:
+  premise PR6:
+    |
+      Link metadataはcanonical bytesとSealIDを変更し、unknown memberをformat 4 readerが無視すると同一schemaの意味が分岐する
+
+step S17:
+  evidence EV6:
+    |
+      accepted format policyはpersisted member変更にstorage-format、canonical fixtures、compatibility consideration、ADRを要求し、
+      format 4はunknown memberをrejectする
+
+step S18:
+  decision D6 based_on P6, PR6, EV6:
+    |
+      metadata実装はnew repository/Seal/Candidate formatとexplicit migration boundaryを要求する。
+      format 4へのsilent extension、dual interpretation、messageからのmetadata inferenceを禁止する
+
+problem P7:
+  "core Link fieldとuser metadataを一つのquery modelで扱いながら二重保存を避けるにはどうするか"
+
+step S19:
+  premise PR7:
+    |
+      target SealIDとmessageをreserved metadata entryにもpersistすると、canonical Link fieldとの不一致、重複identity、
+      migration ambiguityが生じる
+
+step S20:
+  evidence EV7:
+    |
+      SealGraphQLはnamespaceとJSON Pointerでmetadataをaddressし、source SealはLinkを含むSealから、targetとmessageは
+      canonical Linkから一意に導出できる
+
+step S21:
+  decision D7 based_on P7, PR7, EV7:
+    |
+      sealgraphおよびsealgraph/ prefixをpersisted metadataで予約し、query時だけsource_seal、target_seal、messageを持つ
+      sealgraph/virtual-link/v1 objectとして投影する。current/stale等のobservation factは混在させない
+
+problem P8:
+  "対称性・一貫性・網羅性レビューで残る未決事項をどう扱うか"
+
+step S22:
+  premise PR8:
+    |
+      persisted limits、mutation CLI、query AST、validator、index、public nameは異なるauthorityとcompatibility costを持つ
+
+step S23:
+  evidence EV8:
+    |
+      proposal reviewはpresent/missing/null、incoming/outgoing、current/historical、encode/decode、schema/no-schema、
+      cache/scanを対称に定義し、既存Causeとpublication invariantとの整合を確認した
+
+step S24:
+  decision D8 based_on P8, PR8, EV8:
+    |
+      responsibility splitとgeneric metadata modelをfinal proposalとし、numeric limits、format transition、mutation CLI、
+      normative query AST、validator、index、name、query mutationを明示的な次gateとして残す

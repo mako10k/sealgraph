@@ -81,6 +81,7 @@ llmthink dsl audit docs/decisions/2026-08-14-seal-event-metadata.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-reseal-required.think --pretty
 llmthink dsl audit docs/decisions/2026-08-14-seal-revision-dag.think --pretty
 llmthink dsl audit docs/decisions/2026-08-17-format3-logical-dump.think --pretty
+llmthink dsl audit docs/decisions/2026-08-17-link-metadata-sealgraphql.think --pretty
 ```
 
 When a major architecture choice changes:
