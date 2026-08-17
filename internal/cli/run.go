@@ -98,9 +98,42 @@ func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, st
 		return runImpact(ctx, workDir, args[1:], stdout, stderr)
 	case "graph":
 		return runGraph(ctx, workDir, args[1:], stdout, stderr)
+	case "dump":
+		return runDump(ctx, workDir, args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "unknown command %q", args[0])
 	}
+}
+
+func runDump(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dump", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var format singleString
+	flags.Var(&format, "format", "required versioned dump format")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "dump accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if !format.set {
+		return usageError(stderr, "dump requires --format logical-v1")
+	}
+	if format.value != "logical-v1" {
+		return usageError(stderr, "dump format %q is unsupported; expected logical-v1", format.value)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "dump", err)
+	}
+	output, err := repo.DumpLogicalV1(ctx)
+	if err != nil {
+		return commandError(stderr, "dump", err)
+	}
+	if _, err := stdout.Write(output); err != nil {
+		return commandError(stderr, "dump", fmt.Errorf("write logical-v1 output: %w", err))
+	}
+	return 0
 }
 
 func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -1047,7 +1080,8 @@ Usage:
   sealgraph status [REF]
   sealgraph stale [--frontier] [--refs-only]
   sealgraph impact REF
-  sealgraph graph
+	  sealgraph graph
+	  sealgraph dump --format logical-v1
 
 Each seal operation advances exactly one logical REF.
 

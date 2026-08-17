@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -27,9 +28,7 @@ func NewObjectStore(repositoryDir string) *ObjectStore {
 }
 
 func ObjectID(data []byte) domain.ObjectID {
-	envelope := envelope(data)
-	digest := sha256.Sum256(envelope)
-	return domain.ObjectID{Hex: fmt.Sprintf("%x", digest)}
+	return domain.ComputeNativeBlobID(data)
 }
 
 func (s *ObjectStore) WriteBlob(ctx context.Context, data []byte) (domain.ObjectID, error) {
@@ -180,6 +179,53 @@ func (s *ObjectStore) ResolvePrefix(ctx context.Context, prefix string) (domain.
 		return domain.ObjectID{}, fmt.Errorf("%w: prefix %s", store.ErrObjectNotFound, prefix)
 	}
 	return domain.ObjectID{Hex: match}, nil
+}
+
+// List reads and validates every physical loose object in deterministic ID
+// order. Unexpected paths fail instead of being skipped.
+func (s *ObjectStore) List(ctx context.Context) ([]store.Object, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, err := os.Lstat(s.objectsDir)
+	if err != nil {
+		return nil, fmt.Errorf("inspect object store: %w", err)
+	}
+	if !root.IsDir() || root.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("object store is not a real directory")
+	}
+	fanouts, err := os.ReadDir(s.objectsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read object store: %w", err)
+	}
+	objects := make([]store.Object, 0)
+	for _, fanout := range fanouts {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		name := fanout.Name()
+		if len(name) != 2 || !isLowerHex(name) || fanout.Type()&os.ModeSymlink != 0 || !fanout.IsDir() {
+			return nil, fmt.Errorf("unexpected object fanout entry %q; expected a real two-lower-hex directory", name)
+		}
+		files, err := os.ReadDir(filepath.Join(s.objectsDir, name))
+		if err != nil {
+			return nil, fmt.Errorf("read object fanout %s: %w", name, err)
+		}
+		for _, file := range files {
+			full := name + file.Name()
+			if len(file.Name()) != 62 || !isLowerHex(file.Name()) || file.Type()&os.ModeSymlink != 0 || !file.Type().IsRegular() {
+				return nil, fmt.Errorf("unexpected object entry %q; expected a regular 64-lower-hex object path", full)
+			}
+			id := domain.ObjectID{Hex: full}
+			object, err := s.ReadObject(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, object)
+		}
+	}
+	sort.Slice(objects, func(i, j int) bool { return objects[i].ID.String() < objects[j].ID.String() })
+	return objects, nil
 }
 
 func isLowerHex(text string) bool {

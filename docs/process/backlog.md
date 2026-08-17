@@ -396,13 +396,13 @@ Before Git sidecar:
    runtime reader changes.
 2. `FORMAT4_NATIVE_CORE` and `FORMAT4_REVISION_GRAPH`: implement ADR 0011
    without a dual reader or partial owner-check removal.
-3. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise
-   sibling revision behavior.
-4. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
-5. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
-   `parent_revision` and exact target SealIDs.
-6. `TAG_CONTRACT`: SG-BL-010 selects a rename-safe format-4 namespace and
+3. `TAG_CONTRACT`: SG-BL-010 selects a rename-safe format-4 namespace and
    narrow `mv` transaction without compatibility scaffolding.
+4. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise
+   sibling revision behavior without dropping format-3 tags.
+5. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
+6. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
+   `parent_revision` and exact target SealIDs.
 7. `OPERATOR_CONTRACT`: SG-BL-005 through SG-BL-007 and SG-BL-011, using the
    final history and diff data shapes.
 8. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.

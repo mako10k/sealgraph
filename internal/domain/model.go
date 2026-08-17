@@ -1,9 +1,11 @@
 package domain
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -19,6 +21,15 @@ const (
 // the algorithm, so the canonical representation contains only full hex.
 type ObjectID struct {
 	Hex string
+}
+
+// ComputeNativeBlobID returns the native SHA-256 identity for exact blob
+// payload bytes. Native objects use the Git blob envelope but no Git repository
+// semantics.
+func ComputeNativeBlobID(data []byte) ObjectID {
+	header := []byte("blob " + strconv.Itoa(len(data)) + "\x00")
+	digest := sha256.Sum256(append(header, data...))
+	return ObjectID{Hex: fmt.Sprintf("%x", digest)}
 }
 
 func (id ObjectID) String() string {

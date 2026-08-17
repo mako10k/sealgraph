@@ -19,12 +19,12 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 	}
 	b := make([]byte, 0, 512)
 	b = append(b, `{"schema":`...)
-	b, err = appendString(b, normalized.Schema)
+	b, err = AppendString(b, normalized.Schema)
 	if err != nil {
 		return nil, err
 	}
 	b = append(b, `,"ref":`...)
-	b, err = appendString(b, normalized.REF)
+	b, err = AppendString(b, normalized.REF)
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +48,12 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 			b = append(b, ',')
 		}
 		b = append(b, `{"name":`...)
-		b, err = appendString(b, attachment.Name)
+		b, err = AppendString(b, attachment.Name)
 		if err != nil {
 			return nil, err
 		}
 		b = append(b, `,"media_type":`...)
-		b, err = appendString(b, attachment.MediaType)
+		b, err = AppendString(b, attachment.MediaType)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +70,7 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 			b = append(b, ',')
 		}
 		b = append(b, `{"target_ref":`...)
-		b, err = appendString(b, link.TargetREF)
+		b, err = AppendString(b, link.TargetREF)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +80,7 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 			return nil, err
 		}
 		b = append(b, `,"message":`...)
-		b, err = appendString(b, link.Message)
+		b, err = AppendString(b, link.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -127,18 +127,18 @@ func appendObjectID(b []byte, id domain.ObjectID) ([]byte, error) {
 	if err := id.ValidateNative(); err != nil {
 		return nil, err
 	}
-	return appendString(b, id.Hex)
+	return AppendString(b, id.Hex)
 }
 
 func appendContent(b []byte, content domain.ContentRef) ([]byte, error) {
 	b = append(b, `{"store":`...)
 	var err error
-	b, err = appendString(b, content.Store)
+	b, err = AppendString(b, content.Store)
 	if err != nil {
 		return nil, err
 	}
 	b = append(b, `,"type":`...)
-	b, err = appendString(b, content.Type)
+	b, err = AppendString(b, content.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,9 @@ func appendContent(b []byte, content domain.ContentRef) ([]byte, error) {
 	return b, nil
 }
 
-func appendString(b []byte, value string) ([]byte, error) {
+// AppendString appends one canonical JSON string using Sealgraph's exact
+// UTF-8 and control-escape rules.
+func AppendString(b []byte, value string) ([]byte, error) {
 	if !utf8.ValidString(value) {
 		return nil, fmt.Errorf("canonical string is not valid UTF-8")
 	}

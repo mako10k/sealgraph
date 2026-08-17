@@ -56,12 +56,16 @@ milestone FORMAT4_DESIGN:
 
 milestone FORMAT3_DUMP:
   title "Format-3 logical dump is available"
+  state reached
 
 milestone FORMAT4_RUNTIME:
   title "Format-4 native repository works"
 
 milestone REVISION_DAG:
   title "Branching revision and Cause graph semantics work"
+
+milestone TAG_READY:
+  title "Rename-safe format-4 tag namespace works"
 
 milestone FORMAT4_DOGFOOD:
   title "Tracked dogfood is explicitly converted to format 4"
@@ -131,6 +135,7 @@ task ADR11_DESIGN MATERIAL_IDENTITY -> FORMAT4_DESIGN:
 task FORMAT3_LOGICAL_DUMP FORMAT4_DESIGN -> FORMAT3_DUMP:
   title "Add deterministic read-only format-3 logical dump"
   duration 3p
+  status done
 
 task FORMAT4_NATIVE_CORE FORMAT3_DUMP -> FORMAT4_RUNTIME:
   title "Implement format-4 canonical Seal, candidate, selector, and dump/load core"
@@ -140,7 +145,11 @@ task FORMAT4_REVISION_GRAPH FORMAT4_RUNTIME -> REVISION_DAG:
   title "Implement active revision DAG, derive/add-parent, stale cache/scan, history, and impact"
   duration 6p
 
-task FORMAT4_DOGFOOD_LOAD REVISION_DAG -> FORMAT4_DOGFOOD:
+task TAG_CONTRACT REVISION_DAG -> TAG_READY:
+  title "Resolve rename-safe format-4 tag namespace and REF mv transaction (SG-BL-010)"
+  duration 2p
+
+task FORMAT4_DOGFOOD_LOAD TAG_READY -> FORMAT4_DOGFOOD:
   title "Convert tracked dogfood by explicit dump/load and exercise a sibling revision"
   duration 2p
 
@@ -156,10 +165,6 @@ task HISTORY_INSPECTION DOGFOOD_R1 -> HISTORY_READY:
 task OPERATOR_CONTRACT FORMAT4_DOGFOOD -> USABLE:
   title "Clarify semantics, output, and link-message editing (SG-BL-005/006/007/011)"
   duration 3p
-
-task TAG_CONTRACT FORMAT4_DOGFOOD -> USABLE:
-  title "Resolve rename-safe format-4 tag namespace and REF mv transaction (SG-BL-010)"
-  duration 2p
 
 task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
   title "Exercise recurring tracked workflow (SG-BL-008)"

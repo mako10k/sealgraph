@@ -283,7 +283,39 @@ explicitly relinking one downstream candidate to it, and sealing that one REF.
 The old downstream Seal remains immutable and stale; no pin flag, automatic
 target choice, or recursive repair is introduced.
 
-## 7. Git plugin
+## 7. Format-3 logical dump and future load
+
+The checked-in format-3 binary exposes one migration export:
+
+```sh
+sealgraph dump --format logical-v1
+```
+
+`--format logical-v1` is required exactly once. The command accepts no
+positional operand, output path, repair, ignore, or compatibility option. On
+success stdout is exactly one compact canonical
+`sealgraph/logical-dump/v1` JSON document followed by LF, and stderr is empty.
+
+All object, Seal, REF, tag, candidate, graph, and final-observation checks
+complete before stdout emission. A candidate of any validity blocks the dump.
+The command does not acquire the mutation guard, create runtime files, repair
+state, or inspect Git. Output-sink failure is nonzero; consumers accept a dump
+only with exit zero and complete canonical parsing.
+
+The paired future format-4 command is:
+
+```sh
+sealgraph load --format logical-v1 < repository.dump.json
+```
+
+It is not implemented by the format-3 slice. The target `.sealgraph` must be
+absent. Load stages and validates a complete format-4 repository, rewrites all
+parent/Link/REF/tag targets through a complete old-to-new mapping, and uses one
+atomic no-replace directory publication. It never merges with or replaces an
+existing repository. Non-empty tags reject load until the format-4 tag
+namespace contract is implemented.
+
+## 8. Git plugin
 
 Git integration is invoked explicitly as:
 
@@ -312,7 +344,7 @@ resolution does not create a Seal or imply review.
 
 Git blob/tree/commit/tag material import is not in the initial sidecar.
 
-## 8. Exit and machine output
+## 9. Exit and machine output
 
 - `0`: successful command, including empty factual result or documented path
   truncation;

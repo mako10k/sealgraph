@@ -49,6 +49,12 @@ type Tag struct {
 	Seal domain.ObjectID
 }
 
+type ScopedTag struct {
+	REF  string
+	Name string
+	Seal domain.ObjectID
+}
+
 // TagStore manages immutable, REF-scoped aliases for exact seals. It is not a
 // Git tag or movable ref abstraction.
 type TagStore interface {

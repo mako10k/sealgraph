@@ -86,6 +86,18 @@ here. A Seal contains no owner REF.
 Canonical encoding does not resolve selectors, inspect REFs, derive stale, or
 perform I/O.
 
+### `internal/migration`
+
+- strict versioned logical dump models and canonical encoders;
+- deterministic dependency-first conversion ordering;
+- explicit records for material, old Seal identity, REF/tag targets, and
+  excluded loose objects.
+
+It does not open repositories, mutate storage, read Git, or act as a legacy
+repository reader. The format-3 repository layer supplies a fully validated
+logical observation; a future format-4 loader consumes the versioned document
+through a separate empty-target transaction.
+
 ### `internal/store`
 
 Native storage capabilities:
@@ -146,6 +158,8 @@ Coordinates:
 - one-REF CAS publication;
 - coherent multi-REF observations;
 - disposable revision/Cause cache orchestration.
+- read-only format-3 logical dump capture, graph closure, and final complete
+  observation revalidation during the explicit migration slice.
 
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.

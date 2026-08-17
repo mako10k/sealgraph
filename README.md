@@ -12,9 +12,12 @@ The core question is not only “what changed?” but:
 
 The native standalone slices implement repository creation and sealing,
 direct/transitive graph inspection, immutable seal history, link history, and
-semantic generation diff. The normative requirements are in
+semantic generation diff, plus the deterministic read-only format-3 logical
+dump required before the format-4 transition. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
-is in [`docs/storage-format.md`](docs/storage-format.md) and ADR 0009.
+and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
+ADR 0011, and ADR 0012. The checked-in runtime and tracked dogfood remain
+format 3.
 
 ## Two product surfaces
 
@@ -108,7 +111,12 @@ sealgraph status
 sealgraph stale [--frontier] [--refs-only]
 sealgraph impact
 sealgraph graph
+sealgraph dump --format logical-v1
 ```
+
+The logical dump is a versioned migration artifact. It rejects any working
+candidate and never changes `.sealgraph/`; format-4 load remains separately
+gated and is not implemented by this slice.
 
 `stale --refs-only` emits the complete stale REF set as a stable one-REF-per-line
 stream. Adding `--frontier` selects only the upstream-most stale REFs to review

@@ -26,12 +26,14 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0009-separate-seal-event-metadata.md`](adr/0009-separate-seal-event-metadata.md)
 - [`adr/0010-stale-review-frontier.md`](adr/0010-stale-review-frontier.md)
 - [`adr/0011-ref-independent-seals-and-branching-revisions.md`](adr/0011-ref-independent-seals-and-branching-revisions.md)
+- [`adr/0012-format3-logical-dump-and-load-boundary.md`](adr/0012-format3-logical-dump-and-load-boundary.md)
 
 ## Agent-auditable design
 
 - [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
 - [`decisions/2026-08-14-seal-revision-dag.think`](decisions/2026-08-14-seal-revision-dag.think)
+- [`decisions/2026-08-17-format3-logical-dump.think`](decisions/2026-08-17-format3-logical-dump.think)
 
 ## Planning
 
@@ -42,6 +44,8 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/reseal-required-proposal-2026-08-14.md`](process/reseal-required-proposal-2026-08-14.md)
 - [`process/seal-revision-dag-proposal-2026-08-14.md`](process/seal-revision-dag-proposal-2026-08-14.md)
 - [`process/wip-handoff-2026-08-14.md`](process/wip-handoff-2026-08-14.md)
+- [`process/format3-logical-dump-proposal-2026-08-17.md`](process/format3-logical-dump-proposal-2026-08-17.md)
+- [`process/format3-logical-dump-acceptance-2026-08-17.md`](process/format3-logical-dump-acceptance-2026-08-17.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
 - [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)

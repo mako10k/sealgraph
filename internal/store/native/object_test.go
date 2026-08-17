@@ -18,6 +18,38 @@ func TestObjectIDUsesGitBlobEnvelopeSHA256(t *testing.T) {
 	}
 }
 
+func TestObjectStoreListIsDeterministicAndRejectsUnexpectedPaths(t *testing.T) {
+	repositoryDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repositoryDir, "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	objects := NewObjectStore(repositoryDir)
+	first, err := objects.WriteBlob(context.Background(), []byte("first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := objects.WriteBlob(context.Background(), []byte("second"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := objects.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID.String() >= listed[1].ID.String() {
+		t.Fatalf("listed objects = %+v", listed)
+	}
+	if listed[0].ID.String() != first.String() && listed[1].ID.String() != first.String() || listed[0].ID.String() != second.String() && listed[1].ID.String() != second.String() {
+		t.Fatalf("listed object IDs = %s, %s; want %s, %s", listed[0].ID, listed[1].ID, first, second)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "objects", "unexpected"), []byte("not an object"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := objects.List(context.Background()); err == nil || !strings.Contains(err.Error(), "unexpected object fanout") {
+		t.Fatalf("unexpected object path error = %v", err)
+	}
+}
+
 func TestResolvePrefixRequiresRepositoryWideUniqueness(t *testing.T) {
 	repositoryDir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repositoryDir, "objects"), 0o755); err != nil {

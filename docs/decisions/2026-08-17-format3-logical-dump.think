@@ -1,0 +1,269 @@
+framework SealgraphFormat3LogicalDump:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain Format3LogicalDump:
+  description |
+    format 3 repository から format 4 へ明示変換するための read-only logical dump と
+    future empty-target load publication boundary を、runtime dual reader なしで設計する
+
+problem P1:
+  "format 3 logical dump をどの public CLI と versioned envelope で出力するか"
+
+step S1:
+  premise PR1:
+    |
+      migration artifact は script から再現可能で、future format と取り違えず、repository path への
+      第二の publication transaction を format 3 binary に追加しない必要がある
+
+step S2:
+  evidence EV1:
+    |
+      CLI contract は structured machine output の versioning を要求し、ADR 0011 は format 3 binary に
+      versioned read-only logical dump を先行追加する方針を受理している
+
+step S3:
+  viewpoint VP1:
+    axis explicit_versioned_read_only_export
+
+step S4:
+  decision D1 based_on P1, PR1, EV1, VP1:
+    |
+      sealgraph dump --format logical-v1 を唯一の initial surface とし、stdout へ
+      sealgraph/logical-dump/v1 compact canonical JSON と LF を一つ出す。output path、repair、ignore、
+      compatibility option は追加しない
+
+problem P2:
+  "dump がどの Seal と object を logical repository state として扱うか"
+
+step S5:
+  premise PR2:
+    |
+      native object は untyped blob であり、arbitrary content bytes が canonical Seal bytes と一致し得る。
+      object-store presence だけでは dangling Seal、material blob、failed candidate artifact を区別できない
+
+step S6:
+  evidence EV2:
+    |
+      current REF heads と immutable tags は published logical roots であり、parent と concrete Cause Link は
+      exact reachable Seal graph を定め、content と attachments はそこから exact blob identity を定める
+
+step S7:
+  viewpoint VP2:
+    axis logical_reachability_without_type_guessing
+
+step S8:
+  decision D2 based_on P2, PR2, EV2, VP2:
+    |
+      REF head または tag target から parent と Cause edge で到達する canonical format 3 Seal と、
+      それらが参照する content/attachment bytes を export する。その他のvalid loose object は bytes を
+      copyせず sorted excluded_objects ID として明示する
+
+step S9:
+  decision D3 based_on P2, PR2, EV2, VP2:
+    "全loose object payloadを無条件にformat 4 ODBへcopyする"
+    annotation caveat:
+      |
+        old format 3 Seal bytes と abandoned material を foreign blob として残し、selector prefix ambiguity と
+        logical migration scope を不必要に拡大する
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "logical rootsからroleを確定し、excluded IDsを明示する案を推奨する"
+
+step S10:
+  comparison CMP1 on P2 viewpoint VP2 relation preferred_over D2, D3:
+    |
+      reachable export は blob payload の型を推測せずprovenanceを完全に再構築でき、dangling objectを
+      silent loss にせず source repository に保持したまま除外を可視化する
+
+problem P3:
+  "mutableまたはcorrupt candidateをdumpでどう扱うか"
+
+step S11:
+  premise PR3:
+    |
+      candidate は unsealed operator intent であり、format 3 base を format 4 parent_revision と
+      expected_ref_head へ current state 抜きに一意変換できない
+
+step S12:
+  evidence EV3:
+    |
+      candidate discard はcorrupt stateにも使えるexplicit recoveryであり、candidateはcanonical provenanceでも
+      immutable selector targetでもない
+
+step S13:
+  viewpoint VP3:
+    axis preserve_unsealed_intent_without_guessing
+
+step S14:
+  decision D4 based_on P3, PR3, EV3, VP3:
+    |
+      index以下にcandidate fileまたはnon-regular entryが一つでもあればdumpを拒否する。
+      candidate bytesは出力せず、sealまたはexplicit discardをoperatorへ要求する
+
+problem P4:
+  "logical dump のexact representationとdeterministic orderをどう固定するか"
+
+step S15:
+  premise PR4:
+    |
+      format 4 SealID rebuild はold parentとCause targetのnew ID mappingを先に必要とし、同一observationの
+      dump bytes は時刻、path、traversal orderから独立すべきである
+
+step S16:
+  evidence EV4:
+    |
+      format 3 Seal payload、attachment、Link は既にcanonical member/order contractを持ち、native object IDは
+      exact blob bytesから再計算できる
+
+step S17:
+  viewpoint VP4:
+    axis deterministic_topological_rebuild
+
+step S18:
+  decision D5 based_on P4, PR4, EV4, VP4:
+    |
+      objectsはfull ID順、SealsはparentとCause targetが先のcombined topological orderかつready tieをold ID順、
+      REFsはname順、tagsはref/name順、excluded objectsはID順とする。member order、base64 padding、single LFを固定し、
+      decode後のcanonical re-encode byte equalityを要求する
+
+problem P5:
+  "format 3 REF-scoped tag path collisionとformat 4未決namespaceをどう扱うか"
+
+step S19:
+  premise PR5:
+    |
+      format 3 refs/tags/REF/ENCODED_TAGNAME はhierarchical REFとtag leafがphysical prefix collisionし得る。
+      format 4 rename-safe tag namespaceはADR 0011で別approvalへdeferされている
+
+step S20:
+  evidence EV5:
+    |
+      tracked format 3 dogfoodにはtagsが存在し、現在のPERTはTAG_CONTRACTより先にFORMAT4_DOGFOOD_LOADを置くため、
+      tagをlosslessにpublishするstorage contractがその時点では存在しない
+
+step S21:
+  viewpoint VP5:
+    axis lossless_fail_closed_tag_conversion
+
+step S22:
+  decision D6 based_on P5, PR5, EV5, VP5:
+    |
+      dumpは全physical tag fileのunique logical attributionとtarget ownershipを検証し、raw REF、TAGNAME、targetを保存する。
+      format 4 loadはapproved rename-safe layoutなしにnon-empty tagsをpublishせず、TAG_CONTRACTをtag-bearing dogfood loadより
+      前へ移す
+
+step S23:
+  decision D7 based_on P5, PR5, EV5, VP5:
+    "loadがtagsをsilent dropするかprivate deferred manifestへ保存して先に進む"
+    annotation caveat:
+      "canonical tag stateを失うか未承認persisted formatを導入し、explicit migration receiptだけでは復元authorityが曖昧になる"
+    annotation status:
+      "rejected"
+    annotation rationale:
+      "namespace approvalまでfail closedしPERT orderingを修正する案を推奨する"
+
+step S24:
+  comparison CMP2 on P5 viewpoint VP5 relation preferred_over D6, D7:
+    "logical tag preservationとsequencing correctionはdata lossまたはhidden migration stateを作らない"
+
+problem P6:
+  "many old SealIDs to one format 4 SealID mappingをどう証明するか"
+
+step S25:
+  premise PR6:
+    |
+      format 4はowner refとLink target_refをidentityから除くため、異なるold Sealが同一rewritten payloadへcollapseし得る
+
+step S26:
+  evidence EV6:
+    |
+      dependency-first rebuildならparentとLink targetをcomplete mappingで置換し、new canonical bytesとSealIDを
+      deterministicに計算できる
+
+step S27:
+  viewpoint VP6:
+    axis explicit_non_injective_identity_receipt
+
+step S28:
+  decision D8 based_on P6, PR6, EV6, VP6:
+    |
+      future load receiptはexported old Seal全件のold_to_new pairと、new IDごとの2件以上のcomplete sorted
+      collapsed old ID groupを出力する。mappingはrepository内のhidden mutable stateとして保存しない
+
+problem P7:
+  "future format 4 loadのempty targetとpublication pointをどう定めるか"
+
+step S29:
+  premise PR7:
+    |
+      initialized repositoryへobjectsと複数REFを順次書くと、中間failureでpartial canonical stateが残り、
+      retryまたはrollbackがautomatic repairになり得る
+
+step S30:
+  evidence EV7:
+    |
+      initはsibling stagingからdirectory renameでcomplete standalone repositoryをpublishしており、
+      format 4 loadは既存stateとのmergeを必要としないone-time explicit initializationである
+
+step S31:
+  viewpoint VP7:
+    axis atomic_non_destructive_initial_load
+
+step S32:
+  decision D9 based_on P7, PR7, EV7, VP7:
+    |
+      loadはWORKDIR/.sealgraph absentのみを受理し、sibling stagingにcomplete format 4 repositoryを構築、
+      shared readerで全検証後にatomic no-replace directory publicationを行う。existing initialized repositoryは
+      emptyに見えてもreplace、merge、repairしない
+
+problem P8:
+  "dumpがread-onlyとcoherent observationをどこまで保証するか"
+
+step S33:
+  premise PR8:
+    |
+      read commandsはexclusive writer guardを取らず、manual filesystem writerまたはouter Gitはcooperative guardに従わない。
+      一方、partial stdoutはinvalid migration inputに見え得る
+
+step S34:
+  evidence EV8:
+    |
+      current stale frontierはcomplete current-head capture、buffer、revalidation後emitを行い、successをreservationとは扱わない
+
+step S35:
+  viewpoint VP8:
+    axis validated_buffered_non_mutating_observation
+
+step S36:
+  decision D10 based_on P8, PR8, EV8, VP8:
+    |
+      dumpはobjects、REFs、tags、candidatesのcomplete inventory/valueをcaptureして全検証とbuffer後に再検証し、
+      mismatchならzero stdoutでfailする。.sealgraphへlock、cache、temp、log、repairを書かない。
+      stdout sink failure後のprefixはexit 0とcanonical parseなしには受理しない
+
+problem P9:
+  "operator approval前後のimplementation boundaryは何か"
+
+step S37:
+  premise PR9:
+    |
+      WIP handoffはdump detail contractのoperator approval前にGo runtime codeを変更しないと明示し、
+      ADR 0011はformat 4 reader、load、dogfood conversionをseparate sequenced workとしている
+
+step S38:
+  evidence EV9:
+    |
+      current runtime、config、tracked dogfoodはformat 3であり、PERTはFORMAT3_LOGICAL_DUMPだけをreadyと判定する
+
+step S39:
+  viewpoint VP9:
+    axis approval_gated_vertical_slice
+
+step S40:
+  decision D11 based_on P9, PR9, EV9, VP9:
+    |
+      proposal approval後もfirst implementationはformat 3 dump、fixtures、corruption/no-mutation testsだけとする。
+      format 4 runtime/load、tracked dogfood、tag namespace、Git sidecar、release、external tracker writeは開始しない

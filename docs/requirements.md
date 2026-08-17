@@ -396,3 +396,29 @@ Sealgraph MUST NOT treat secret plaintext as a normal metadata field.
 Repository docs/tests MUST NOT include real credentials.
 
 Integration with secdat is optional and explicit; core operation does not depend on secdat.
+
+## 13. Explicit experimental migration boundary
+
+Before the format-4 runtime replaces the checked-in format-3 runtime, the
+format-3 binary MUST provide:
+
+```sh
+sealgraph dump --format logical-v1
+```
+
+The command emits one deterministic canonical
+`sealgraph/logical-dump/v1` document and MUST NOT change repository or Git
+state. Current REF heads and immutable tag targets root the exported parent and
+Cause closure. Referenced content/attachment bytes are included exactly;
+valid loose objects outside that logical graph are reported by identity and
+not copied.
+
+Any candidate entry, corrupt object, invalid REF/tag attribution, invalid
+Seal/graph, or changed final observation MUST reject the dump without
+plausible stdout. Candidate state is neither omitted nor translated.
+
+The future format-4 load MUST use only an absent `.sealgraph` target, complete
+staging validation, atomic no-replace publication, and an explicit complete
+old-to-new SealID receipt. It MUST NOT merge, replace, repair, or silently drop
+tags. A non-empty tag set remains unloadable until the rename-safe format-4 tag
+namespace is approved and implemented.

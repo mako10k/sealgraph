@@ -52,6 +52,26 @@ the complete revision/Cause graph, and publishes converted REFs explicitly.
 Many old owner-salted SealIDs may map to one format-4 SealID; the complete
 mapping is an output receipt, not hidden migration state.
 
+ADR 0012 fixes the format-3 command as `sealgraph dump --format logical-v1`
+and the envelope schema as `sealgraph/logical-dump/v1`. Its exact compact JSON
+member order is:
+
+```text
+schema, source_repository, objects, seals, refs, tags, excluded_objects
+```
+
+REF heads and tag targets root the exported parent/Cause closure. `objects`
+contains exact base64 payload bytes for referenced content and attachments;
+`seals` retains each canonical format-3 payload with its old SealID; and
+`excluded_objects` reports valid loose IDs outside both roles without copying
+their bytes. Any candidate or corruption rejects the dump.
+
+The future load target is stricter than an initialized empty repository:
+`.sealgraph` must be absent so a complete sibling staging directory can be
+validated and published atomically without replacement. Tag-bearing load
+remains blocked until the rename-safe format-4 tag layout is accepted. The
+format-4 runtime still never opens a format-3 repository directly.
+
 ## 3. Native object identity and Git ODB compatibility
 
 All native objects use the Git SHA-256 loose-blob envelope. Given payload `P`:

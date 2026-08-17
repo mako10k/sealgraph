@@ -24,16 +24,17 @@ artifacts are frozen.
 
 ## 2. Product blockers before freeze
 
-- [ ] Add the deterministic read-only format-3 logical dump.
+- [x] Add the deterministic read-only format-3 logical dump.
 - [ ] Implement format-4 canonical Seal/candidate bytes, fixtures, and
       empty-repository load with complete ID mapping.
 - [ ] Implement and validate active revision DAG, same-material sibling,
       active-leaf admission, stale cache/`--scan`, exact-Cause frontier, and
       bounded impact.
-- [ ] Explicitly convert tracked dogfood through dump/load and verify there is
-      no mixed-format or partial owner-check behavior.
 - [ ] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit
       pre-1.0 storage decision and tests.
+- [ ] Explicitly convert tracked dogfood through dump/load after the tag
+      contract and verify there is no tag loss, mixed-format state, or partial
+      owner-check behavior.
 - [ ] Complete SG-BL-002's deterministic explicit-path manifest builder.
 - [ ] Complete remaining SG-BL-001 acceptance coverage for unsafe file kinds
       and prove failure before candidate mutation.

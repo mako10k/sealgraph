@@ -34,6 +34,23 @@ func TestTagNameEncodingIsInjectiveAndEscapesSlash(t *testing.T) {
 	}
 }
 
+func TestTagStoreListAllRejectsREFTagPathCollision(t *testing.T) {
+	repositoryDir := t.TempDir()
+	for _, relative := range []string{filepath.Join("refs", "tags"), filepath.Join("locks", "tags")} {
+		if err := os.MkdirAll(filepath.Join(repositoryDir, relative), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tags := NewTagStore(repositoryDir)
+	id := ObjectID([]byte("target"))
+	if err := tags.Create(context.Background(), "ROOT", "child", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tags.ListAll(context.Background(), []string{"ROOT", "ROOT/child"}); err == nil || !strings.Contains(err.Error(), "collides with a hierarchical REF scope") {
+		t.Fatalf("REF/tag path collision error = %v", err)
+	}
+}
+
 func TestTagStoreIsImmutableIdempotentAndScoped(t *testing.T) {
 	repositoryDir := t.TempDir()
 	for _, relative := range []string{filepath.Join("refs", "tags"), "locks"} {

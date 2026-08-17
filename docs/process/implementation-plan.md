@@ -1,20 +1,21 @@
 # Initial implementation plan
 
-Status: phases through native format 3 are historical completed work. ADR 0011
-accepts a breaking format-4 implementation frontier. `PLAN.pert` is the current
-perttool projection.
+Status: phases through native format 3 and the ADR 0012 read-only logical dump
+are completed work. ADR 0011 accepts a breaking format-4 implementation
+frontier. `PLAN.pert` is the current perttool projection; dump completion does
+not authorize starting the format-4 runtime.
 
 ## Current format-4 frontier
 
 Proceed in this order; do not partially mix formats:
 
-1. add deterministic read-only logical dump to the format-3 binary;
+1. [x] add deterministic read-only logical dump to the format-3 binary;
 2. implement format-4 canonical Seal/candidate bytes and fixture hashes;
 3. add empty-repository load with complete old-to-new mapping;
 4. implement active revision indexing, `derive`, `add --parent`, active-leaf
    admission, stale cache/`--scan`, history, frontier, and bounded impact;
-5. explicitly convert tracked dogfood and exercise a same-material sibling;
-6. resolve rename-safe tag namespace and narrow crash-safe `mv`;
+5. resolve the rename-safe tag namespace and narrow crash-safe `mv`;
+6. explicitly convert tracked dogfood and exercise a same-material sibling;
 7. add read-only native tree views before selecting a Git SDK;
 8. prove staged/commit/merge-stage behavior in temporary SHA-1/SHA-256
    repositories, then add validation-only hook dispatch.
