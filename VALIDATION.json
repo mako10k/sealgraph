@@ -3,6 +3,10 @@
   "validation_go": "1.26.5",
 	"release_candidate": "0.1.0-beta.1",
 	"scope": "standalone Linux amd64; no file sync; no Git sidecar",
+	"fresh_checkout_source": "cb16a8614aa9832c662b29f55da89d6a79b11903",
+	"fsck_inventory": "objects=13,seals=7,material_objects=6,refs=6,tags=4,active_seals=7,historical_or_detached=0,unreferenced_objects=0",
+	"artifact_sha256": "09f33f9166c72b318b61d1f16d7ebc6f3843a4bf34c7dcaa62af43c03dfb1688",
+	"checksums_file_sha256": "50bd0ca446ebbf1886c6c41ceb24ca918b73b551a6624b5c1250771f4e5ea744",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
 	"result": "implementation-pass-release-gate-pending",
 	"note": "Final exact-SHA, remote CI, artifact digests, and publication evidence remain pending until the release candidate commit is frozen."

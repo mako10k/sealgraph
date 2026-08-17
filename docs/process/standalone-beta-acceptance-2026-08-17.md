@@ -29,6 +29,12 @@ The tracked repository observation was:
 FSCK_OK objects=13 seals=7 material_objects=6 refs=6 tags=4 active_seals=7 historical_or_detached=0 unreferenced_objects=0
 ```
 
+A detached fresh checkout of implementation commit
+`cb16a8614aa9832c662b29f55da89d6a79b11903` initially lacked ignored runtime
+directories. Explicit init reported `BOOTSTRAPPED_RUNTIME index,locks`, after
+which `fsck/v1` reproduced the same inventory above. The checkout remained
+free of tracked changes.
+
 Focused fixtures cover clean inventory, detached Seal reporting, unreferenced
 blob reporting, corrupt envelopes/hashes, missing material, human output, and
 `sealgraph/fsck/v1` JSON. Existing lower-level REF/object and graph fixtures
@@ -44,6 +50,13 @@ checksum files. The archive contains one top-level directory with exactly
 version, init, root/dependent publication, stale frontier, successful fsck, and
 corruption refusal.
 
-Artifact digests are intentionally not frozen here because README and
-acceptance metadata are still changing. They must be recomputed from the final
-clean exact SHA before publication approval.
+README, LICENSE, binary inputs, and archive rules were fixed at the detached
+implementation commit. Two builds were byte-identical and produced:
+
+```text
+archive sha256        09f33f9166c72b318b61d1f16d7ebc6f3843a4bf34c7dcaa62af43c03dfb1688
+checksums-file sha256 50bd0ca446ebbf1886c6c41ceb24ca918b73b551a6624b5c1250771f4e5ea744
+```
+
+The final clean candidate commit must reproduce these bytes before publication
+approval. Remote CI and downloaded-asset readback remain pending.

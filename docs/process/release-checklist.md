@@ -46,7 +46,7 @@ document does not authorize a tag, push, GitHub Release, or package publication.
 - [x] Implement the read-only full-inventory `fsck` slice from SG-BL-009.
 - [x] Run the controlled recurring manifest/one-REF Seal/history/diff workflow
       from a fresh checkout without claiming self-sealing.
-- [ ] Run beta `fsck` from a fresh canonical checkout and record full inventory.
+- [x] Run beta `fsck` from a fresh canonical checkout and record full inventory.
 - [ ] Reconcile implemented backlog Issues with executable acceptance evidence;
       do not close partially implemented Issues merely to make the release look
       complete.
@@ -104,7 +104,7 @@ perttool dag analyze PLAN.pert
       provenance-metadata commit without claiming self-sealing.
 - [ ] `sealgraph stale --refs-only` and `--frontier --refs-only` have the
       expected exact bytes after the dogfood sequence.
-- [ ] `fsck` succeeds from a fresh canonical checkout after explicit runtime
+- [x] `fsck` succeeds from a fresh canonical checkout after explicit runtime
       bootstrap.
 - [ ] Artifact SHA-256 checksums are computed after the final archive bytes are
       fixed and independently rechecked.
