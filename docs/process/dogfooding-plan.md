@@ -300,3 +300,41 @@ The focused round must:
 This round completes the tracked conversion gate only. It does not complete
 the recurring dogfood, Git sidecar, release, publication, or external tracker
 gates.
+
+## 12. Recurring two-commit workflow
+
+Each recurring round separates source identity from provenance metadata:
+
+1. Make and validate one controlled source/documentation change, then commit
+   it with no candidate or new canonical Seal state. Freeze that commit as
+   `SOURCE_COMMIT`.
+2. Export or check out exactly `SOURCE_COMMIT`, build the standalone binary
+   there with `-buildvcs=false -trimpath`, and record its SHA-256. Do not build
+   a claimed source artifact from later uncommitted files.
+3. Run `sealgraph manifest --source git:SOURCE_COMMIT` with an explicit path
+   list against that exact tree. The standalone command receives the source
+   identity as data; it does not inspect `.git`.
+4. In the working repository, update exactly one reviewed REF candidate using
+   `add --content-file`, add each concrete dependency with explicit `link`
+   commands when distinct messages are needed, inspect the candidate, and
+   invoke `seal` for that one REF only.
+5. Capture versioned JSON from `show`, `status`, `graph`, `impact`, `log`, and
+   `diff` as applicable. Record complete IDs and command results in a receipt;
+   do not turn an impact or stale result into an automatic mutation plan.
+6. Stage only the receipt, planned metadata, loose immutable objects, and REF
+   manifests. Reject `index`, `cache`, `locks`, logs, candidates, temporary
+   archives, and binaries. Commit this as `SEAL_METADATA_COMMIT`.
+7. Reproduce from a fresh checkout of `SEAL_METADATA_COMMIT`: run explicit
+   `sealgraph init` to bootstrap ignored runtime directories, rebuild the
+   exact source tree named by `SOURCE_COMMIT`, regenerate the manifest, and
+   compare it byte-for-byte before read-only JSON inspection.
+
+`SEAL_METADATA_COMMIT` necessarily differs from `SOURCE_COMMIT`: it contains
+the Seal and receipt that identify the predecessor. The current outer checkout
+may differ again while verification notes are being prepared. None of those
+later commits may be described as content sealed by the earlier manifest.
+
+No recurring round installs a hook, discovers Git from standalone code,
+automatically seals after a commit, batch-seals, recursively repairs, or
+silently relinks stale downstream REFs. Failure leaves the candidate explicit
+for review or discard and blocks the metadata commit.

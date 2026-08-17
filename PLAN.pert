@@ -1,5 +1,5 @@
 project SEALGRAPH:
-  version 2
+  version 5
   title "Sealgraph initial implementation"
   as_of 2026-08-14
   duration_unit point
@@ -179,6 +179,7 @@ task OPERATOR_CONTRACT FORMAT4_DOGFOOD -> USABLE:
 task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
   title "Exercise recurring tracked workflow (SG-BL-008)"
   duration 1p
+  status active
 
 task GIT_SIDECAR DOGFOOD_R2 -> GIT:
   title "Implement staged/commit tree validation, hook dispatch, and merge-stage inspection"
@@ -187,3 +188,10 @@ task GIT_SIDECAR DOGFOOD_R2 -> GIT:
 task RELEASE_GATE GIT -> READY:
   title "Add fsck, integration tests, docs, and release checks"
   duration 3p
+
+work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
+  model 1
+  task DOGFOOD_RECURRING
+  kind start
+  occurred_at 2026-08-17T12:57:19+09:00
+  planned_value 1p
