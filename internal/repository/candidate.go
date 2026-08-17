@@ -2,16 +2,15 @@ package repository
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/store"
 )
@@ -50,15 +49,9 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 		}
 		return candidateSnapshot{}, fmt.Errorf("read candidate %s: %w", ref, err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var candidate domain.Candidate
-	if err := decoder.Decode(&candidate); err != nil {
+	candidate, err := canonical.DecodeCandidate(data)
+	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("candidate %s is corrupt: %w; recreate it explicitly with add", ref, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return candidateSnapshot{}, fmt.Errorf("candidate %s has trailing data; recreate it explicitly with add", ref)
 	}
 	if candidate.REF != ref {
 		return candidateSnapshot{}, fmt.Errorf("candidate path %s contains REF %s; recreate it explicitly", ref, candidate.REF)
@@ -92,11 +85,10 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 		}
 		return fmt.Errorf("create candidate directory: %w", err)
 	}
-	data, err := json.MarshalIndent(candidate, "", "  ")
+	data, err := canonical.EncodeCandidate(candidate)
 	if err != nil {
 		return fmt.Errorf("encode candidate %s: %w", candidate.REF, err)
 	}
-	data = append(data, '\n')
 	temp, err := os.CreateTemp(filepath.Dir(path), ".tmp-candidate-")
 	if err != nil {
 		return fmt.Errorf("create candidate temporary file: %w", err)

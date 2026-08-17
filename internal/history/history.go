@@ -13,7 +13,8 @@ import (
 // LoadSealFunc loads and validates one immutable canonical seal.
 type LoadSealFunc func(context.Context, domain.ObjectID) (domain.SealPayload, error)
 
-// Identity identifies one exact generation in a logical REF history.
+// Identity identifies one exact immutable generation. REF is optional display
+// scope and is never validated as Seal ownership.
 type Identity struct {
 	REF  string
 	Seal domain.ObjectID
@@ -43,8 +44,8 @@ func (err *CycleError) Error() string {
 	return "cycle detected in immutable seal parent history: " + strings.Join(parts, " -> ")
 }
 
-// Walk loads the complete parent chain for one logical REF. It validates every
-// seal before returning so callers never print a partial history.
+// Walk loads the complete parent chain from one REF head. REF is presentation
+// context only; format-4 Seals do not contain an owner.
 func Walk(ctx context.Context, ref string, head domain.ObjectID, load LoadSealFunc) ([]Entry, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return nil, err
@@ -75,13 +76,10 @@ func Walk(ctx context.Context, ref string, head domain.ObjectID, load LoadSealFu
 		if err != nil {
 			return nil, fmt.Errorf("load history generation %s@%s: %w", ref, current, err)
 		}
-		if payload.REF != ref {
-			return nil, fmt.Errorf("history generation %s belongs to REF %s, not %s", current, payload.REF, ref)
-		}
 		entries = append(entries, Entry{ID: current, Payload: payload})
-		if payload.Parent == nil {
+		if payload.ParentRevision == nil {
 			return entries, nil
 		}
-		current = *payload.Parent
+		current = *payload.ParentRevision
 	}
 }

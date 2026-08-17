@@ -11,7 +11,6 @@ type LinkChangeKind string
 const (
 	LinkAdd     LinkChangeKind = "ADD"
 	LinkRemove  LinkChangeKind = "REMOVE"
-	LinkRepoint LinkChangeKind = "REPOINT"
 	LinkMessage LinkChangeKind = "MESSAGE_CHANGE"
 )
 
@@ -19,7 +18,7 @@ const (
 // newer seal state. Before and After are concrete seal identities.
 type LinkChange struct {
 	Kind          LinkChangeKind
-	TargetREF     string
+	TargetSeal    domain.ObjectID
 	BeforeSeal    *domain.ObjectID
 	AfterSeal     *domain.ObjectID
 	BeforeMessage string
@@ -34,20 +33,21 @@ type LinkLogEntry struct {
 	Changes []LinkChange
 }
 
-// DiffLinks derives add, remove, repoint, and message events in deterministic
-// target-REF order.
+// DiffLinks derives exact-target add, remove, and message events in
+// deterministic SealID order. Ancestry-based repoint presentation belongs to
+// the revision-graph slice.
 func DiffLinks(before, after []domain.Link) []LinkChange {
 	type linkKey string
 	beforeByKey := make(map[linkKey]domain.Link, len(before))
 	afterByKey := make(map[linkKey]domain.Link, len(after))
 	keys := make(map[linkKey]bool, len(before)+len(after))
 	for _, link := range before {
-		key := linkKey(link.TargetREF)
+		key := linkKey(link.TargetSeal.String())
 		beforeByKey[key] = link
 		keys[key] = true
 	}
 	for _, link := range after {
-		key := linkKey(link.TargetREF)
+		key := linkKey(link.TargetSeal.String())
 		afterByKey[key] = link
 		keys[key] = true
 	}
@@ -64,17 +64,13 @@ func DiffLinks(before, after []domain.Link) []LinkChange {
 		switch {
 		case !hadBefore && hasAfter:
 			afterID := newLink.TargetSeal
-			changes = append(changes, LinkChange{Kind: LinkAdd, TargetREF: string(key), AfterSeal: &afterID, AfterMessage: newLink.Message})
+			changes = append(changes, LinkChange{Kind: LinkAdd, TargetSeal: afterID, AfterSeal: &afterID, AfterMessage: newLink.Message})
 		case hadBefore && !hasAfter:
 			beforeID := oldLink.TargetSeal
-			changes = append(changes, LinkChange{Kind: LinkRemove, TargetREF: string(key), BeforeSeal: &beforeID, BeforeMessage: oldLink.Message})
+			changes = append(changes, LinkChange{Kind: LinkRemove, TargetSeal: beforeID, BeforeSeal: &beforeID, BeforeMessage: oldLink.Message})
 		default:
-			if !oldLink.TargetSeal.Equal(newLink.TargetSeal) {
-				beforeID, afterID := oldLink.TargetSeal, newLink.TargetSeal
-				changes = append(changes, LinkChange{Kind: LinkRepoint, TargetREF: string(key), BeforeSeal: &beforeID, AfterSeal: &afterID})
-			}
 			if oldLink.Message != newLink.Message {
-				changes = append(changes, LinkChange{Kind: LinkMessage, TargetREF: string(key), BeforeMessage: oldLink.Message, AfterMessage: newLink.Message})
+				changes = append(changes, LinkChange{Kind: LinkMessage, TargetSeal: oldLink.TargetSeal, BeforeMessage: oldLink.Message, AfterMessage: newLink.Message})
 			}
 		}
 	}
@@ -82,8 +78,8 @@ func DiffLinks(before, after []domain.Link) []LinkChange {
 }
 
 // DeriveLinkLog compares each generation with its parent. The optional
-// upstream filter matches one exact logical target REF.
-func DeriveLinkLog(entries []Entry, upstream string) []LinkLogEntry {
+// target filter matches one exact full target SealID.
+func DeriveLinkLog(entries []Entry, target string) []LinkLogEntry {
 	result := make([]LinkLogEntry, 0, len(entries))
 	for i, entry := range entries {
 		var parentLinks []domain.Link
@@ -91,10 +87,10 @@ func DeriveLinkLog(entries []Entry, upstream string) []LinkLogEntry {
 			parentLinks = entries[i+1].Payload.Links
 		}
 		changes := DiffLinks(parentLinks, entry.Payload.Links)
-		if upstream != "" {
+		if target != "" {
 			filtered := changes[:0]
 			for _, change := range changes {
-				if change.TargetREF == upstream {
+				if change.TargetSeal.String() == target {
 					filtered = append(filtered, change)
 				}
 			}

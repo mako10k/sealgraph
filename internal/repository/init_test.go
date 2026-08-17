@@ -53,17 +53,19 @@ func TestInitRejectsUnsafeExistingRepositoryDirectory(t *testing.T) {
 	}
 }
 
-func TestInitRejectsFormatTwoWithoutMigration(t *testing.T) {
+func TestInitRejectsOlderFormatsWithoutMigration(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := InitStandalone(dir); err != nil {
 		t.Fatal(err)
 	}
 	config := filepath.Join(dir, ".sealgraph", "config")
-	if err := os.WriteFile(config, []byte("repository_format = 2\nobject_format = sha256\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := InitStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
-		t.Fatalf("format-2 init error = %v", err)
+	for _, format := range []string{"1", "2", "3"} {
+		if err := os.WriteFile(config, []byte("repository_format = "+format+"\nobject_format = sha256\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := InitStandalone(dir); err == nil || !strings.Contains(err.Error(), "unsupported or malformed config") {
+			t.Fatalf("format-%s init error = %v", format, err)
+		}
 	}
 }
 

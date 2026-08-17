@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
 func fixtureID(char byte) domain.ObjectID {
@@ -14,38 +13,42 @@ func fixtureID(char byte) domain.ObjectID {
 }
 
 func fixturePayload() domain.SealPayload {
+	parent := fixtureID('e')
 	return domain.SealPayload{
-		Schema:      domain.SealSchema,
-		REF:         "design/api/DESIGN-001",
-		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('a')},
-		Attachments: []domain.Attachment{},
+		Schema:         domain.SealSchema,
+		ParentRevision: &parent,
+		Content:        domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('a')},
+		Attachments:    []domain.Attachment{},
 		Links: []domain.Link{
-			{TargetREF: "requirements/REQ-B", TargetSeal: fixtureID('c'), Message: "later input"},
-			{TargetREF: "requirements/REQ-A", TargetSeal: fixtureID('b'), Message: "review basis"},
+			{TargetSeal: fixtureID('c'), Message: "later input"},
+			{TargetSeal: fixtureID('b'), Message: "review basis"},
 		},
 	}
 }
 
-func TestCanonicalSealFixtureHash(t *testing.T) {
+func TestCanonicalFormat4SealFixture(t *testing.T) {
 	encoded, err := EncodeSeal(fixturePayload())
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := native.ObjectID(encoded)
-	const expected = "1252494cb709ab0721fa9849d68e36fcd4776d1b63013f257ad780ffcac13203"
-	if id.Hex != expected {
-		t.Fatalf("fixture hash = %s, want %s\npayload=%s", id.Hex, expected, encoded)
+	const expected = `{"schema":"sealgraph/seal/v4","parent_revision":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","content":{"store":"native","type":"blob","id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"attachments":[],"links":[{"target_seal":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","message":"review basis"},{"target_seal":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","message":"later input"}],"root":false,"draft":false}`
+	if string(encoded) != expected {
+		t.Fatalf("canonical format-4 bytes differ:\n%s", encoded)
+	}
+	const expectedID = "d73988845debf3a426e92b33b3269f6dcca41f5dce265f8630c80f88911364ec"
+	if id := domain.ComputeNativeBlobID(encoded); id.String() != expectedID {
+		t.Fatalf("fixture hash = %s, want %s", id, expectedID)
 	}
 	decoded, err := DecodeSeal(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decoded.Links[0].TargetREF != "requirements/REQ-A" {
-		t.Fatalf("links were not canonicalized: %+v", decoded.Links)
+	if !decoded.Links[0].TargetSeal.Equal(fixtureID('b')) {
+		t.Fatalf("links were not sorted by exact target: %+v", decoded.Links)
 	}
 }
 
-func TestDependencyInputOrderHasSameCanonicalRepresentation(t *testing.T) {
+func TestFormat4SealInputOrderAndREFIndependence(t *testing.T) {
 	first := fixturePayload()
 	second := fixturePayload()
 	second.Links[0], second.Links[1] = second.Links[1], second.Links[0]
@@ -58,78 +61,50 @@ func TestDependencyInputOrderHasSameCanonicalRepresentation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(a, b) {
-		t.Fatalf("canonical payload differs by link input order:\n%s\n%s", a, b)
+		t.Fatal("link input order changed canonical identity")
+	}
+	if bytes.Contains(a, []byte(`"ref"`)) || bytes.Contains(a, []byte("target_ref")) {
+		t.Fatalf("format-4 Seal retained REF ownership: %s", a)
 	}
 }
 
-func TestDirectUpstreamAndLinkMessageAffectSealIdentity(t *testing.T) {
+func TestFormat4IdentityCommitsParentTargetAndMessage(t *testing.T) {
 	base := fixturePayload()
-	encoded, err := EncodeSeal(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	baseID := native.ObjectID(encoded)
-
-	upstream := fixturePayload()
-	upstream.Links[0].TargetSeal = fixtureID('d')
-	upstreamBytes, err := EncodeSeal(upstream)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if baseID.Equal(native.ObjectID(upstreamBytes)) {
-		t.Fatal("changing only direct upstream seal identity did not change seal identity")
-	}
-
-	linkMessage := fixturePayload()
-	linkMessage.Links[0].Message = "different edge rationale"
-	linkMessageBytes, err := EncodeSeal(linkMessage)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if baseID.Equal(native.ObjectID(linkMessageBytes)) {
-		t.Fatal("changing only a link message did not change seal identity")
-	}
-
-}
-
-func TestDecoderRejectsSealEventMetadata(t *testing.T) {
-	encoded, err := EncodeSeal(fixturePayload())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, member := range []string{`,"message":"event"`, `,"created_at":"2026-08-14T00:00:00Z"`, `,"actor":"operator"`} {
-		withMetadata := append([]byte(nil), encoded[:len(encoded)-1]...)
-		withMetadata = append(withMetadata, member...)
-		withMetadata = append(withMetadata, '}')
-		if _, err := DecodeSeal(withMetadata); err == nil {
-			t.Fatalf("seal event metadata was accepted: %s", member)
+	baseBytes, _ := EncodeSeal(base)
+	baseID := domain.ComputeNativeBlobID(baseBytes)
+	variants := []domain.SealPayload{fixturePayload(), fixturePayload(), fixturePayload()}
+	variants[0].ParentRevision = nil
+	variants[1].Links[0].TargetSeal = fixtureID('d')
+	variants[2].Links[0].Message = "different"
+	for i, variant := range variants {
+		encoded, err := EncodeSeal(variant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if domain.ComputeNativeBlobID(encoded).Equal(baseID) {
+			t.Fatalf("identity-bearing variant %d did not change SealID", i)
 		}
 	}
 }
 
-func TestCanonicalSealDoesNotPersistStaleState(t *testing.T) {
-	encoded, err := EncodeSeal(fixturePayload())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(bytes.ToLower(encoded), []byte("stale")) {
-		t.Fatalf("canonical seal contains derived stale state: %s", encoded)
-	}
-}
-
-func TestDuplicateDependencyREFIsRejected(t *testing.T) {
+func TestFormat4SealRejectsDuplicateTargetAndNoncanonicalBytes(t *testing.T) {
 	payload := fixturePayload()
-	payload.Links[1].TargetREF = payload.Links[0].TargetREF
+	payload.Links[1].TargetSeal = payload.Links[0].TargetSeal
 	if _, err := EncodeSeal(payload); err == nil {
-		t.Fatal("duplicate dependency REF was accepted")
+		t.Fatal("duplicate exact Cause target was accepted")
+	}
+	encoded, _ := EncodeSeal(fixturePayload())
+	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v4","parent_revision":`), []byte(`{"parent_revision":`), 1)
+	if _, err := DecodeSeal(changed); err == nil {
+		t.Fatal("noncanonical member set/order was accepted")
 	}
 }
 
-func TestAttachmentOrderAndDuplicateNamePolicy(t *testing.T) {
+func TestFormat4AttachmentOrderAndDuplicateName(t *testing.T) {
 	payload := fixturePayload()
 	payload.Attachments = []domain.Attachment{
-		{Name: "z.txt", MediaType: "text/plain", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('e')}},
-		{Name: "a.txt", MediaType: "text/plain", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('f')}},
+		{Name: "z", MediaType: "text/plain", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('f')}},
+		{Name: "a", MediaType: "text/plain", Blob: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: fixtureID('d')}},
 	}
 	first, err := EncodeSeal(payload)
 	if err != nil {
@@ -141,24 +116,10 @@ func TestAttachmentOrderAndDuplicateNamePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(first, second) {
-		t.Fatal("attachment input order changed canonical bytes")
+		t.Fatal("attachment order changed canonical bytes")
 	}
 	payload.Attachments[1].Name = payload.Attachments[0].Name
 	if _, err := EncodeSeal(payload); err == nil {
 		t.Fatal("duplicate attachment name was accepted")
-	}
-}
-
-func TestDecoderRejectsNonCanonicalMemberOrder(t *testing.T) {
-	encoded, err := EncodeSeal(fixturePayload())
-	if err != nil {
-		t.Fatal(err)
-	}
-	changed := bytes.Replace(encoded, []byte(`{"schema":"sealgraph/seal/v3","ref":`), []byte(`{"ref":`), 1)
-	if bytes.Equal(changed, encoded) {
-		t.Fatal("test setup did not alter bytes")
-	}
-	if _, err := DecodeSeal(changed); err == nil {
-		t.Fatal("non-canonical payload was accepted")
 	}
 }

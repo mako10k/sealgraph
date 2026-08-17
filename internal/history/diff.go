@@ -38,7 +38,6 @@ type AttachmentChangeRecord struct {
 // SealDiff is a semantic comparison from one exact generation to another.
 // Empty attachment/link change slices mean those canonical sets are unchanged.
 type SealDiff struct {
-	REF         string
 	From        domain.ObjectID
 	To          domain.ObjectID
 	Content     ValueChange[domain.ContentRef]
@@ -85,14 +84,9 @@ func copyObjectID(id *domain.ObjectID) *domain.ObjectID {
 	return &copy
 }
 
-// DiffSeals compares all material canonical fields between two generations of
-// the same logical REF. Schema equality follows from canonical v3 decoding.
+// DiffSeals compares all material canonical fields between two format-4 Seals.
 func DiffSeals(fromID domain.ObjectID, from domain.SealPayload, toID domain.ObjectID, to domain.SealPayload) (SealDiff, error) {
-	if from.REF != to.REF {
-		return SealDiff{}, fmt.Errorf("cannot compare seal generations from different REFs: %s and %s", from.REF, to.REF)
-	}
 	return SealDiff{
-		REF:         from.REF,
 		From:        fromID,
 		To:          toID,
 		Content:     valueChange(from.Content, to.Content),
@@ -100,7 +94,7 @@ func DiffSeals(fromID domain.ObjectID, from domain.SealPayload, toID domain.Obje
 		Links:       DiffLinks(from.Links, to.Links),
 		Root:        valueChange(from.Root, to.Root),
 		Draft:       valueChange(from.Draft, to.Draft),
-		Parent:      parentChange(from.Parent, to.Parent),
+		Parent:      parentChange(from.ParentRevision, to.ParentRevision),
 	}, nil
 }
 
@@ -119,9 +113,6 @@ func DiffCandidate(base *domain.SealPayload, candidate domain.Candidate) (Candid
 			Root:        valueChange(false, candidate.Root),
 			Draft:       valueChange(false, candidate.Draft),
 		}, nil
-	}
-	if base.REF != candidate.REF {
-		return CandidateDiff{}, fmt.Errorf("cannot compare candidate %s with base owned by %s", candidate.REF, base.REF)
 	}
 	return CandidateDiff{
 		Content:     valueChange(base.Content, candidate.Content),

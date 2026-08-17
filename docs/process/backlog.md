@@ -394,8 +394,8 @@ Before Git sidecar:
 
 1. `FORMAT3_LOGICAL_DUMP`: preserve an explicit export boundary before the
    runtime reader changes.
-2. `FORMAT4_NATIVE_CORE` and `FORMAT4_REVISION_GRAPH`: implement ADR 0011
-   without a dual reader or partial owner-check removal.
+2. `FORMAT4_NATIVE_CORE` is complete; next implement `FORMAT4_REVISION_GRAPH`
+   without reintroducing a dual reader or owner-relative graph checks.
 3. `TAG_CONTRACT`: SG-BL-010 selects a rename-safe format-4 namespace and
    narrow `mv` transaction without compatibility scaffolding.
 4. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise

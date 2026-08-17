@@ -13,8 +13,8 @@ import (
 const (
 	NativeStore     = "native"
 	BlobType        = "blob"
-	SealSchema      = "sealgraph/seal/v3"
-	CandidateSchema = "sealgraph/candidate/v3"
+	SealSchema      = "sealgraph/seal/v4"
+	CandidateSchema = "sealgraph/candidate/v4"
 )
 
 // ObjectID is a full native SHA-256 object name. The repository config fixes
@@ -96,7 +96,6 @@ func (ref ContentRef) ValidateNativeBlob() error {
 
 // Link commits a dependent seal to one exact upstream seal generation.
 type Link struct {
-	TargetREF  string   `json:"target_ref"`
 	TargetSeal ObjectID `json:"target_seal"`
 	Message    string   `json:"message"`
 }
@@ -108,29 +107,30 @@ type Attachment struct {
 	Blob      ContentRef `json:"blob"`
 }
 
-// SealPayload is the semantic payload encoded by sealgraph-canonical-json-v2.
+// SealPayload is the REF-independent immutable format-4 payload.
 type SealPayload struct {
-	Schema      string       `json:"schema"`
-	REF         string       `json:"ref"`
-	Parent      *ObjectID    `json:"parent"`
-	Content     ContentRef   `json:"content"`
-	Attachments []Attachment `json:"attachments"`
-	Links       []Link       `json:"links"`
-	Root        bool         `json:"root"`
-	Draft       bool         `json:"draft"`
+	Schema         string       `json:"schema"`
+	ParentRevision *ObjectID    `json:"parent_revision"`
+	Content        ContentRef   `json:"content"`
+	Attachments    []Attachment `json:"attachments"`
+	Links          []Link       `json:"links"`
+	Root           bool         `json:"root"`
+	Draft          bool         `json:"draft"`
 }
 
-// Candidate is mutable working state. Base is the REF head observed when the
-// candidate was first derived and is used for compare-and-swap sealing.
+// Candidate is mutable working state. ParentRevision is immutable derivation
+// topology for the next Seal. ExpectedREFHead is separate publication CAS
+// state for the destination REF.
 type Candidate struct {
-	Schema      string       `json:"schema"`
-	REF         string       `json:"ref"`
-	Base        *ObjectID    `json:"base"`
-	Content     ContentRef   `json:"content"`
-	Attachments []Attachment `json:"attachments"`
-	Links       []Link       `json:"links"`
-	Root        bool         `json:"root"`
-	Draft       bool         `json:"draft"`
+	Schema          string       `json:"schema"`
+	REF             string       `json:"ref"`
+	ParentRevision  *ObjectID    `json:"parent_revision"`
+	ExpectedREFHead *ObjectID    `json:"expected_ref_head"`
+	Content         ContentRef   `json:"content"`
+	Attachments     []Attachment `json:"attachments"`
+	Links           []Link       `json:"links"`
+	Root            bool         `json:"root"`
+	Draft           bool         `json:"draft"`
 }
 
 // ValidateREF applies Git check-ref-format-compatible rules to the full name

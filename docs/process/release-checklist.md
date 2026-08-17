@@ -10,8 +10,8 @@ artifacts are frozen.
 
 - Target: `v0.1.0-alpha.1`.
 - Product surface: standalone `sealgraph` only.
-- Repository format: native format 4 after implementation; the current
-  format-3 runtime is not a release candidate.
+- Repository format: native format 4. The tracked project dogfood remains
+  format 3 and is not runtime-compatible until explicit conversion.
 - Compatibility policy: formats 1 through 3 remain unsupported by the
   format-4 runtime; pre-1.0 breaking
   regeneration is allowed and preferred over compatibility scaffolding.
@@ -25,7 +25,7 @@ artifacts are frozen.
 ## 2. Product blockers before freeze
 
 - [x] Add the deterministic read-only format-3 logical dump.
-- [ ] Implement format-4 canonical Seal/candidate bytes, fixtures, and
+- [x] Implement format-4 canonical Seal/candidate bytes, fixtures, and
       empty-repository load with complete ID mapping.
 - [ ] Implement and validate active revision DAG, same-material sibling,
       active-leaf admission, stale cache/`--scan`, exact-Cause frontier, and

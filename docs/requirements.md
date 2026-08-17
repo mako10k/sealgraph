@@ -1,8 +1,8 @@
 # Sealgraph requirements
 
 Status: normative format-4 contract accepted by ADR 0011. The checked-in Go
-runtime remains format 3 until the sequenced implementation and explicit
-dump/load transition are completed.
+runtime implements the canonical/candidate, selector, and explicit load core;
+active revision/graph behavior and tags remain gated.
 
 ## 1. Purpose
 
@@ -399,8 +399,7 @@ Integration with secdat is optional and explicit; core operation does not depend
 
 ## 13. Explicit experimental migration boundary
 
-Before the format-4 runtime replaces the checked-in format-3 runtime, the
-format-3 binary MUST provide:
+The final format-3 binary before the runtime transition provides:
 
 ```sh
 sealgraph dump --format logical-v1
@@ -417,7 +416,7 @@ Any candidate entry, corrupt object, invalid REF/tag attribution, invalid
 Seal/graph, or changed final observation MUST reject the dump without
 plausible stdout. Candidate state is neither omitted nor translated.
 
-The future format-4 load MUST use only an absent `.sealgraph` target, complete
+The format-4 load MUST use only an absent `.sealgraph` target, complete
 staging validation, atomic no-replace publication, and an explicit complete
 old-to-new SealID receipt. It MUST NOT merge, replace, repair, or silently drop
 tags. A non-empty tag set remains unloadable until the rename-safe format-4 tag

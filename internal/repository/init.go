@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-const configBytes = "repository_format = 3\nobject_format = sha256\n"
+const configBytes = "repository_format = 4\nobject_format = sha256\n"
 
 // InitStandalone initializes only workDir/.sealgraph. It never probes Git or
 // searches parent directories.

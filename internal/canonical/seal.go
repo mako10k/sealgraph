@@ -1,4 +1,4 @@
-// Package canonical implements the native v2 canonical seal byte contract.
+// Package canonical implements native canonical byte contracts.
 package canonical
 
 import (
@@ -23,16 +23,11 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	b = append(b, `,"ref":`...)
-	b, err = AppendString(b, normalized.REF)
-	if err != nil {
-		return nil, err
-	}
-	b = append(b, `,"parent":`...)
-	if normalized.Parent == nil {
+	b = append(b, `,"parent_revision":`...)
+	if normalized.ParentRevision == nil {
 		b = append(b, "null"...)
 	} else {
-		b, err = appendObjectID(b, *normalized.Parent)
+		b, err = appendObjectID(b, *normalized.ParentRevision)
 		if err != nil {
 			return nil, err
 		}
@@ -69,12 +64,7 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 		if i > 0 {
 			b = append(b, ',')
 		}
-		b = append(b, `{"target_ref":`...)
-		b, err = AppendString(b, link.TargetREF)
-		if err != nil {
-			return nil, err
-		}
-		b = append(b, `,"target_seal":`...)
+		b = append(b, `{"target_seal":`...)
 		b, err = appendObjectID(b, link.TargetSeal)
 		if err != nil {
 			return nil, err
@@ -87,17 +77,9 @@ func EncodeSeal(payload domain.SealPayload) ([]byte, error) {
 		b = append(b, '}')
 	}
 	b = append(b, `],"root":`...)
-	if normalized.Root {
-		b = append(b, "true"...)
-	} else {
-		b = append(b, "false"...)
-	}
+	b = AppendBool(b, normalized.Root)
 	b = append(b, `,"draft":`...)
-	if normalized.Draft {
-		b = append(b, "true"...)
-	} else {
-		b = append(b, "false"...)
-	}
+	b = AppendBool(b, normalized.Draft)
 	b = append(b, '}')
 	return b, nil
 }
@@ -183,4 +165,12 @@ func AppendString(b []byte, value string) ([]byte, error) {
 	}
 	b = append(b, '"')
 	return b, nil
+}
+
+// AppendBool appends one canonical JSON boolean.
+func AppendBool(b []byte, value bool) []byte {
+	if value {
+		return append(b, "true"...)
+	}
+	return append(b, "false"...)
 }

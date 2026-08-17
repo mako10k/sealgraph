@@ -1,17 +1,17 @@
 # Initial implementation plan
 
-Status: phases through native format 3 and the ADR 0012 read-only logical dump
-are completed work. ADR 0011 accepts a breaking format-4 implementation
-frontier. `PLAN.pert` is the current perttool projection; dump completion does
-not authorize starting the format-4 runtime.
+Status: phases through the format-4 canonical/candidate, selector, and atomic
+logical-v1 load core are completed. `PLAN.pert` is the current perttool
+projection; the next frontier is the active revision graph, not tags, tracked
+dogfood conversion, Git, or release.
 
 ## Current format-4 frontier
 
 Proceed in this order; do not partially mix formats:
 
 1. [x] add deterministic read-only logical dump to the format-3 binary;
-2. implement format-4 canonical Seal/candidate bytes and fixture hashes;
-3. add empty-repository load with complete old-to-new mapping;
+2. [x] implement format-4 canonical Seal/candidate bytes and fixture hashes;
+3. [x] add empty-repository load with complete old-to-new mapping;
 4. implement active revision indexing, `derive`, `add --parent`, active-leaf
    admission, stale cache/`--scan`, history, frontier, and bounded impact;
 5. resolve the rename-safe tag namespace and narrow crash-safe `mv`;
@@ -20,9 +20,10 @@ Proceed in this order; do not partially mix formats:
 8. prove staged/commit/merge-stage behavior in temporary SHA-1/SHA-256
    repositories, then add validation-only hook dispatch.
 
-Runtime, tracked `.sealgraph`, and release claims remain format 3 until the
-corresponding dump/load and implementation gates pass. ADR acceptance alone is
-not migration authority.
+The runtime now writes format 4. The tracked project `.sealgraph` remains
+format 3 until `TAG_CONTRACT` permits a lossless explicit conversion, and is
+therefore intentionally unreadable by the current runtime. Release claims stay
+blocked until the remaining graph, tag, dogfood, and release gates pass.
 
 ## Historical implementation phases
 

@@ -60,6 +60,7 @@ milestone FORMAT3_DUMP:
 
 milestone FORMAT4_RUNTIME:
   title "Format-4 native repository works"
+  state reached
 
 milestone REVISION_DAG:
   title "Branching revision and Cause graph semantics work"
@@ -140,6 +141,7 @@ task FORMAT3_LOGICAL_DUMP FORMAT4_DESIGN -> FORMAT3_DUMP:
 task FORMAT4_NATIVE_CORE FORMAT3_DUMP -> FORMAT4_RUNTIME:
   title "Implement format-4 canonical Seal, candidate, selector, and dump/load core"
   duration 6p
+  status done
 
 task FORMAT4_REVISION_GRAPH FORMAT4_RUNTIME -> REVISION_DAG:
   title "Implement active revision DAG, derive/add-parent, stale cache/scan, history, and impact"

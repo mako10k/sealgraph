@@ -10,21 +10,21 @@ import (
 	"github.com/mako10k/sealgraph/internal/store"
 )
 
-type CandidateBaseState string
+type CandidateExpectedHeadState string
 
 const (
-	CandidateBaseInitial        CandidateBaseState = "INITIAL"
-	CandidateBaseCurrent        CandidateBaseState = "CURRENT"
-	CandidateBaseHeadAdvanced   CandidateBaseState = "HEAD_ADVANCED"
-	CandidateBaseHeadMissing    CandidateBaseState = "HEAD_MISSING"
-	CandidateBaseUnexpectedHead CandidateBaseState = "UNEXPECTED_HEAD"
+	CandidateExpectedAbsent  CandidateExpectedHeadState = "EXPECTED_ABSENT"
+	CandidateExpectedCurrent CandidateExpectedHeadState = "EXPECTED_CURRENT"
+	CandidateHeadAdvanced    CandidateExpectedHeadState = "HEAD_ADVANCED"
+	CandidateHeadMissing     CandidateExpectedHeadState = "HEAD_MISSING"
+	CandidateUnexpectedHead  CandidateExpectedHeadState = "UNEXPECTED_HEAD"
 )
 
 type CandidateInspection struct {
-	Candidate   domain.Candidate
-	Content     []byte
-	CurrentHead *domain.ObjectID
-	BaseState   CandidateBaseState
+	Candidate         domain.Candidate
+	Content           []byte
+	CurrentHead       *domain.ObjectID
+	ExpectedHeadState CandidateExpectedHeadState
 }
 
 type CandidateDiffResult struct {
@@ -70,23 +70,16 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 		}
 	}
 	for _, link := range candidate.Links {
-		seal, err := r.LoadSeal(ctx, link.TargetSeal)
-		if err != nil {
-			return CandidateInspection{}, nil, fmt.Errorf("candidate dependency %s@%s is unreadable: %w", link.TargetREF, link.TargetSeal, err)
-		}
-		if seal.REF != link.TargetREF {
-			return CandidateInspection{}, nil, fmt.Errorf("candidate dependency %s@%s is owned by %s; discard or relink the candidate explicitly", link.TargetREF, link.TargetSeal, seal.REF)
+		if _, err := r.LoadSeal(ctx, link.TargetSeal); err != nil {
+			return CandidateInspection{}, nil, fmt.Errorf("candidate Cause target %s is unreadable: %w", link.TargetSeal, err)
 		}
 	}
 
 	var base *domain.SealPayload
-	if candidate.Base != nil {
-		payload, err := r.LoadSeal(ctx, *candidate.Base)
+	if candidate.ParentRevision != nil {
+		payload, err := r.LoadSeal(ctx, *candidate.ParentRevision)
 		if err != nil {
-			return CandidateInspection{}, nil, fmt.Errorf("candidate base %s@%s is unreadable: %w", ref, candidate.Base, err)
-		}
-		if payload.REF != ref {
-			return CandidateInspection{}, nil, fmt.Errorf("candidate base %s belongs to %s, not %s; discard the candidate explicitly", candidate.Base, payload.REF, ref)
+			return CandidateInspection{}, nil, fmt.Errorf("candidate parent revision %s is unreadable: %w", candidate.ParentRevision, err)
 		}
 		base = &payload
 	}
@@ -94,12 +87,8 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 	var currentHead *domain.ObjectID
 	head, err := r.refs.Resolve(ctx, ref)
 	if err == nil {
-		payload, loadErr := r.LoadSeal(ctx, head)
-		if loadErr != nil {
+		if _, loadErr := r.LoadSeal(ctx, head); loadErr != nil {
 			return CandidateInspection{}, nil, fmt.Errorf("current HEAD %s@%s is unreadable: %w", ref, head, loadErr)
-		}
-		if payload.REF != ref {
-			return CandidateInspection{}, nil, fmt.Errorf("current HEAD %s points to a seal owned by %s; repair the REF explicitly", ref, payload.REF)
 		}
 		headCopy := head
 		currentHead = &headCopy
@@ -109,7 +98,7 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 
 	return CandidateInspection{
 		Candidate: candidate, Content: content, CurrentHead: currentHead,
-		BaseState: candidateBaseState(candidate.Base, currentHead),
+		ExpectedHeadState: candidateExpectedHeadState(candidate.ExpectedREFHead, currentHead),
 	}, base, nil
 }
 
@@ -124,41 +113,34 @@ func (r *Repository) readRepositoryBlob(ctx context.Context, ref domain.ContentR
 	return object.Data, nil
 }
 
-func candidateBaseState(base, current *domain.ObjectID) CandidateBaseState {
+func candidateExpectedHeadState(expected, current *domain.ObjectID) CandidateExpectedHeadState {
 	switch {
-	case base == nil && current == nil:
-		return CandidateBaseInitial
-	case base == nil:
-		return CandidateBaseUnexpectedHead
+	case expected == nil && current == nil:
+		return CandidateExpectedAbsent
+	case expected == nil:
+		return CandidateUnexpectedHead
 	case current == nil:
-		return CandidateBaseHeadMissing
-	case base.Equal(*current):
-		return CandidateBaseCurrent
+		return CandidateHeadMissing
+	case expected.Equal(*current):
+		return CandidateExpectedCurrent
 	default:
-		return CandidateBaseHeadAdvanced
+		return CandidateHeadAdvanced
 	}
 }
 
-func (r *Repository) Unlink(ctx context.Context, ref, upstreamREF, revision string) (domain.Candidate, error) {
+func (r *Repository) Unlink(ctx context.Context, ref, upstreamSelector string) (domain.Candidate, error) {
 	return withMutation(ctx, r.writer, "unlink candidate", func() (domain.Candidate, error) {
-		return r.unlink(ctx, ref, upstreamREF, revision)
+		return r.unlink(ctx, ref, upstreamSelector)
 	})
 }
 
-func (r *Repository) unlink(ctx context.Context, ref, upstreamREF, revision string) (domain.Candidate, error) {
+func (r *Repository) unlink(ctx context.Context, ref, upstreamSelector string) (domain.Candidate, error) {
 	if err := domain.ValidateREF(ref); err != nil {
 		return domain.Candidate{}, err
 	}
-	if err := domain.ValidateREF(upstreamREF); err != nil {
-		return domain.Candidate{}, fmt.Errorf("invalid upstream REF %q: %w", upstreamREF, err)
-	}
-	var expected *domain.ObjectID
-	if revision != "" {
-		id, err := r.ResolveSealID(ctx, upstreamREF, revision)
-		if err != nil {
-			return domain.Candidate{}, fmt.Errorf("resolve unlink precondition %s@%s: %w", upstreamREF, revision, err)
-		}
-		expected = &id
+	resolved, err := r.ResolveSelector(ctx, upstreamSelector)
+	if err != nil {
+		return domain.Candidate{}, fmt.Errorf("resolve unlink target %q: %w", upstreamSelector, err)
 	}
 	candidate, err := r.candidateForEdit(ctx, ref)
 	if err != nil {
@@ -166,16 +148,13 @@ func (r *Repository) unlink(ctx context.Context, ref, upstreamREF, revision stri
 	}
 	index := -1
 	for i, link := range candidate.Links {
-		if link.TargetREF == upstreamREF {
+		if link.TargetSeal.Equal(resolved.ID) {
 			index = i
-			if expected != nil && !link.TargetSeal.Equal(*expected) {
-				return domain.Candidate{}, fmt.Errorf("candidate %s dependency %s targets %s, not required generation %s; inspect the candidate and retry with its exact target", ref, upstreamREF, link.TargetSeal, expected)
-			}
 			break
 		}
 	}
 	if index < 0 {
-		return domain.Candidate{}, fmt.Errorf("candidate %s has no dependency on %s; inspect it before retrying", ref, upstreamREF)
+		return domain.Candidate{}, fmt.Errorf("candidate %s has no Cause link to %s; inspect it and use the exact displayed @SealID selector", ref, resolved.ID)
 	}
 	candidate.Links = append(candidate.Links[:index], candidate.Links[index+1:]...)
 	if err := r.candidates.Save(candidate); err != nil {

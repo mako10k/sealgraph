@@ -1,8 +1,8 @@
 # Storage format
 
-Status: native format-4 contract accepted by ADR 0011. The checked-in runtime
-still writes format 3 until the explicit dump/load implementation transition.
-Formats 1 through 3 remain unsupported by the format-4 runtime.
+Status: the checked-in runtime writes native format 4 and supports the explicit
+logical-v1 load boundary. Formats 1 through 3 remain unsupported by the
+format-4 runtime.
 
 ## 1. Layout
 
@@ -66,7 +66,7 @@ contains exact base64 payload bytes for referenced content and attachments;
 `excluded_objects` reports valid loose IDs outside both roles without copying
 their bytes. Any candidate or corruption rejects the dump.
 
-The future load target is stricter than an initialized empty repository:
+The load target is stricter than an initialized empty repository:
 `.sealgraph` must be absent so a complete sibling staging directory can be
 validated and published atomically without replacement. Tag-bearing load
 remains blocked until the rename-safe format-4 tag layout is accepted. The
@@ -263,6 +263,14 @@ the format-4 Link representation/order/duplicate rules. Candidate files are not
 Seal objects and have no ObjectID, but writers serialize them deterministically
 and cleanup compares their exact persisted bytes with the version loaded for
 sealing.
+
+The format-4 writer emits compact JSON in the required candidate member order,
+uses the same nested content/attachment/Link member order as Seal encoding,
+and appends one LF. Readers reject unknown/trailing members and semantic
+invalidity but may accept insignificant JSON whitespace because candidates are
+mutable orchestration state rather than content-addressed objects. The fixed
+writer-byte fixture hash, including LF, is recorded in the format-4 native-core
+acceptance receipt.
 
 Every native mutation holds one repository-wide writer guard. Explicit discard
 removes only the exact validated regular candidate file. It never moves a REF,

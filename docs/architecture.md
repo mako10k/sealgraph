@@ -1,8 +1,8 @@
 # Architecture
 
-Status: target architecture for the format-4 contract accepted by ADR 0011.
-The checked-in runtime remains format 3 until the sequenced implementation and
-dump/load transition complete.
+Status: the checked-in runtime implements the format-4 canonical/candidate,
+selector, and atomic load core. Active revision/graph behavior, tags, tracked
+dogfood conversion, and Git views remain separately sequenced.
 
 ## 1. Design center
 
@@ -88,15 +88,15 @@ perform I/O.
 
 ### `internal/migration`
 
-- strict versioned logical dump models and canonical encoders;
+- strict versioned logical dump parser/model and canonical round-trip;
 - deterministic dependency-first conversion ordering;
 - explicit records for material, old Seal identity, REF/tag targets, and
   excluded loose objects.
 
 It does not open repositories, mutate storage, read Git, or act as a legacy
-repository reader. The format-3 repository layer supplies a fully validated
-logical observation; a future format-4 loader consumes the versioned document
-through a separate empty-target transaction.
+repository reader. `internal/repository` consumes the validated document
+through a separate absent-target transaction; legacy format-3 payload types
+exist only inside this migration-document boundary.
 
 ### `internal/store`
 

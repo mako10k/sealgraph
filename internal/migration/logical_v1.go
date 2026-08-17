@@ -3,8 +3,12 @@
 package migration
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 
 	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -19,7 +23,7 @@ type ObjectRecord struct {
 
 type SealRecord struct {
 	OldSealID domain.ObjectID
-	Payload   domain.SealPayload
+	Payload   Format3SealPayload
 }
 
 type RefRecord struct {
@@ -39,6 +43,117 @@ type LogicalDumpV1 struct {
 	REFs            []RefRecord
 	Tags            []TagRecord
 	ExcludedObjects []domain.ObjectID
+}
+
+type logicalDumpV1Wire struct {
+	Schema           string `json:"schema"`
+	SourceRepository struct {
+		RepositoryFormat int    `json:"repository_format"`
+		ObjectFormat     string `json:"object_format"`
+	} `json:"source_repository"`
+	Objects []struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		DataBase64 string `json:"data_base64"`
+	} `json:"objects"`
+	Seals []struct {
+		OldSealID string          `json:"old_seal_id"`
+		Payload   json.RawMessage `json:"payload"`
+	} `json:"seals"`
+	REFs []struct {
+		Name string `json:"name"`
+		Head string `json:"head"`
+	} `json:"refs"`
+	Tags []struct {
+		REF    string `json:"ref"`
+		Name   string `json:"name"`
+		Target string `json:"target"`
+	} `json:"tags"`
+	ExcludedObjects []string `json:"excluded_objects"`
+}
+
+// DecodeLogicalDumpV1 parses the migration document, never an on-disk
+// format-3 repository. Exact re-encoding proves compact member order, base64,
+// payload canonicality, and the required single trailing LF.
+func DecodeLogicalDumpV1(data []byte) (LogicalDumpV1, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var wire logicalDumpV1Wire
+	if err := decoder.Decode(&wire); err != nil {
+		return LogicalDumpV1{}, fmt.Errorf("decode logical-v1 dump: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return LogicalDumpV1{}, fmt.Errorf("decode logical-v1 dump: trailing JSON value")
+	}
+	if wire.Schema != LogicalDumpV1Schema {
+		return LogicalDumpV1{}, fmt.Errorf("logical dump schema is %q; expected %q", wire.Schema, LogicalDumpV1Schema)
+	}
+	if wire.SourceRepository.RepositoryFormat != 3 || wire.SourceRepository.ObjectFormat != "sha256" {
+		return LogicalDumpV1{}, fmt.Errorf("logical dump source repository must be format 3 with sha256 objects")
+	}
+
+	dump := LogicalDumpV1{
+		Objects:         make([]ObjectRecord, len(wire.Objects)),
+		Seals:           make([]SealRecord, len(wire.Seals)),
+		REFs:            make([]RefRecord, len(wire.REFs)),
+		Tags:            make([]TagRecord, len(wire.Tags)),
+		ExcludedObjects: make([]domain.ObjectID, len(wire.ExcludedObjects)),
+	}
+	for i, object := range wire.Objects {
+		id, err := domain.ParseObjectID(object.ID)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("object record %d: %w", i, err)
+		}
+		if object.Type != domain.BlobType {
+			return LogicalDumpV1{}, fmt.Errorf("object %s type is %q; expected blob", id, object.Type)
+		}
+		payload, err := base64.StdEncoding.Strict().DecodeString(object.DataBase64)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("object %s data_base64: %w", id, err)
+		}
+		dump.Objects[i] = ObjectRecord{ID: id, Data: payload}
+	}
+	for i, seal := range wire.Seals {
+		id, err := domain.ParseObjectID(seal.OldSealID)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("seal record %d: %w", i, err)
+		}
+		payload, err := decodeFormat3Seal(seal.Payload)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("seal %s payload: %w", id, err)
+		}
+		dump.Seals[i] = SealRecord{OldSealID: id, Payload: payload}
+	}
+	for i, ref := range wire.REFs {
+		head, err := domain.ParseObjectID(ref.Head)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("REF record %d head: %w", i, err)
+		}
+		dump.REFs[i] = RefRecord{Name: ref.Name, Head: head}
+	}
+	for i, tag := range wire.Tags {
+		target, err := domain.ParseObjectID(tag.Target)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("tag record %d target: %w", i, err)
+		}
+		dump.Tags[i] = TagRecord{REF: tag.REF, Name: tag.Name, Target: target}
+	}
+	for i, text := range wire.ExcludedObjects {
+		id, err := domain.ParseObjectID(text)
+		if err != nil {
+			return LogicalDumpV1{}, fmt.Errorf("excluded object %d: %w", i, err)
+		}
+		dump.ExcludedObjects[i] = id
+	}
+	canonicalBytes, err := EncodeLogicalDumpV1(dump)
+	if err != nil {
+		return LogicalDumpV1{}, err
+	}
+	if !bytes.Equal(data, canonicalBytes) {
+		return LogicalDumpV1{}, fmt.Errorf("logical-v1 dump is not canonical or lacks its exact trailing LF")
+	}
+	return dump, nil
 }
 
 // EncodeLogicalDumpV1 validates and emits the exact compact logical-v1 JSON
@@ -122,7 +237,7 @@ func validateLogicalDumpV1(dump LogicalDumpV1) ([][]byte, error) {
 	}
 
 	sealPositions := make(map[string]int, len(dump.Seals))
-	sealPayloads := make(map[string]domain.SealPayload, len(dump.Seals))
+	sealPayloads := make(map[string]Format3SealPayload, len(dump.Seals))
 	sealBytes := make([][]byte, len(dump.Seals))
 	for i, seal := range dump.Seals {
 		if err := seal.OldSealID.ValidateNative(); err != nil {
@@ -131,7 +246,7 @@ func validateLogicalDumpV1(dump LogicalDumpV1) ([][]byte, error) {
 		if _, exists := sealPositions[seal.OldSealID.String()]; exists {
 			return nil, fmt.Errorf("duplicate old SealID %s", seal.OldSealID)
 		}
-		encoded, err := canonical.EncodeSeal(seal.Payload)
+		encoded, err := encodeFormat3Seal(seal.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("encode old seal %s: %w", seal.OldSealID, err)
 		}

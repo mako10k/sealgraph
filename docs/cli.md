@@ -1,7 +1,8 @@
 # CLI contract
 
-Status: target format-4 command contract accepted by ADR 0011. The checked-in
-runtime remains format 3 until the sequenced implementation transition.
+Status: the checked-in runtime implements the format-4 native core and load.
+Commands requiring the active revision index or tag namespace fail explicitly
+until their separately sequenced implementation tasks complete.
 
 ## 1. Common selector grammar
 
@@ -283,9 +284,9 @@ explicitly relinking one downstream candidate to it, and sealing that one REF.
 The old downstream Seal remains immutable and stale; no pin flag, automatic
 target choice, or recursive repair is introduced.
 
-## 7. Format-3 logical dump and future load
+## 7. Format-3 logical dump and format-4 load
 
-The checked-in format-3 binary exposes one migration export:
+The final format-3 binary at commit `5b24d47` exposes one migration export:
 
 ```sh
 sealgraph dump --format logical-v1
@@ -302,18 +303,28 @@ The command does not acquire the mutation guard, create runtime files, repair
 state, or inspect Git. Output-sink failure is nonzero; consumers accept a dump
 only with exit zero and complete canonical parsing.
 
-The paired future format-4 command is:
+The checked-in format-4 runtime consumes that document with:
 
 ```sh
 sealgraph load --format logical-v1 < repository.dump.json
 ```
 
-It is not implemented by the format-3 slice. The target `.sealgraph` must be
-absent. Load stages and validates a complete format-4 repository, rewrites all
+The target `.sealgraph` must be absent. Load stages and validates a complete
+format-4 repository, rewrites all
 parent/Link/REF/tag targets through a complete old-to-new mapping, and uses one
 atomic no-replace directory publication. It never merges with or replaces an
 existing repository. Non-empty tags reject load until the format-4 tag
 namespace contract is implemented.
+
+A platform without atomic no-replace directory publication rejects load before
+target publication; it does not weaken the boundary to check-then-rename.
+
+Successful stdout is the canonical compact
+`sealgraph/logical-load-receipt/v1` document plus LF. It includes the exact
+source dump SHA-256, every old-to-new mapping, every many-to-one collapse,
+rewritten REF records, an empty tag list, and published format `4`. A prior
+`.sealgraph-load-*` staging path is reported for explicit inspection and is
+never adopted or deleted automatically.
 
 ## 8. Git plugin
 

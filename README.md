@@ -10,14 +10,20 @@ The core question is not only “what changed?” but:
 
 ## Status
 
-The native standalone slices implement repository creation and sealing,
-direct/transitive graph inspection, immutable seal history, link history, and
-semantic generation diff, plus the deterministic read-only format-3 logical
-dump required before the format-4 transition. The normative requirements are in
+The checked-in standalone runtime now implements the format-4 native core:
+REF-independent Seal and Link identity, separated candidate revision/CAS
+state, exact selectors, and atomic logical-v1 load into an absent repository.
+The prior format-3 dump remains available from commit `5b24d47` for explicit
+source export. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-ADR 0011, and ADR 0012. The checked-in runtime and tracked dogfood remain
-format 3.
+ADR 0011, and ADR 0012.
+
+Active revision indexing, normal non-root admission, stale/status/graph/history,
+`derive`, `add --parent`, tags, and REF move are the next separately sequenced
+slices. The tracked project `.sealgraph` intentionally remains format 3 until
+the tag contract allows lossless dogfood conversion; the format-4 runtime does
+not open it directly.
 
 ## Two product surfaces
 
@@ -28,13 +34,10 @@ sealgraph init
 sealgraph add REQ-001 --root --content 'Authentication is required.'
 sealgraph seal REQ-001
 
-sealgraph add DESIGN-001 \
-  --content 'JWT authentication design' \
-  --depend-on REQ-001
-sealgraph seal DESIGN-001
+sealgraph show REQ-001
 
-sealgraph tag DESIGN-001 reviewed
-sealgraph show DESIGN-001@reviewed
+# Explicit conversion into a different directory with no .sealgraph target:
+sealgraph load --format logical-v1 < repository.dump.json
 ```
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
@@ -77,15 +80,17 @@ DESIGN@D7 HEAD -> REQ@Q4    transitive stale
 
 Repair is intentionally explicit and sequential. Each affected REF must be relinked/reviewed and resealed. There is no recursive repair command.
 
-A seal commits to:
+A format-4 Seal commits to:
 
-- logical REF identity,
 - content blob identity,
 - attachments,
 - exact upstream target seal identities,
-- previous seal identity,
+- optional exact parent revision identity,
 - root/draft semantics,
 - canonical format/version metadata.
+
+REF paths, selector spelling, tags, publication expectation, actor, and time do
+not enter Seal identity. Multiple REFs may point to the same Seal.
 
 Actor, time, and seal-operation rationale are not implicit seal fields. When a
 domain needs them, it seals the claim as separate content and links it to the
@@ -101,27 +106,15 @@ sealgraph add
 sealgraph link
 sealgraph unlink
 sealgraph candidate
-sealgraph tag
 sealgraph seal
 sealgraph show
-sealgraph log
-sealgraph linklog
-sealgraph diff
-sealgraph status
-sealgraph stale [--frontier] [--refs-only]
-sealgraph impact
-sealgraph graph
-sealgraph dump --format logical-v1
+sealgraph load --format logical-v1
 ```
 
-The logical dump is a versioned migration artifact. It rejects any working
-candidate and never changes `.sealgraph/`; format-4 load remains separately
-gated and is not implemented by this slice.
-
-`stale --refs-only` emits the complete stale REF set as a stable one-REF-per-line
-stream. Adding `--frontier` selects only the upstream-most stale REFs to review
-before their stale downstreams. It is a read-only observation, not a batch
-reseal, reservation, or automatic reseal plan.
+The format-4 binary consumes, but never directly opens, a format-3 migration
+source. Load requires an absent `.sealgraph`, stages and validates the complete
+repository, publishes it with atomic no-replace semantics, and emits every
+old-to-new SealID mapping. Tag-bearing input fails closed until `TAG_CONTRACT`.
 
 Later phases retain the following planned surface:
 
@@ -129,6 +122,16 @@ Later phases retain the following planned surface:
 sealgraph attach
 sealgraph detach
 sealgraph fsck
+sealgraph derive
+sealgraph add --parent
+sealgraph tag
+sealgraph log
+sealgraph linklog
+sealgraph diff
+sealgraph status
+sealgraph stale [--frontier] [--refs-only] [--scan]
+sealgraph impact
+sealgraph graph
 ```
 
 Git-only helpers are intentionally separate:
