@@ -18,7 +18,9 @@ import (
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
-const version = "0.1.0-dev"
+// Version is replaced for release artifacts with -ldflags -X. Development
+// builds retain an explicit non-release fallback.
+var Version = "0.1.0-dev"
 
 func RunStandalone(args []string, stdout, stderr io.Writer) int {
 	workDir, err := os.Getwd()
@@ -35,7 +37,7 @@ func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if args[0] == "--version" || args[0] == "version" {
-		fmt.Fprintf(stdout, "git sealgraph %s\n", version)
+		fmt.Fprintf(stdout, "git sealgraph %s\n", Version)
 		return 0
 	}
 	fmt.Fprintf(stderr, "git sealgraph: command %q is not implemented; Git sidecar is outside the Phase 1 standalone scope\n", args[0])
@@ -48,7 +50,7 @@ func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, st
 		return 0
 	}
 	if args[0] == "--version" || args[0] == "version" {
-		fmt.Fprintf(stdout, "sealgraph %s\n", version)
+		fmt.Fprintf(stdout, "sealgraph %s\n", Version)
 		return 0
 	}
 	ctx := context.Background()
@@ -102,6 +104,8 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 		return runImpact(ctx, workDir, args[1:], stdout, stderr)
 	case "graph":
 		return runGraph(ctx, workDir, args[1:], stdout, stderr)
+	case "fsck":
+		return runFsck(ctx, workDir, args[1:], stdout, stderr)
 	case "load":
 		return runLoad(ctx, workDir, args[1:], stdin, stdout, stderr)
 	default:
@@ -1070,6 +1074,35 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 	return 0
 }
 
+func runFsck(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) != 0 {
+		return usageError(stderr, "fsck accepts no positional arguments")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "fsck", err)
+	}
+	report, err := repo.Fsck(ctx)
+	if err != nil {
+		return commandError(stderr, "fsck", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "fsck", fsckJSON(report))
+	}
+	fmt.Fprintf(stdout, "FSCK_OK objects=%d seals=%d material_objects=%d refs=%d tags=%d active_seals=%d historical_or_detached=%d unreferenced_objects=%d\n", report.Objects, report.Seals, report.MaterialObjects, report.REFs, report.Tags, report.ActiveSeals, len(report.HistoricalOrDetachedSeals), len(report.UnreferencedObjects))
+	for _, id := range report.HistoricalOrDetachedSeals {
+		fmt.Fprintf(stdout, "HISTORICAL_OR_DETACHED_SEAL %s\n", id)
+	}
+	for _, id := range report.UnreferencedObjects {
+		fmt.Fprintf(stdout, "UNREFERENCED_OBJECT %s\n", id)
+	}
+	return 0
+}
+
 func parseImpactLimit(allPaths bool, value singleString) (int, error) {
 	if value.set && !allPaths {
 		return 0, errors.New("--max-paths is valid only with --all-paths")
@@ -1225,6 +1258,7 @@ Usage:
   sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]
   sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]
   sealgraph graph [--format human|json]
+  sealgraph fsck [--format human|json]
   sealgraph load --format logical-v1 < repository.dump.json
 
 manifest emits a path/digest claim only; it does not write repository state or

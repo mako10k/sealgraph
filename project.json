@@ -1,12 +1,13 @@
 {
   "project": "sealgraph",
-  "status": "phase-1-native-vertical-slice",
+  "status": "standalone-beta-preparation",
+	"version": "0.1.0-beta.1",
+	"license": "MIT",
+	"release_scope": "linux-amd64-standalone-no-file-sync-no-git-sidecar",
   "language": "go",
   "go": "1.26",
-  "entrypoints": [
-    "cmd/sealgraph",
-    "cmd/git-sealgraph"
-  ],
+	"entrypoints": ["cmd/sealgraph"],
+	"unreleased_source_placeholders": ["cmd/git-sealgraph"],
   "normative_docs": [
     "docs/requirements.md",
     "docs/storage-format.md",
@@ -17,6 +18,6 @@
     "llmthink",
     "secdat",
     "perttool",
-    "git-sidecar"
+	"git-sidecar-decision"
   ]
 }

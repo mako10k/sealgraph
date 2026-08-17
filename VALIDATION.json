@@ -1,7 +1,9 @@
 {
   "target_go": "1.26",
   "validation_go": "1.26.5",
-  "validation_method": "Ran gofmt -w ., go vet ./..., go test ./..., and go test -race ./... against the Phase 1 native standalone vertical slice.",
-  "result": "pass",
-  "note": "Canonical fixtures, Git-compatible SHA-256 blob identity, hierarchical REF conflicts, compare-and-swap refs, corruption rejection, historical draft links, and direct stale derivation are covered by automated tests."
+	"release_candidate": "0.1.0-beta.1",
+	"scope": "standalone Linux amd64; no file sync; no Git sidecar",
+	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
+	"result": "implementation-pass-release-gate-pending",
+	"note": "Final exact-SHA, remote CI, artifact digests, and publication evidence remain pending until the release candidate commit is frozen."
 }

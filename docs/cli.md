@@ -441,6 +441,18 @@ Git blob/tree/commit/tag material import is not in the initial sidecar.
 Structured machine-readable outputs must be versioned before external use.
 `stale --refs-only` is the intentionally narrow stable line exception.
 
+`fsck [--format human|json]` performs a complete read-only inventory of loose
+objects, REF manifests/tags, canonical Seals, material references, and both
+parent and Cause DAGs. Success JSON uses `sealgraph/fsck/v1`. Historical or
+detached Seals and unreferenced valid blobs are reported separately and do not
+fail the command. Corruption, missing references, unsafe paths, or cycles fail
+nonzero; `fsck` never repairs, removes, repacks, caches, or changes modes.
+
+The standalone beta has no file synchronization/watch/import surface.
+`manifest` is an explicit path/digest claim builder only. Attachment fields are
+read, preserved by load, and inspected, but beta does not expose `attach` or
+`detach` mutation commands.
+
 `show`, `status`, `stale`, `graph`, `impact`, `log`, `linklog`, and `diff`
 accept `--format human|json` in any argument position. Human is the default;
 JSON uses a command-specific `sealgraph/<command>/v1` schema. Raw content and

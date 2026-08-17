@@ -16,7 +16,8 @@ Sealgraph has one native semantic/storage model:
 - movable REF paths outside Seal bytes;
 - native SHA-256 loose objects under `.sealgraph`.
 
-Standalone and Git sidecar share that model. Sidecar adds Git-aware read views
+Standalone beta implements that model without file synchronization or Git
+integration. A separately adopted sidecar would add Git-aware read views
 of the same `.sealgraph` files; it is not another Seal schema, ObjectID system,
 or Git-commit interpretation of the revision DAG.
 
@@ -51,6 +52,7 @@ filesystem, prospective staged result tree, or immutable Git commit tree.
 
 ### `cmd/git-sealgraph`
 
+- remains an unreleased source placeholder in the standalone beta;
 - is invoked explicitly as `git sealgraph ...`;
 - may locate the outer Git repository/worktree;
 - uses the same real `.sealgraph` writer for native mutations;
@@ -253,7 +255,8 @@ not persist cache.
 
 ## 7. Git sidecar boundary
 
-The first sidecar value is `.sealgraph` file integration:
+This is a constraint on any separately approved future sidecar, not a beta
+implementation commitment. Its first potential value is `.sealgraph` file integration:
 
 - prospective staged-tree validation;
 - historical read-only validation/inspection;

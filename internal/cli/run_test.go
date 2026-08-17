@@ -88,6 +88,20 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 	}
 }
 
+func TestCLIFsckHumanAndJSON(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	mustSealCLI(t, dir, "root")
+	if output := mustRunCLI(t, dir, "fsck"); !strings.HasPrefix(output, "FSCK_OK objects=2 seals=1 material_objects=1 refs=1") {
+		t.Fatalf("fsck output=%q", output)
+	}
+	value := decodeCLIJSON(t, mustRunCLI(t, dir, "fsck", "--format", "json"))
+	if value["schema"] != "sealgraph/fsck/v1" || value["result"] != "ok" {
+		t.Fatalf("fsck JSON=%#v", value)
+	}
+}
+
 func TestCLIExactContentFileAndStdinRoundTripWithoutSeal(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")

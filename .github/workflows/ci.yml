@@ -28,9 +28,13 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      - name: Race test
+        run: go test -race ./...
       - name: Clone detection
         run: npm run clone-check
       - name: Cyclomatic complexity
         run: make complexity-check
       - name: Dead code
         run: make deadcode-check
+      - name: Standalone beta artifact smoke
+        run: make beta-artifact-smoke VERSION=0.1.0-beta.1

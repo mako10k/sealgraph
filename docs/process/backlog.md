@@ -316,7 +316,7 @@ sealing itself would be a self-referential and misleading claim.
 
 ## SG-BL-009 — Full `fsck` and checkout-mode integrity explanation
 
-- Status: open
+- Status: complete locally for standalone beta (2026-08-17); external Issue state unchanged
 - Priority: P3, required by `RELEASE_GATE`
 - PERT: `RELEASE_GATE`
 
@@ -427,6 +427,6 @@ Before Git sidecar:
    final history and diff data shapes.
 8. `DOGFOOD_RECURRING`: SG-BL-008 validates the combined operator workflow.
 
-SG-BL-009 remains in the existing release gate. Git sidecar follows the
-recurring dogfood gate so it can reuse one established inspection vocabulary
-instead of introducing Git-shaped semantics into an ambiguous core surface.
+SG-BL-009 remains in the standalone beta release gate. Git sidecar adoption is
+outside this plan and requires a separate product decision; it is not a beta
+prerequisite.

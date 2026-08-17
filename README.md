@@ -17,6 +17,8 @@ branching parents, active-leaf admission, stale/frontier, history, and bounded
 impact, plus collision-free REF manifests, immutable scoped tags, atomic REF
 move, tag-preserving logical load, exact file/stdin content ingestion, and a
 deterministic explicit-path digest manifest builder.
+The beta candidate also includes read-only full-inventory `fsck` with
+versioned JSON output and explicit historical/detached inventory reporting.
 The prior format-3 dump remains available from commit `5b24d47` for explicit
 source export. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
@@ -29,9 +31,7 @@ loader; it was not opened or rewritten in place by the new runtime. The
 conversion and same-material sibling receipt is recorded in
 [`docs/process/dogfooding-receipts/2026-08-17-format4-load.md`](docs/process/dogfooding-receipts/2026-08-17-format4-load.md).
 
-## Two product surfaces
-
-### Standalone
+## Standalone beta surface
 
 ```sh
 sealgraph init
@@ -48,22 +48,14 @@ sealgraph load --format logical-v1 < repository.dump.json
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
 
-### Git sidecar
+`v0.1.0-beta.1` is standalone-only. It has no file synchronization, watcher,
+working-tree reconciliation, Git discovery, or Git sidecar. `manifest` reads
+only explicitly named files and emits a deterministic path/digest claim; it
+does not track or synchronize those files. The `git-sealgraph` source entry
+point is an unreleased placeholder for a separate future adoption decision.
 
-Git integration is a separate plugin surface:
-
-```sh
-git sealgraph init
-git sealgraph status
-git sealgraph conflicts
-git sealgraph resolve REF
-```
-
-The executable name is `git-sealgraph`, which Git exposes as `git sealgraph`.
-
-The first sidecar may present exact staged/commit `.sealgraph` trees and merge
-stages to the same native validators while keeping Sealgraph provenance
-semantics separate from Git commit semantics.
+Attachment-bearing repositories can be read, inspected, and converted, but
+this beta does not expose `attach` or `detach` mutation commands.
 
 ## Key semantics
 
@@ -149,10 +141,9 @@ Later phases retain the following planned surface:
 ```text
 sealgraph attach
 sealgraph detach
-sealgraph fsck
 ```
 
-Git-only helpers are intentionally separate:
+Potential Git-only helpers are a separate, unadopted product discussion:
 
 ```text
 git sealgraph init
@@ -164,6 +155,23 @@ git sealgraph resolve
 ## Development
 
 Requires Go 1.26+.
+
+Build and install the standalone development binary:
+
+```sh
+make build
+install -m 0755 bin/sealgraph "$HOME/.local/bin/sealgraph"
+```
+
+Uninstall by removing only the installed binary:
+
+```sh
+rm "$HOME/.local/bin/sealgraph"
+```
+
+No command installs hooks, services, configuration, or a Git plugin. Release
+artifacts are Linux amd64 tar archives containing `sealgraph`, `LICENSE`, and
+`README.md` only.
 
 ```sh
 go test ./...

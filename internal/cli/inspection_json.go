@@ -204,3 +204,15 @@ func diffJSON(diff history.SealDiff) map[string]any {
 	}
 	return map[string]any{"schema": "sealgraph/diff/v1", "from_seal_id": diff.From.String(), "to_seal_id": diff.To.String(), "content": map[string]any{"changed": diff.Content.Changed, "before": contentJSON(diff.Content.Before), "after": contentJSON(diff.Content.After)}, "attachments": attachments, "links": links, "root": map[string]any{"changed": diff.Root.Changed, "before": diff.Root.Before, "after": diff.Root.After}, "draft": map[string]any{"changed": diff.Draft.Changed, "before": diff.Draft.Before, "after": diff.Draft.After}, "parent_revision": map[string]any{"changed": diff.Parent.Changed, "before": idValue(diff.Parent.Before), "after": idValue(diff.Parent.After)}}
 }
+
+func fsckJSON(report repository.FsckReport) map[string]any {
+	detached := make([]string, 0, len(report.HistoricalOrDetachedSeals))
+	for _, id := range report.HistoricalOrDetachedSeals {
+		detached = append(detached, id.String())
+	}
+	unreferenced := make([]string, 0, len(report.UnreferencedObjects))
+	for _, id := range report.UnreferencedObjects {
+		unreferenced = append(unreferenced, id.String())
+	}
+	return map[string]any{"schema": "sealgraph/fsck/v1", "result": "ok", "objects": report.Objects, "seals": report.Seals, "material_objects": report.MaterialObjects, "refs": report.REFs, "tags": report.Tags, "active_seals": report.ActiveSeals, "historical_or_detached_seal_ids": detached, "unreferenced_object_ids": unreferenced}
+}

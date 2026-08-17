@@ -1,13 +1,12 @@
-# Standalone alpha release checklist
+# Standalone beta release checklist
 
-Status: release-blocked by the remaining product, recurring-dogfood, and Git
-gates. Completing this document does not authorize a tag, GitHub Release,
-package publication, or Git-sidecar release. Publication requires a separate
-explicit operator approval after an exact commit SHA and artifacts are frozen.
+Status: preparing `v0.1.0-beta.1`; release-blocked until the exact-SHA and
+publication gates pass. Git sidecar is not a beta dependency. Completing this
+document does not authorize a tag, push, GitHub Release, or package publication.
 
 ## 1. Release identity and scope
 
-- Target: `v0.1.0-alpha.1`.
+- Target: `v0.1.0-beta.1`.
 - Product surface: standalone `sealgraph` only.
 - Repository format: native format 4. The tracked project dogfood was converted
   explicitly through the accepted logical dump/load boundary.
@@ -16,8 +15,12 @@ explicit operator approval after an exact commit SHA and artifacts are frozen.
   regeneration is allowed and preferred over compatibility scaffolding.
 - Initial binary artifact scope: Linux amd64 only unless another platform is
   separately built and tested before the freeze.
+- No file synchronization, watcher, working-tree comparison, or automatic
+  import is included. `manifest` is only an explicit path/digest claim.
 - `git-sealgraph` is a source-tree placeholder and MUST NOT be included in the
-  standalone alpha artifacts or described as implemented.
+  standalone beta artifacts or described as implemented.
+- Attachment-bearing state is readable/preservable; `attach` and `detach`
+  mutation commands are not part of this beta.
 - The release does not imply Git integration, truth, trust, signatures,
   automatic repair, migration, remote storage, or server support.
 
@@ -38,45 +41,41 @@ explicit operator approval after an exact commit SHA and artifacts are frozen.
 - [x] Complete remaining SG-BL-001 acceptance coverage for unsafe file kinds
       and prove failure before candidate mutation.
 - [x] Complete SG-BL-005's compact operator semantic legend (ADR 0015).
-- [ ] Complete SG-BL-007's distinct initialized/runtime-bootstrap/already-ready
+- [x] Complete SG-BL-007's distinct initialized/runtime-bootstrap/already-ready
       result reporting.
-- [ ] Implement the read-only full-inventory `fsck` slice from SG-BL-009.
-- [x] Run a controlled recurring standalone dogfood from a fresh checkout,
-      including manifest construction, one-REF sealing, stale frontier,
-      sequential downstream repair, history/diff inspection, and `fsck`.
+- [x] Implement the read-only full-inventory `fsck` slice from SG-BL-009.
+- [x] Run the controlled recurring manifest/one-REF Seal/history/diff workflow
+      from a fresh checkout without claiming self-sealing.
+- [ ] Run beta `fsck` from a fresh canonical checkout and record full inventory.
 - [ ] Reconcile implemented backlog Issues with executable acceptance evidence;
       do not close partially implemented Issues merely to make the release look
       complete.
 
-The cross-command versioned JSON contract (SG-BL-006), multi-edge link-message
-ergonomics (SG-BL-011), attachments, and Git sidecar may remain open for this
-alpha. Recurring alpha evidence may be collected manually using bounded human
-output plus the stable `stale --refs-only` stream; automation must wait for a
-versioned structured format.
+SG-BL-006 JSON and SG-BL-011's repeated-command link-message contract are
+complete. Attachment mutation and Git sidecar remain explicitly deferred.
 
 ## 3. Release engineering blockers
 
-- [ ] Select and commit an explicit LICENSE. Do not infer a license from public
-      repository visibility.
-- [ ] Replace the hard-coded `0.1.0-dev` release value with deterministic build
+- [x] Select and commit the MIT LICENSE.
+- [x] Replace the hard-coded release value with deterministic build
       metadata injection while keeping an honest development fallback.
-- [ ] Document source build and Linux amd64 installation/uninstallation.
-- [ ] Add concise release notes covering format 4, explicit dump/load,
+- [x] Document source build and Linux amd64 installation/uninstallation.
+- [x] Add concise release notes covering format 4, explicit dump/load,
       breaking-regeneration policy,
       standalone-only scope, supported platform, and known omissions.
-- [ ] Add a deterministic artifact build that produces:
+- [x] Add a deterministic artifact build that produces:
 
   ```text
-  sealgraph_0.1.0-alpha.1_linux_amd64.tar.gz
-  sealgraph_0.1.0-alpha.1_checksums.txt
+  sealgraph_0.1.0-beta.1_linux_amd64.tar.gz
+  sealgraph_0.1.0-beta.1_checksums.txt
   ```
 
-- [ ] Ensure the archive contains only the standalone binary plus approved
+- [x] Ensure the archive builder includes only the standalone binary plus approved
       documentation/license files; it must not contain `.sealgraph`, candidates,
       secrets, local paths, `git-sealgraph`, or generated development state.
-- [ ] Refresh `project.json` and `VALIDATION.json` so they describe the actual
-      alpha scope and exact validation performed.
-- [ ] Add an artifact smoke test that checks `--version`, standalone init,
+- [ ] Finalize `project.json` and `VALIDATION.json` with the exact frozen-SHA
+      validation and artifact digests.
+- [x] Add an artifact smoke test that checks `--version`, standalone init,
       root/dependent seal, stale frontier, and corruption refusal in a temporary
       directory.
 
@@ -125,7 +124,7 @@ maximum GitHub Release writes: 1
 ```
 
 - [ ] Obtain explicit operator approval for the frozen record above.
-- [ ] Create one immutable `v0.1.0-alpha.1` tag at the approved SHA. Never
+- [ ] Create one immutable `v0.1.0-beta.1` tag at the approved SHA. Never
       force-move or reuse a published version tag.
 - [ ] Push the tag through the configured `secdat exec` boundary.
 - [ ] Create the GitHub prerelease once, through `secdat exec`, with only the
@@ -135,8 +134,8 @@ maximum GitHub Release writes: 1
 - [ ] Confirm the source tree and release assets contain no secret material.
 
 If publication is incomplete or ambiguous, stop and inspect remote state. Do
-not blindly resend. If a published alpha is defective, keep its tag immutable,
-document the defect, and release a new alpha version after a new gate.
+not blindly resend. If a published beta is defective, keep its tag immutable,
+document the defect, and release a new prerelease version after a new gate.
 
 ## 6. Post-release evidence
 
@@ -144,6 +143,5 @@ document the defect, and release a new alpha version after a new gate.
       result in a release receipt.
 - [ ] Verify installation from the downloaded artifact in a clean temporary
       environment.
-- [ ] Keep Git-sidecar, structured JSON, attachments, signatures, and other
-      deferred work explicitly open; alpha publication does not complete the
-      `READY` milestone in `PLAN.pert`.
+- [ ] Keep Git-sidecar, attachment mutation, file sync, signatures, and other
+      deferred work explicitly outside the standalone beta.

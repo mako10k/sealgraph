@@ -345,7 +345,9 @@ conformance tests do not change that lifecycle boundary.
 
 ## 10. Git sidecar
 
-Git sidecar is a separate product surface exposed as `git sealgraph ...` through a `git-sealgraph` executable.
+Git sidecar is a deferred, separately decided product surface. It is not part
+of the standalone `v0.1.0-beta.1` product or release artifact. If adopted, it
+is exposed as `git sealgraph ...` through a `git-sealgraph` executable.
 
 Sidecar uses the same native `.sealgraph` Seal, Link, REF, object-store, and
 repository-format contract. It MUST NOT define a sidecar Seal schema or use an

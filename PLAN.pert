@@ -80,11 +80,8 @@ milestone USABLE:
 milestone DOGFOOD_R2:
   title "Recurring tracked dogfood passes"
 
-milestone GIT:
-  title "Git sidecar works"
-
 milestone READY:
-  title "Initial usable release"
+  title "Standalone beta is ready for separately approved publication"
 
 task FORMAT_SPEC START -> FORMAT:
   title "Lock canonical payload, REF grammar, and object IDs"
@@ -181,13 +178,10 @@ task DOGFOOD_RECURRING USABLE -> DOGFOOD_R2:
   duration 1p
   status done
 
-task GIT_SIDECAR DOGFOOD_R2 -> GIT:
-  title "Implement staged/commit tree validation, hook dispatch, and merge-stage inspection"
-  duration 6p
-
-task RELEASE_GATE GIT -> READY:
-  title "Add fsck, integration tests, docs, and release checks"
+task RELEASE_GATE DOGFOOD_R2 -> READY:
+  title "Close standalone-only v0.1.0-beta.1 with fsck and release checks"
   duration 3p
+  status active
 
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
   model 1
@@ -201,3 +195,10 @@ work_event WE-2e6e654e188c9ea9701718c17320c85fdd8677e35b4e2e2b899014ca08530b7d:
   task DOGFOOD_RECURRING
   kind finish
   occurred_at 2026-08-17T13:00:58+09:00
+
+work_event WE-08390f259a6d1ba089e15b252f6113362a83caaefb6afd04cca3f90c2c56f119:
+  model 1
+  task RELEASE_GATE
+  kind start
+  occurred_at 2026-08-17T13:32:13+09:00
+  planned_value 3p
