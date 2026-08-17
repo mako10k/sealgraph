@@ -1,8 +1,8 @@
 # Architecture
 
 Status: the checked-in runtime implements the format-4 canonical/candidate,
-selector, and atomic load core. Active revision/graph behavior, tags, tracked
-dogfood conversion, and Git views remain separately sequenced.
+selector, atomic load, active revision/Cause graph, history, and impact core.
+Tags, tracked dogfood conversion, and Git views remain separately sequenced.
 
 ## 1. Design center
 

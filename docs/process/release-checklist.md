@@ -27,7 +27,7 @@ artifacts are frozen.
 - [x] Add the deterministic read-only format-3 logical dump.
 - [x] Implement format-4 canonical Seal/candidate bytes, fixtures, and
       empty-repository load with complete ID mapping.
-- [ ] Implement and validate active revision DAG, same-material sibling,
+- [x] Implement and validate active revision DAG, same-material sibling,
       active-leaf admission, stale cache/`--scan`, exact-Cause frontier, and
       bounded impact.
 - [ ] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit

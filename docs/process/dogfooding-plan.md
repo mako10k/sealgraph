@@ -92,13 +92,13 @@ Acceptance:
 - each dependent payload stores only its direct upstream seal identity;
 - repeating inspection does not mutate any object or REF.
 
-### Scenario R0.2 — upstream supersession and explicit repair
+### Scenario R0.2 — upstream revision and explicit review
 
 1. Change and reseal `dogfood/spec/storage-contract`.
 2. Confirm the prior implementation seal/link is unchanged.
 3. Confirm `dogfood/implementation/native-slice` is `STALE_DIRECT`.
-4. In Phase 1, record that `dogfood/validation/core-tests` remains `CLEAN`
-   because `STALE_TRANSITIVE` is intentionally not implemented yet.
+4. Confirm `dogfood/validation/core-tests` is `STALE_TRANSITIVE` while its
+   direct implementation Cause is still an active leaf.
 5. Relink and reseal only `dogfood/implementation/native-slice`.
 6. Confirm `dogfood/validation/core-tests` is now `STALE_DIRECT`.
 7. Relink and reseal only `dogfood/validation/core-tests` and confirm `CLEAN`.

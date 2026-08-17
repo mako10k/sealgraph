@@ -169,3 +169,18 @@ npm run clone-check
 The scan covers Go implementation and tests under `internal/` and `cmd/` using
 the repository `.jscpd.json`. It is not imported by, invoked by, or required at
 runtime by either sealgraph executable.
+
+## 7. Complexity and dead-code analysis
+
+Cyclomatic complexity and whole-program reachability are separate from
+`go vet`. The Makefile pins their development-only versions and CI runs both:
+
+```sh
+make complexity-check  # gocyclo v0.6.0; fail above 20 per function
+make deadcode-check    # x/tools deadcode v0.49.0; include test executables
+```
+
+The commands use versioned `go run` tool modules and do not add runtime or
+library dependencies to `go.mod`. A deadcode report requires judgment, but no
+reported function is accepted silently: remove it, exercise the intended
+entrypoint, or document and test a platform-specific build configuration.

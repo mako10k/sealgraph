@@ -64,6 +64,7 @@ milestone FORMAT4_RUNTIME:
 
 milestone REVISION_DAG:
   title "Branching revision and Cause graph semantics work"
+  state reached
 
 milestone TAG_READY:
   title "Rename-safe format-4 tag namespace works"
@@ -146,6 +147,7 @@ task FORMAT4_NATIVE_CORE FORMAT3_DUMP -> FORMAT4_RUNTIME:
 task FORMAT4_REVISION_GRAPH FORMAT4_RUNTIME -> REVISION_DAG:
   title "Implement active revision DAG, derive/add-parent, stale cache/scan, history, and impact"
   duration 6p
+  status done
 
 task TAG_CONTRACT REVISION_DAG -> TAG_READY:
   title "Resolve rename-safe format-4 tag namespace and REF mv transaction (SG-BL-010)"

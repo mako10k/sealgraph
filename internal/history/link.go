@@ -1,6 +1,8 @@
 package history
 
 import (
+	"context"
+	"fmt"
 	"sort"
 
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -11,6 +13,7 @@ type LinkChangeKind string
 const (
 	LinkAdd     LinkChangeKind = "ADD"
 	LinkRemove  LinkChangeKind = "REMOVE"
+	LinkRepoint LinkChangeKind = "REPOINT"
 	LinkMessage LinkChangeKind = "MESSAGE_CHANGE"
 )
 
@@ -77,20 +80,24 @@ func DiffLinks(before, after []domain.Link) []LinkChange {
 	return changes
 }
 
-// DeriveLinkLog compares each generation with its parent. The optional
-// target filter matches one exact full target SealID.
-func DeriveLinkLog(entries []Entry, target string) []LinkLogEntry {
+// DeriveLinkLog compares each generation with its parent. Unambiguous
+// ancestry-related remove/add pairs are presented as repoints. The optional
+// target filter matches one exact full target SealID on either side.
+func DeriveLinkLog(ctx context.Context, entries []Entry, target string, load LoadSealFunc) ([]LinkLogEntry, error) {
 	result := make([]LinkLogEntry, 0, len(entries))
 	for i, entry := range entries {
 		var parentLinks []domain.Link
 		if i+1 < len(entries) {
 			parentLinks = entries[i+1].Payload.Links
 		}
-		changes := DiffLinks(parentLinks, entry.Payload.Links)
+		changes, err := withRepoints(ctx, DiffLinks(parentLinks, entry.Payload.Links), load)
+		if err != nil {
+			return nil, fmt.Errorf("derive Link changes at %s: %w", entry.ID, err)
+		}
 		if target != "" {
 			filtered := changes[:0]
 			for _, change := range changes {
-				if change.TargetSeal.String() == target {
+				if change.TargetSeal.String() == target || optionalIDString(change.BeforeSeal) == target || optionalIDString(change.AfterSeal) == target {
 					filtered = append(filtered, change)
 				}
 			}
@@ -98,5 +105,92 @@ func DeriveLinkLog(entries []Entry, target string) []LinkLogEntry {
 		}
 		result = append(result, LinkLogEntry{Entry: entry, Changes: changes})
 	}
-	return result
+	return result, nil
+}
+
+func withRepoints(ctx context.Context, changes []LinkChange, load LoadSealFunc) ([]LinkChange, error) {
+	removeIndexes, addIndexes := changeIndexes(changes)
+	removeMatches := make(map[int][]int)
+	addMatches := make(map[int][]int)
+	for _, removeIndex := range removeIndexes {
+		for _, addIndex := range addIndexes {
+			related, err := isAncestor(ctx, *changes[removeIndex].BeforeSeal, *changes[addIndex].AfterSeal, load)
+			if err != nil {
+				return nil, err
+			}
+			if related {
+				removeMatches[removeIndex] = append(removeMatches[removeIndex], addIndex)
+				addMatches[addIndex] = append(addMatches[addIndex], removeIndex)
+			}
+		}
+	}
+	consumed := make(map[int]bool)
+	result := make([]LinkChange, 0, len(changes))
+	for _, removeIndex := range removeIndexes {
+		matches := removeMatches[removeIndex]
+		if len(matches) != 1 || len(addMatches[matches[0]]) != 1 {
+			continue
+		}
+		addIndex := matches[0]
+		before, after := changes[removeIndex], changes[addIndex]
+		consumed[removeIndex], consumed[addIndex] = true, true
+		result = append(result, LinkChange{
+			Kind: LinkRepoint, TargetSeal: *after.AfterSeal,
+			BeforeSeal: before.BeforeSeal, AfterSeal: after.AfterSeal,
+			BeforeMessage: before.BeforeMessage, AfterMessage: after.AfterMessage,
+		})
+	}
+	for index, change := range changes {
+		if !consumed[index] {
+			result = append(result, change)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return linkChangeKey(result[i]) < linkChangeKey(result[j]) })
+	return result, nil
+}
+
+func changeIndexes(changes []LinkChange) ([]int, []int) {
+	var removes, adds []int
+	for index, change := range changes {
+		switch change.Kind {
+		case LinkRemove:
+			removes = append(removes, index)
+		case LinkAdd:
+			adds = append(adds, index)
+		}
+	}
+	return removes, adds
+}
+
+func isAncestor(ctx context.Context, ancestor, descendant domain.ObjectID, load LoadSealFunc) (bool, error) {
+	seen := make(map[string]bool)
+	current := descendant
+	for {
+		if current.Equal(ancestor) {
+			return true, nil
+		}
+		if seen[current.String()] {
+			return false, fmt.Errorf("parent_revision cycle reaches %s", current)
+		}
+		seen[current.String()] = true
+		payload, err := load(ctx, current)
+		if err != nil {
+			return false, err
+		}
+		if payload.ParentRevision == nil {
+			return false, nil
+		}
+		current = *payload.ParentRevision
+	}
+}
+
+func optionalIDString(id *domain.ObjectID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
+}
+
+func linkChangeKey(change LinkChange) string {
+	return string(change.Kind) + "\x00" + optionalIDString(change.BeforeSeal) + "\x00" + optionalIDString(change.AfterSeal) + "\x00" + change.TargetSeal.String()
 }

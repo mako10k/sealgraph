@@ -30,3 +30,7 @@ jobs:
         run: go test ./...
       - name: Clone detection
         run: npm run clone-check
+      - name: Cyclomatic complexity
+        run: make complexity-check
+      - name: Dead code
+        run: make deadcode-check

@@ -69,10 +69,14 @@ go vet ./...
 go test ./...
 npm ci
 npm run clone-check
+make complexity-check
+make deadcode-check
 ```
 
-The pinned jscpd dependency is development tooling only. It MUST NOT become a
-sealgraph runtime dependency.
+The pinned jscpd, gocyclo, and deadcode versions are development tooling only.
+They MUST NOT become sealgraph runtime dependencies. Cyclomatic complexity is
+limited to 20 per function, and deadcode includes test executables so public
+functions exercised only by tests are not reported as unreachable.
 
 If Git integration is changed, also add/run focused integration tests with temporary repositories.
 

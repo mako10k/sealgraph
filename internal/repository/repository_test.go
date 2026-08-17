@@ -130,7 +130,7 @@ func TestDraftCauseLinkStoresOnlyExactSeal(t *testing.T) {
 	}
 }
 
-func TestNormalNonRootPublicationWaitsForActiveLeafAdmission(t *testing.T) {
+func TestNormalNonRootPublicationUsesActiveLeafAdmission(t *testing.T) {
 	_, repo := newFormat4Repository(t)
 	sealRoot(t, repo, "root", []byte("root"))
 	if _, err := repo.Add(context.Background(), AddOptions{
@@ -138,11 +138,11 @@ func TestNormalNonRootPublicationWaitsForActiveLeafAdmission(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Seal(context.Background(), "child"); !errors.Is(err, ErrRevisionGraphPending) {
+	if _, err := repo.Seal(context.Background(), "child"); err != nil {
 		t.Fatalf("normal child seal error = %v", err)
 	}
-	if _, err := repo.InspectCandidate(context.Background(), "child"); err != nil {
-		t.Fatalf("blocked publication did not retain candidate: %v", err)
+	if _, err := repo.candidates.Load("child"); !errors.Is(err, ErrCandidateNotFound) {
+		t.Fatalf("published candidate was not cleared: %v", err)
 	}
 }
 

@@ -60,3 +60,38 @@ func TestDiffSealsIncludesParentRevision(t *testing.T) {
 		t.Fatalf("parent diff = %+v", diff.Parent)
 	}
 }
+
+func TestLinkLogPresentsOnlyUnambiguousAncestryRepoint(t *testing.T) {
+	oldTarget, newTarget := historyID('1'), historyID('2')
+	oldDependent, newDependent := historyID('3'), historyID('4')
+	seals := map[string]domain.SealPayload{
+		oldTarget.String(): {Schema: domain.SealSchema, Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true},
+		newTarget.String(): {Schema: domain.SealSchema, ParentRevision: &oldTarget, Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true},
+	}
+	entries := []Entry{
+		{ID: newDependent, Payload: historySeal(&oldDependent, domain.Link{TargetSeal: newTarget, Message: "new"})},
+		{ID: oldDependent, Payload: historySeal(nil, domain.Link{TargetSeal: oldTarget, Message: "old"})},
+	}
+	load := func(_ context.Context, id domain.ObjectID) (domain.SealPayload, error) {
+		return seals[id.String()], nil
+	}
+	log, err := DeriveLinkLog(context.Background(), entries, "", load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := log[0].Changes
+	if len(changes) != 1 || changes[0].Kind != LinkRepoint || !changes[0].BeforeSeal.Equal(oldTarget) || !changes[0].AfterSeal.Equal(newTarget) {
+		t.Fatalf("changes = %+v", changes)
+	}
+	reversed := []Entry{
+		{ID: newDependent, Payload: historySeal(&oldDependent, domain.Link{TargetSeal: oldTarget})},
+		{ID: oldDependent, Payload: historySeal(nil, domain.Link{TargetSeal: newTarget})},
+	}
+	log, err = DeriveLinkLog(context.Background(), reversed, "", load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := log[0].Changes; len(changes) != 2 || changes[0].Kind == LinkRepoint || changes[1].Kind == LinkRepoint {
+		t.Fatalf("reverse ancestry changes = %+v", changes)
+	}
+}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/graph"
 	"github.com/mako10k/sealgraph/internal/history"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
@@ -39,10 +41,6 @@ func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
 	return 2
 }
 
-func runStandaloneAt(workDir string, args []string, stdout, stderr io.Writer) int {
-	return runStandaloneAtWithInput(workDir, args, strings.NewReader(""), stdout, stderr)
-}
-
 func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 || isHelp(args[0]) {
 		printStandaloneHelp(stdout)
@@ -53,33 +51,36 @@ func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, st
 		return 0
 	}
 	ctx := context.Background()
+	if code, handled := runStandaloneMutation(ctx, workDir, args, stdin, stdout, stderr); handled {
+		return code
+	}
+	return runStandaloneInspection(ctx, workDir, args, stdin, stdout, stderr)
+}
+
+func runStandaloneMutation(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, bool) {
 	switch args[0] {
 	case "init":
-		if len(args) != 1 {
-			return usageError(stderr, "init accepts no arguments")
-		}
-		created, err := repository.InitStandalone(workDir)
-		if err != nil {
-			return commandError(stderr, "init", err)
-		}
-		if created {
-			fmt.Fprintf(stdout, "Initialized standalone sealgraph repository in %s/.sealgraph\n", workDir)
-		} else {
-			fmt.Fprintf(stdout, "Standalone sealgraph repository already initialized in %s/.sealgraph\n", workDir)
-		}
-		return 0
+		return runInit(workDir, args[1:], stdout, stderr), true
 	case "add":
-		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr)
+		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr), true
+	case "derive":
+		return runDerive(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
-		return runLink(ctx, workDir, args[1:], stdout, stderr)
+		return runLink(ctx, workDir, args[1:], stdout, stderr), true
 	case "unlink":
-		return runUnlink(ctx, workDir, args[1:], stdout, stderr)
+		return runUnlink(ctx, workDir, args[1:], stdout, stderr), true
 	case "candidate":
-		return runCandidate(ctx, workDir, args[1:], stdout, stderr)
+		return runCandidate(ctx, workDir, args[1:], stdout, stderr), true
+	case "seal":
+		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
+	}
+	return 0, false
+}
+
+func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	switch args[0] {
 	case "tag":
 		return runTag(ctx, workDir, args[1:], stdout, stderr)
-	case "seal":
-		return runSeal(ctx, workDir, args[1:], stdout, stderr)
 	case "show":
 		return runShow(ctx, workDir, args[1:], stdout, stderr)
 	case "log":
@@ -101,6 +102,22 @@ func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, st
 	default:
 		return usageError(stderr, "unknown command %q", args[0])
 	}
+}
+
+func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		return usageError(stderr, "init accepts no arguments")
+	}
+	created, err := repository.InitStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "init", err)
+	}
+	if created {
+		fmt.Fprintf(stdout, "Initialized standalone sealgraph repository in %s/.sealgraph\n", workDir)
+	} else {
+		fmt.Fprintf(stdout, "Standalone sealgraph repository already initialized in %s/.sealgraph\n", workDir)
+	}
+	return 0
 }
 
 func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -144,9 +161,11 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	var content trackedString
 	var contentFile trackedString
 	var depends stringList
+	var parent singleString
 	flags.Var(&content, "content", "exact content bytes supplied as a command argument")
 	flags.Var(&contentFile, "content-file", "read exact content bytes from a regular file, or '-' for stdin")
 	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
+	flags.Var(&parent, "parent", "exact revision parent for an absent destination REF")
 	root := flags.Bool("root", false, "declare a provenance root")
 	draft := flags.Bool("draft", false, "mark the candidate draft")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -157,6 +176,14 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	}
 	if content.set == contentFile.set {
 		return usageError(stderr, "add requires exactly one of --content or --content-file")
+	}
+	if parent.set {
+		if parent.value == "" {
+			return usageError(stderr, "add --parent requires a non-empty Seal selector")
+		}
+		if _, err := repository.ParseSelector(parent.value); err != nil {
+			return usageError(stderr, "invalid add parent selector: %v", err)
+		}
 	}
 	contentBytes := []byte(content.value)
 	if contentFile.set {
@@ -174,11 +201,44 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
-	candidate, err := repo.Add(ctx, repository.AddOptions{REF: ref, Content: contentBytes, Dependencies: dependencies, Root: *root, Draft: *draft})
+	candidate, err := repo.Add(ctx, repository.AddOptions{REF: ref, Content: contentBytes, Dependencies: dependencies, Parent: parent.value, Root: *root, Draft: *draft})
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
 	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
+	return 0
+}
+
+func runDerive(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "derive requires exactly one destination REF")
+	}
+	ref := args[0]
+	flags := flag.NewFlagSet("derive", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var source singleString
+	flags.Var(&source, "from", "required source Seal selector")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "derive accepts exactly one destination REF; unexpected argument %q", flags.Arg(0))
+	}
+	if !source.set || source.value == "" {
+		return usageError(stderr, "derive requires exactly one --from SOURCE selector")
+	}
+	if _, err := repository.ParseSelector(source.value); err != nil {
+		return usageError(stderr, "invalid derive source: %v", err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "derive", err)
+	}
+	candidate, err := repo.Derive(ctx, ref, source.value)
+	if err != nil {
+		return commandError(stderr, "derive", err)
+	}
+	fmt.Fprintf(stdout, "CANDIDATE %s parent=%s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, formatOptionalObjectID(candidate.ParentRevision), candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
 	return 0
 }
 
@@ -502,7 +562,12 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "log", err)
 	}
-	return commandError(stderr, "log", repo.RevisionGraphUnavailable())
+	entries, err := repo.Log(ctx, args[0])
+	if err != nil {
+		return commandError(stderr, "log", err)
+	}
+	printLog(stdout, args[0], entries)
+	return 0
 }
 
 func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -514,7 +579,8 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	}
 	flags := flag.NewFlagSet("linklog", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	upstream := flags.String("upstream", "", "show changes for one exact upstream logical REF")
+	var upstream singleString
+	flags.Var(&upstream, "upstream", "show changes involving one exact upstream Seal selector")
 	if err := flags.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -525,8 +591,17 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "linklog", err)
 	}
-	_ = upstream
-	return commandError(stderr, "linklog", repo.RevisionGraphUnavailable())
+	if upstream.set {
+		if _, err := repository.ParseSelector(upstream.value); err != nil {
+			return usageError(stderr, "invalid linklog upstream selector: %v", err)
+		}
+	}
+	entries, target, err := repo.LinkLog(ctx, args[0], upstream.value)
+	if err != nil {
+		return commandError(stderr, "linklog", err)
+	}
+	printLinkLog(stdout, args[0], target, entries)
+	return 0
 }
 
 func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -542,7 +617,21 @@ func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "diff", err)
 	}
-	return commandError(stderr, "diff", repo.RevisionGraphUnavailable())
+	var result history.SealDiff
+	if len(args) == 1 {
+		selector, _ := repository.ParseSelector(args[0])
+		if selector.Kind != repository.SelectorCurrentREF {
+			return usageError(stderr, "one-argument diff requires a current REF; provide two selectors for an explicit comparison")
+		}
+		result, err = repo.DiffCurrent(ctx, selector.REF)
+	} else {
+		result, err = repo.DiffSelectors(ctx, args[0], args[1])
+	}
+	if err != nil {
+		return commandError(stderr, "diff", err)
+	}
+	printSealDiff(stdout, result)
+	return 0
 }
 
 func printLog(stdout io.Writer, ref string, entries []history.Entry) {
@@ -620,6 +709,8 @@ func printLinkChange(stdout io.Writer, prefix string, change history.LinkChange)
 		fmt.Fprintf(stdout, "%sADD target=%s message=%s\n", prefix, change.TargetSeal, quoteHumanString(change.AfterMessage))
 	case history.LinkRemove:
 		fmt.Fprintf(stdout, "%sREMOVE target=%s message=%s\n", prefix, change.TargetSeal, quoteHumanString(change.BeforeMessage))
+	case history.LinkRepoint:
+		fmt.Fprintf(stdout, "%sREPOINT old=%s new=%s old_message=%s new_message=%s\n", prefix, formatOptionalObjectID(change.BeforeSeal), formatOptionalObjectID(change.AfterSeal), quoteHumanString(change.BeforeMessage), quoteHumanString(change.AfterMessage))
 	case history.LinkMessage:
 		fmt.Fprintf(stdout, "%sMESSAGE_CHANGE target=%s old=%s new=%s\n", prefix, change.TargetSeal, quoteHumanString(change.BeforeMessage), quoteHumanString(change.AfterMessage))
 	}
@@ -633,14 +724,6 @@ func printAttachmentChange(stdout io.Writer, change history.AttachmentChangeReco
 		fmt.Fprintf(stdout, "  ATTACHMENT_REMOVE name=%s media_type=%s blob=%s\n", quoteHumanString(change.Name), quoteHumanString(change.Before.MediaType), formatContentRef(change.Before.Blob))
 	case history.AttachmentChange:
 		fmt.Fprintf(stdout, "  ATTACHMENT_CHANGE name=%s old_media_type=%s new_media_type=%s old_blob=%s new_blob=%s\n", quoteHumanString(change.Name), quoteHumanString(change.Before.MediaType), quoteHumanString(change.After.MediaType), formatContentRef(change.Before.Blob), formatContentRef(change.After.Blob))
-	}
-}
-
-func printStringChange(stdout io.Writer, name string, change history.ValueChange[string]) {
-	if change.Changed {
-		fmt.Fprintf(stdout, "%s CHANGED old=%s new=%s\n", name, quoteHumanString(change.Before), quoteHumanString(change.After))
-	} else {
-		fmt.Fprintf(stdout, "%s UNCHANGED value=%s\n", name, quoteHumanString(change.Before))
 	}
 }
 
@@ -762,22 +845,54 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 	if err != nil {
 		return commandError(stderr, "stale", err)
 	}
-	_, _, _ = frontier.value, refsOnly.value, scan.value
-	return commandError(stderr, "stale", repo.RevisionGraphUnavailable())
+	statuses, warning, err := repo.Stale(ctx, frontier.value, scan.value)
+	if err != nil {
+		return commandError(stderr, "stale", err)
+	}
+	if warning != "" {
+		fmt.Fprintf(stderr, "sealgraph stale: warning: %s\n", warning)
+	}
+	if refsOnly.value {
+		for _, status := range statuses {
+			fmt.Fprintln(stdout, status.REF)
+		}
+		return 0
+	}
+	printStatuses(stdout, statuses)
+	return 0
 }
 
 func runImpact(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
+	flags := flag.NewFlagSet("impact", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var allPaths singleBool
+	var maxPaths singleString
+	flags.Var(&allPaths, "all-paths", "show bounded distinct simple Cause paths")
+	flags.Var(&maxPaths, "max-paths", "positive path limit per downstream Seal; valid only with --all-paths")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 1 {
 		return usageError(stderr, "impact requires exactly one Seal selector")
 	}
-	if _, err := repository.ParseSelector(args[0]); err != nil {
+	selector := flags.Arg(0)
+	if _, err := repository.ParseSelector(selector); err != nil {
 		return usageError(stderr, "invalid impact selector: %v", err)
+	}
+	limit, err := parseImpactLimit(allPaths.value, maxPaths)
+	if err != nil {
+		return usageError(stderr, "%v", err)
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "impact", err)
 	}
-	return commandError(stderr, "impact", repo.RevisionGraphUnavailable())
+	source, impacts, err := repo.Impact(ctx, selector, allPaths.value, limit)
+	if err != nil {
+		return commandError(stderr, "impact", err)
+	}
+	printImpacts(stdout, source, impacts, limit)
+	return 0
 }
 
 func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -788,7 +903,56 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 	if err != nil {
 		return commandError(stderr, "graph", err)
 	}
-	return commandError(stderr, "graph", repo.RevisionGraphUnavailable())
+	nodes, err := repo.Graph(ctx)
+	if err != nil {
+		return commandError(stderr, "graph", err)
+	}
+	printGraph(stdout, nodes)
+	return 0
+}
+
+func parseImpactLimit(allPaths bool, value singleString) (int, error) {
+	if value.set && !allPaths {
+		return 0, errors.New("--max-paths is valid only with --all-paths")
+	}
+	if !value.set {
+		return 100, nil
+	}
+	parsed, err := strconv.Atoi(value.value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("--max-paths requires a positive integer, got %q", value.value)
+	}
+	return parsed, nil
+}
+
+func printImpacts(stdout io.Writer, source domain.ObjectID, impacts []graph.Impact, limit int) {
+	fmt.Fprintf(stdout, "SOURCE %s\n", source)
+	for _, impact := range impacts {
+		fmt.Fprintf(stdout, "IMPACT %s refs=%s paths=%d\n", impact.Head, strings.Join(impact.REFs, ","), len(impact.Paths))
+		for _, path := range impact.Paths {
+			parts := make([]string, len(path))
+			for i, id := range path {
+				parts[i] = id.String()
+			}
+			fmt.Fprintf(stdout, "  PATH %s\n", strings.Join(parts, " -> "))
+		}
+		if impact.Truncated {
+			fmt.Fprintf(stdout, "  PATHS_TRUNCATED max=%d\n", limit)
+		}
+	}
+}
+
+func printGraph(stdout io.Writer, nodes []repository.GraphNode) {
+	for _, node := range nodes {
+		refs := "-"
+		if len(node.REFs) != 0 {
+			refs = strings.Join(node.REFs, ",")
+		}
+		fmt.Fprintf(stdout, "SEAL %s state=%s refs=%s parent=%s\n", node.ID, node.State, refs, formatOptionalObjectID(node.Parent))
+		for _, link := range node.Links {
+			fmt.Fprintf(stdout, "  CAUSE %s state=%s\n", link.Target, link.State)
+		}
+	}
 }
 
 func printStatuses(stdout io.Writer, statuses []repository.RefStatus) {
@@ -881,7 +1045,8 @@ func printStandaloneHelp(w io.Writer) {
 
 Usage:
   sealgraph init
-  sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--root] [--draft] [--depend-on SELECTOR]...
+  sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]...
+  sealgraph derive NEW_REF --from SOURCE_SELECTOR
   sealgraph link REF --depend-on SELECTOR... [-m LINK_MESSAGE]
   sealgraph unlink REF --upstream SELECTOR
   sealgraph candidate show REF [--raw-content]
@@ -890,19 +1055,19 @@ Usage:
   sealgraph seal REF
   sealgraph show SELECTOR [--raw-content]
   sealgraph log REF
-  sealgraph linklog REF [--upstream REF]
+  sealgraph linklog REF [--upstream SELECTOR]
   sealgraph diff REF
-  sealgraph diff REF@OLD REF@NEW
+  sealgraph diff SELECTOR SELECTOR
   sealgraph status [REF]
   sealgraph stale [--frontier] [--refs-only] [--scan]
-  sealgraph impact SELECTOR
+  sealgraph impact [--all-paths] [--max-paths N] SELECTOR
   sealgraph graph
   sealgraph load --format logical-v1 < repository.dump.json
 
 Each seal operation advances exactly one logical REF.
 
-Format-4 revision graph commands and tags remain explicitly unavailable until
-their separately sequenced implementation contracts are complete.
+Format-4 tags remain explicitly unavailable until their separately sequenced
+rename-safe namespace contract is complete.
 `)
 }
 
@@ -910,8 +1075,8 @@ func printStaleHelp(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   sealgraph stale [--frontier] [--refs-only] [--scan]
 
-This format-4 surface is reserved but remains unavailable until
-FORMAT4_REVISION_GRAPH supplies the coherent active-revision index.
+The result is a coherent current-head observation. --scan bypasses the
+disposable revision cache; no form repairs, relinks, or seals provenance.
 `)
 }
 

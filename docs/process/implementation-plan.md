@@ -1,9 +1,9 @@
 # Initial implementation plan
 
-Status: phases through the format-4 canonical/candidate, selector, and atomic
-logical-v1 load core are completed. `PLAN.pert` is the current perttool
-projection; the next frontier is the active revision graph, not tags, tracked
-dogfood conversion, Git, or release.
+Status: phases through the format-4 native core and active revision/Cause graph
+are completed. `PLAN.pert` is the current perttool projection; the next
+frontier is the tag/REF-move contract, not tracked dogfood conversion, Git, or
+release.
 
 ## Current format-4 frontier
 
@@ -12,7 +12,7 @@ Proceed in this order; do not partially mix formats:
 1. [x] add deterministic read-only logical dump to the format-3 binary;
 2. [x] implement format-4 canonical Seal/candidate bytes and fixture hashes;
 3. [x] add empty-repository load with complete old-to-new mapping;
-4. implement active revision indexing, `derive`, `add --parent`, active-leaf
+4. [x] implement active revision indexing, `derive`, `add --parent`, active-leaf
    admission, stale cache/`--scan`, history, frontier, and bounded impact;
 5. resolve the rename-safe tag namespace and narrow crash-safe `mv`;
 6. explicitly convert tracked dogfood and exercise a same-material sibling;
@@ -23,7 +23,7 @@ Proceed in this order; do not partially mix formats:
 The runtime now writes format 4. The tracked project `.sealgraph` remains
 format 3 until `TAG_CONTRACT` permits a lossless explicit conversion, and is
 therefore intentionally unreadable by the current runtime. Release claims stay
-blocked until the remaining graph, tag, dogfood, and release gates pass.
+blocked until the remaining tag, dogfood, and release gates pass.
 
 ## Historical implementation phases
 

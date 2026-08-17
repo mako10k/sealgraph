@@ -1,8 +1,8 @@
 # CLI contract
 
-Status: the checked-in runtime implements the format-4 native core and load.
-Commands requiring the active revision index or tag namespace fail explicitly
-until their separately sequenced implementation tasks complete.
+Status: the checked-in runtime implements the format-4 native core, load, and
+active revision/Cause graph commands. The tag namespace alone remains blocked
+until its separately sequenced rename-safe contract is implemented.
 
 ## 1. Common selector grammar
 

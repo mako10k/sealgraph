@@ -47,6 +47,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/format3-logical-dump-proposal-2026-08-17.md`](process/format3-logical-dump-proposal-2026-08-17.md)
 - [`process/format3-logical-dump-acceptance-2026-08-17.md`](process/format3-logical-dump-acceptance-2026-08-17.md)
 - [`process/format4-native-core-acceptance-2026-08-17.md`](process/format4-native-core-acceptance-2026-08-17.md)
+- [`process/format4-revision-graph-acceptance-2026-08-17.md`](process/format4-revision-graph-acceptance-2026-08-17.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
 - [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)

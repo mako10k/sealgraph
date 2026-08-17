@@ -82,7 +82,7 @@ func TestCLILoadPublishesOnlyAfterCanonicalInput(t *testing.T) {
 	}
 }
 
-func TestCLIFormat3DumpAndDeferredSurfacesFailExplicitly(t *testing.T) {
+func TestCLIFormat3DumpAndTagSurfacesFailExplicitly(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
 		t.Fatal(stderr)
@@ -90,11 +90,13 @@ func TestCLIFormat3DumpAndDeferredSurfacesFailExplicitly(t *testing.T) {
 	if code, stdout, stderr := runCLI(t, dir, nil, "dump", "--format", "logical-v1"); code != 2 || stdout != "" || !strings.Contains(stderr, `unknown command "dump"`) {
 		t.Fatalf("dump code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	for _, args := range [][]string{{"graph"}, {"stale", "--scan"}, {"tag", "root"}} {
-		code, stdout, stderr := runCLI(t, dir, nil, args...)
-		if code != 1 || stdout != "" || (!strings.Contains(stderr, "not implemented") && !strings.Contains(stderr, "tag namespace")) {
-			t.Fatalf("%v code=%d stdout=%s stderr=%s", args, code, stdout, stderr)
+	for _, args := range [][]string{{"graph"}, {"stale", "--scan"}} {
+		if code, _, stderr := runCLI(t, dir, nil, args...); code != 0 || stderr != "" {
+			t.Fatalf("%v code=%d stderr=%s", args, code, stderr)
 		}
+	}
+	if code, stdout, stderr := runCLI(t, dir, nil, "tag", "root"); code != 1 || stdout != "" || !strings.Contains(stderr, "tag namespace") {
+		t.Fatalf("tag code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 }
 
@@ -112,5 +114,77 @@ func TestCLILoadRequiresSingleKnownFormatAndAbsentTarget(t *testing.T) {
 	}
 	if code, stdout, stderr := runCLI(t, dir, input, "load", "--format", "logical-v1"); code != 1 || stdout != "" || !strings.Contains(stderr, "already exists") {
 		t.Fatalf("existing load code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+}
+
+func mustRunCLI(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	code, stdout, stderr := runCLI(t, dir, nil, args...)
+	if code != 0 || stderr != "" {
+		t.Fatalf("%v code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
+	}
+	return stdout
+}
+
+func mustSealCLI(t *testing.T, dir, ref string) string {
+	t.Helper()
+	stdout := mustRunCLI(t, dir, "seal", ref)
+	return strings.TrimSpace(strings.TrimPrefix(stdout, "SEALED "+ref+" "))
+}
+
+type cliRevisionFixture struct {
+	dir          string
+	root1, root2 string
+}
+
+func newCLIRevisionFixture(t *testing.T) cliRevisionFixture {
+	t.Helper()
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root-v1")
+	root1 := mustSealCLI(t, dir, "root")
+	mustRunCLI(t, dir, "add", "middle", "--content", "middle", "--depend-on", "root")
+	mustSealCLI(t, dir, "middle")
+	mustRunCLI(t, dir, "add", "leaf", "--content", "leaf", "--depend-on", "middle")
+	mustSealCLI(t, dir, "leaf")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root-v2")
+	root2 := mustSealCLI(t, dir, "root")
+	return cliRevisionFixture{dir: dir, root1: root1, root2: root2}
+}
+
+func TestCLIRevisionGraphDeriveStaleHistoryAndImpact(t *testing.T) {
+	fixture := newCLIRevisionFixture(t)
+	verifyCLIStaleAndImpact(t, fixture)
+	verifyCLIDeriveAndHistory(t, fixture)
+}
+
+func verifyCLIStaleAndImpact(t *testing.T, fixture cliRevisionFixture) {
+	t.Helper()
+	if stdout := mustRunCLI(t, fixture.dir, "stale", "--frontier", "--refs-only", "--scan"); stdout != "middle\n" {
+		t.Fatalf("stale stdout=%q", stdout)
+	}
+	stdout := mustRunCLI(t, fixture.dir, "impact", "--all-paths", "--max-paths", "1", "@"+fixture.root2)
+	if !strings.Contains(stdout, "SOURCE "+fixture.root2) || !strings.Contains(stdout, "refs=leaf") {
+		t.Fatalf("impact stdout=%q", stdout)
+	}
+	if code, stdout, _ := runCLI(t, fixture.dir, nil, "impact", "--max-paths", "1", "@"+fixture.root2); code != 2 || stdout != "" {
+		t.Fatalf("invalid impact code=%d stdout=%q", code, stdout)
+	}
+}
+
+func verifyCLIDeriveAndHistory(t *testing.T, fixture cliRevisionFixture) {
+	t.Helper()
+	stdout := mustRunCLI(t, fixture.dir, "derive", "preserved", "--from", "@"+fixture.root1)
+	if !strings.Contains(stdout, "parent="+fixture.root1) {
+		t.Fatalf("derive stdout=%q", stdout)
+	}
+	mustSealCLI(t, fixture.dir, "preserved")
+	stdout = mustRunCLI(t, fixture.dir, "diff", "root")
+	if !strings.Contains(stdout, "FROM "+fixture.root1) || !strings.Contains(stdout, "TO "+fixture.root2) {
+		t.Fatalf("diff stdout=%q", stdout)
+	}
+	stdout = mustRunCLI(t, fixture.dir, "log", "root")
+	if strings.Count(stdout, "SEAL ") != 2 {
+		t.Fatalf("log stdout=%q", stdout)
 	}
 }

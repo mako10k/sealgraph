@@ -303,6 +303,14 @@ own checksum. Cache miss, corruption, or digest mismatch triggers canonical
 scan and atomic refresh. Cache write failure may warn without invalidating an
 already validated result. Cache never repairs canonical state.
 
+The current disposable file is `.sealgraph/cache/revision-v1.json`, schema
+`sealgraph/revision-cache/v1`. It records the sorted active Seal IDs and exact
+`parent_revision` values, repository format 4, the complete observation
+SHA-256, and a checksum over those derived fields. A cache hit re-reads every
+recorded canonical Seal and verifies its parent before graph results are used.
+`stale --scan` bypasses the file. Unsafe cache symlinks/non-files are ignored
+and never followed; failure to refresh is a warning, not canonical repair.
+
 An outer Git repository tracks canonical `.sealgraph/config`, `objects/**`,
 `refs/seals/**`, and the eventual accepted tag files as ordinary exact-byte
 files. It must not stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or

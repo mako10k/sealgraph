@@ -16,7 +16,6 @@ import (
 	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
-var ErrRevisionGraphPending = errors.New("format-4 revision graph is not implemented in this slice")
 var ErrTagContractPending = errors.New("format-4 tag namespace is not implemented; wait for the accepted rename-safe tag contract")
 
 type Repository struct {
@@ -54,6 +53,7 @@ type AddOptions struct {
 	REF          string
 	Content      []byte
 	Dependencies []Dependency
+	Parent       string
 	Root         bool
 	Draft        bool
 }
@@ -63,7 +63,7 @@ func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candid
 		if err := domain.ValidateREF(options.REF); err != nil {
 			return domain.Candidate{}, err
 		}
-		candidate, err := r.candidateForEdit(ctx, options.REF)
+		candidate, err := r.candidateForAdd(ctx, options.REF, options.Parent)
 		if err != nil {
 			return domain.Candidate{}, err
 		}
@@ -89,6 +89,84 @@ func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candid
 		}
 		return candidate, nil
 	})
+}
+
+func (r *Repository) candidateForAdd(ctx context.Context, ref, parentSelector string) (domain.Candidate, error) {
+	if parentSelector == "" {
+		return r.candidateForEdit(ctx, ref)
+	}
+	if err := r.requireAbsentDestination(ctx, ref); err != nil {
+		return domain.Candidate{}, err
+	}
+	parent, err := r.ResolveSelector(ctx, parentSelector)
+	if err != nil {
+		return domain.Candidate{}, fmt.Errorf("resolve explicit parent %q: %w", parentSelector, err)
+	}
+	if err := r.validateRevisionChain(ctx, parent.ID); err != nil {
+		return domain.Candidate{}, fmt.Errorf("validate explicit parent %s: %w", parent.ID, err)
+	}
+	parentID := parent.ID
+	return domain.Candidate{
+		Schema: domain.CandidateSchema, REF: ref, ParentRevision: &parentID,
+		Attachments: []domain.Attachment{}, Links: []domain.Link{},
+	}, nil
+}
+
+func (r *Repository) Derive(ctx context.Context, ref, sourceSelector string) (domain.Candidate, error) {
+	return withMutation(ctx, r.writer, "derive candidate", func() (domain.Candidate, error) {
+		if err := domain.ValidateREF(ref); err != nil {
+			return domain.Candidate{}, err
+		}
+		if err := r.requireAbsentDestination(ctx, ref); err != nil {
+			return domain.Candidate{}, err
+		}
+		source, err := r.ResolveSelector(ctx, sourceSelector)
+		if err != nil {
+			return domain.Candidate{}, fmt.Errorf("resolve derive source %q: %w", sourceSelector, err)
+		}
+		if err := r.validateRevisionChain(ctx, source.ID); err != nil {
+			return domain.Candidate{}, fmt.Errorf("validate derive source %s: %w", source.ID, err)
+		}
+		if err := r.validateSealMaterial(ctx, source.ID, source.Payload); err != nil {
+			return domain.Candidate{}, err
+		}
+		parent := source.ID
+		candidate := domain.Candidate{
+			Schema: domain.CandidateSchema, REF: ref, ParentRevision: &parent,
+			Content: source.Payload.Content, Attachments: append([]domain.Attachment(nil), source.Payload.Attachments...),
+			Links: append([]domain.Link(nil), source.Payload.Links...), Root: source.Payload.Root, Draft: source.Payload.Draft,
+		}
+		if err := r.candidates.Save(candidate); err != nil {
+			return domain.Candidate{}, fmt.Errorf("save derived candidate %s: %w", ref, err)
+		}
+		return candidate, nil
+	})
+}
+
+func (r *Repository) requireAbsentDestination(ctx context.Context, ref string) error {
+	if _, err := r.candidates.LoadSnapshot(ref); err == nil {
+		return fmt.Errorf("destination candidate %s already exists; discard it explicitly or choose another REF", ref)
+	} else if !errors.Is(err, ErrCandidateNotFound) {
+		return fmt.Errorf("destination candidate %s is not safely absent: %w", ref, err)
+	}
+	if head, err := r.refs.Resolve(ctx, ref); err == nil {
+		return fmt.Errorf("destination REF %s already exists at %s; explicit parent creation requires an absent destination", ref, head)
+	} else if !errors.Is(err, store.ErrRefNotFound) {
+		return fmt.Errorf("destination REF %s is not safely absent: %w", ref, err)
+	}
+	return nil
+}
+
+func (r *Repository) validateSealMaterial(ctx context.Context, id domain.ObjectID, payload domain.SealPayload) error {
+	if _, err := r.readRepositoryBlob(ctx, payload.Content, fmt.Sprintf("content for seal %s", id)); err != nil {
+		return err
+	}
+	for _, attachment := range payload.Attachments {
+		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("attachment %q for seal %s", attachment.Name, id)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repository) Link(ctx context.Context, ref string, dependencies []Dependency) (domain.Candidate, error) {
@@ -197,8 +275,13 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		if err := r.validateCauseClosure(ctx, candidate.Links, !candidate.Draft); err != nil {
 			return SealResult{}, err
 		}
+		var admission *headObservation
 		if !candidate.Draft && !candidate.Root {
-			return SealResult{}, fmt.Errorf("normal non-root publication requires active-revision-leaf admission: %w; keep the candidate unchanged until FORMAT4_REVISION_GRAPH is implemented", ErrRevisionGraphPending)
+			observed, err := r.requireActiveLeafClosure(ctx, candidate.Links)
+			if err != nil {
+				return SealResult{}, err
+			}
+			admission = &observed
 		}
 		payload := domain.SealPayload{
 			Schema: domain.SealSchema, ParentRevision: candidate.ParentRevision,
@@ -212,6 +295,11 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		sealID, err := r.objects.WriteBlob(ctx, encoded)
 		if err != nil {
 			return SealResult{}, fmt.Errorf("store immutable seal for %s: %w", ref, err)
+		}
+		if admission != nil {
+			if err := r.revalidateHeads(ctx, *admission, "seal admission"); err != nil {
+				return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
+			}
 		}
 		if err := r.refs.Update(ctx, ref, candidate.ExpectedREFHead, &sealID); err != nil {
 			return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
@@ -279,6 +367,9 @@ func (r *Repository) validateCauseClosure(ctx context.Context, links []domain.Li
 		}
 		if requireNonDraft && payload.Draft {
 			return fmt.Errorf("normal seal requires a non-draft Cause closure, but %s is draft; keep the candidate draft or select a non-draft Cause explicitly", id)
+		}
+		if err := r.validateRevisionChain(ctx, id); err != nil {
+			return fmt.Errorf("Cause target %s has invalid revision ancestry: %w", id, err)
 		}
 		for _, link := range payload.Links {
 			if err := visit(link.TargetSeal); err != nil {
@@ -463,39 +554,4 @@ func (r *Repository) refsPointingTo(ctx context.Context, id domain.ObjectID) ([]
 	}
 	sort.Strings(aliases)
 	return aliases, nil
-}
-
-type RefStatus struct {
-	REF      string
-	Head     *domain.ObjectID
-	Unsealed bool
-	Draft    bool
-}
-
-func (s RefStatus) Labels() []string {
-	var labels []string
-	if s.Unsealed {
-		labels = append(labels, "UNSEALED")
-	}
-	if s.Draft {
-		labels = append(labels, "DRAFT")
-	}
-	if len(labels) == 0 {
-		labels = append(labels, "CLEAN")
-	}
-	return labels
-}
-
-func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, error) {
-	return nil, ErrRevisionGraphPending
-}
-
-func (r *Repository) RevisionGraphUnavailable() error { return ErrRevisionGraphPending }
-
-func (r *Repository) CreateTag(context.Context, string, string) (domain.ObjectID, error) {
-	return domain.ObjectID{}, ErrTagContractPending
-}
-
-func (r *Repository) ListTags(context.Context, string) ([]store.Tag, error) {
-	return nil, ErrTagContractPending
 }

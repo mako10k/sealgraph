@@ -232,78 +232,98 @@ func (s *TagStore) ListAll(ctx context.Context, refs []string) ([]store.ScopedTa
 		}
 		refSet[ref] = struct{}{}
 	}
-	result := make([]store.ScopedTag, 0)
-	seen := make(map[string]struct{})
-	err := filepath.WalkDir(s.tagsDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if path == s.tagsDir {
-			if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
-				return fmt.Errorf("tag store is not a real directory")
-			}
-			return nil
-		}
-		if entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
-			return fmt.Errorf("tag entry %s is not a regular file", path)
-		}
-		relative, err := filepath.Rel(s.tagsDir, path)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
-		if _, conflicts := refSet[relative]; conflicts {
-			return fmt.Errorf("tag path %q collides with a hierarchical REF scope", relative)
-		}
-		var scope, encoded string
-		for _, ref := range refs {
-			prefix := ref + "/"
-			if !strings.HasPrefix(relative, prefix) {
-				continue
-			}
-			candidate := strings.TrimPrefix(relative, prefix)
-			if candidate != "" && !strings.Contains(candidate, "/") {
-				if scope != "" {
-					return fmt.Errorf("tag path %q is attributable to more than one REF", relative)
-				}
-				scope, encoded = ref, candidate
-			}
-		}
-		if scope == "" {
-			return fmt.Errorf("tag path %q has no current REF scope", relative)
-		}
-		name, err := DecodeTagName(encoded)
-		if err != nil {
-			return err
-		}
-		key := scope + "\x00" + name
-		if _, exists := seen[key]; exists {
-			return fmt.Errorf("duplicate logical tag %s@%s", scope, name)
-		}
-		id, err := s.Resolve(ctx, scope, name)
-		if err != nil {
-			return err
-		}
-		seen[key] = struct{}{}
-		result = append(result, store.ScopedTag{REF: scope, Name: name, Seal: id})
-		return nil
-	})
+	inventory := tagInventory{store: s, ctx: ctx, refs: refs, refSet: refSet, seen: make(map[string]struct{})}
+	err := filepath.WalkDir(s.tagsDir, inventory.walk)
 	if err != nil {
 		return nil, fmt.Errorf("inventory tags: %w", err)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].REF != result[j].REF {
-			return result[i].REF < result[j].REF
+	sort.Slice(inventory.result, func(i, j int) bool {
+		if inventory.result[i].REF != inventory.result[j].REF {
+			return inventory.result[i].REF < inventory.result[j].REF
 		}
-		return result[i].Name < result[j].Name
+		return inventory.result[i].Name < inventory.result[j].Name
 	})
-	return result, nil
+	return inventory.result, nil
+}
+
+type tagInventory struct {
+	store  *TagStore
+	ctx    context.Context
+	refs   []string
+	refSet map[string]struct{}
+	seen   map[string]struct{}
+	result []store.ScopedTag
+}
+
+func (inventory *tagInventory) walk(path string, entry fs.DirEntry, walkErr error) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if err := inventory.ctx.Err(); err != nil {
+		return err
+	}
+	if path == inventory.store.tagsDir {
+		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+			return fmt.Errorf("tag store is not a real directory")
+		}
+		return nil
+	}
+	if entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+		return nil
+	}
+	if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
+		return fmt.Errorf("tag entry %s is not a regular file", path)
+	}
+	return inventory.addFile(path)
+}
+
+func (inventory *tagInventory) addFile(path string) error {
+	relative, err := filepath.Rel(inventory.store.tagsDir, path)
+	if err != nil {
+		return err
+	}
+	relative = filepath.ToSlash(relative)
+	if _, conflicts := inventory.refSet[relative]; conflicts {
+		return fmt.Errorf("tag path %q collides with a hierarchical REF scope", relative)
+	}
+	scope, encoded, err := tagScope(relative, inventory.refs)
+	if err != nil {
+		return err
+	}
+	name, err := DecodeTagName(encoded)
+	if err != nil {
+		return err
+	}
+	key := scope + "\x00" + name
+	if _, exists := inventory.seen[key]; exists {
+		return fmt.Errorf("duplicate logical tag %s@%s", scope, name)
+	}
+	id, err := inventory.store.Resolve(inventory.ctx, scope, name)
+	if err != nil {
+		return err
+	}
+	inventory.seen[key] = struct{}{}
+	inventory.result = append(inventory.result, store.ScopedTag{REF: scope, Name: name, Seal: id})
+	return nil
+}
+
+func tagScope(relative string, refs []string) (string, string, error) {
+	var scope, encoded string
+	for _, ref := range refs {
+		prefix := ref + "/"
+		candidate := strings.TrimPrefix(relative, prefix)
+		if candidate == relative || candidate == "" || strings.Contains(candidate, "/") {
+			continue
+		}
+		if scope != "" {
+			return "", "", fmt.Errorf("tag path %q is attributable to more than one REF", relative)
+		}
+		scope, encoded = ref, candidate
+	}
+	if scope == "" {
+		return "", "", fmt.Errorf("tag path %q has no current REF scope", relative)
+	}
+	return scope, encoded, nil
 }
 
 func (s *TagStore) validateNamespace(path string) error {

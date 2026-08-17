@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -154,31 +155,40 @@ func (s *ObjectStore) ResolvePrefix(ctx context.Context, prefix string) (domain.
 		if len(name) != 2 || !isLowerHex(name) || !strings.HasPrefix(name, prefix[:min(len(prefix), 2)]) {
 			continue
 		}
-		if fanout.Type()&os.ModeSymlink != 0 || !fanout.IsDir() {
-			return domain.ObjectID{}, fmt.Errorf("object fanout %s is not a real directory", name)
-		}
-		files, err := os.ReadDir(filepath.Join(s.objectsDir, name))
+		match, err = s.scanObjectFanout(fanout, prefix, match)
 		if err != nil {
-			return domain.ObjectID{}, fmt.Errorf("read object fanout %s: %w", name, err)
-		}
-		for _, file := range files {
-			full := name + file.Name()
-			if len(full) != 64 || !isLowerHex(full) || !strings.HasPrefix(full, prefix) {
-				continue
-			}
-			if file.Type()&os.ModeSymlink != 0 || !file.Type().IsRegular() {
-				return domain.ObjectID{}, fmt.Errorf("object path %s is not a regular file", full)
-			}
-			if match != "" && match != full {
-				return domain.ObjectID{}, fmt.Errorf("%w %q; use more hexadecimal characters", store.ErrAmbiguousObjectPrefix, prefix)
-			}
-			match = full
+			return domain.ObjectID{}, err
 		}
 	}
 	if match == "" {
 		return domain.ObjectID{}, fmt.Errorf("%w: prefix %s", store.ErrObjectNotFound, prefix)
 	}
 	return domain.ObjectID{Hex: match}, nil
+}
+
+func (s *ObjectStore) scanObjectFanout(fanout fs.DirEntry, prefix, match string) (string, error) {
+	name := fanout.Name()
+	if fanout.Type()&os.ModeSymlink != 0 || !fanout.IsDir() {
+		return "", fmt.Errorf("object fanout %s is not a real directory", name)
+	}
+	files, err := os.ReadDir(filepath.Join(s.objectsDir, name))
+	if err != nil {
+		return "", fmt.Errorf("read object fanout %s: %w", name, err)
+	}
+	for _, file := range files {
+		full := name + file.Name()
+		if len(full) != 64 || !isLowerHex(full) || !strings.HasPrefix(full, prefix) {
+			continue
+		}
+		if file.Type()&os.ModeSymlink != 0 || !file.Type().IsRegular() {
+			return "", fmt.Errorf("object path %s is not a regular file", full)
+		}
+		if match != "" && match != full {
+			return "", fmt.Errorf("%w %q; use more hexadecimal characters", store.ErrAmbiguousObjectPrefix, prefix)
+		}
+		match = full
+	}
+	return match, nil
 }
 
 // List reads and validates every physical loose object in deterministic ID

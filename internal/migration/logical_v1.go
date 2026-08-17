@@ -76,23 +76,45 @@ type logicalDumpV1Wire struct {
 // format-3 repository. Exact re-encoding proves compact member order, base64,
 // payload canonicality, and the required single trailing LF.
 func DecodeLogicalDumpV1(data []byte) (LogicalDumpV1, error) {
+	wire, err := decodeLogicalDumpWire(data)
+	if err != nil {
+		return LogicalDumpV1{}, err
+	}
+	dump, err := convertLogicalDumpWire(wire)
+	if err != nil {
+		return LogicalDumpV1{}, err
+	}
+	canonicalBytes, err := EncodeLogicalDumpV1(dump)
+	if err != nil {
+		return LogicalDumpV1{}, err
+	}
+	if !bytes.Equal(data, canonicalBytes) {
+		return LogicalDumpV1{}, fmt.Errorf("logical-v1 dump is not canonical or lacks its exact trailing LF")
+	}
+	return dump, nil
+}
+
+func decodeLogicalDumpWire(data []byte) (logicalDumpV1Wire, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var wire logicalDumpV1Wire
 	if err := decoder.Decode(&wire); err != nil {
-		return LogicalDumpV1{}, fmt.Errorf("decode logical-v1 dump: %w", err)
+		return logicalDumpV1Wire{}, fmt.Errorf("decode logical-v1 dump: %w", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return LogicalDumpV1{}, fmt.Errorf("decode logical-v1 dump: trailing JSON value")
+		return logicalDumpV1Wire{}, fmt.Errorf("decode logical-v1 dump: trailing JSON value")
 	}
 	if wire.Schema != LogicalDumpV1Schema {
-		return LogicalDumpV1{}, fmt.Errorf("logical dump schema is %q; expected %q", wire.Schema, LogicalDumpV1Schema)
+		return logicalDumpV1Wire{}, fmt.Errorf("logical dump schema is %q; expected %q", wire.Schema, LogicalDumpV1Schema)
 	}
 	if wire.SourceRepository.RepositoryFormat != 3 || wire.SourceRepository.ObjectFormat != "sha256" {
-		return LogicalDumpV1{}, fmt.Errorf("logical dump source repository must be format 3 with sha256 objects")
+		return logicalDumpV1Wire{}, fmt.Errorf("logical dump source repository must be format 3 with sha256 objects")
 	}
+	return wire, nil
+}
 
+func convertLogicalDumpWire(wire logicalDumpV1Wire) (LogicalDumpV1, error) {
 	dump := LogicalDumpV1{
 		Objects:         make([]ObjectRecord, len(wire.Objects)),
 		Seals:           make([]SealRecord, len(wire.Seals)),
@@ -145,13 +167,6 @@ func DecodeLogicalDumpV1(data []byte) (LogicalDumpV1, error) {
 			return LogicalDumpV1{}, fmt.Errorf("excluded object %d: %w", i, err)
 		}
 		dump.ExcludedObjects[i] = id
-	}
-	canonicalBytes, err := EncodeLogicalDumpV1(dump)
-	if err != nil {
-		return LogicalDumpV1{}, err
-	}
-	if !bytes.Equal(data, canonicalBytes) {
-		return LogicalDumpV1{}, fmt.Errorf("logical-v1 dump is not canonical or lacks its exact trailing LF")
 	}
 	return dump, nil
 }
@@ -225,9 +240,37 @@ func EncodeLogicalDumpV1(dump LogicalDumpV1) ([]byte, error) {
 }
 
 func validateLogicalDumpV1(dump LogicalDumpV1) ([][]byte, error) {
-	objectIDs := make(map[string]struct{}, len(dump.Objects))
-	for i, object := range dump.Objects {
-		if err := requireOrderedID(i, dump.Objects, object.ID); err != nil {
+	objectIDs, err := validateDumpObjects(dump.Objects)
+	if err != nil {
+		return nil, err
+	}
+	sealPositions, sealPayloads, sealBytes, err := validateDumpSeals(dump.Seals)
+	if err != nil {
+		return nil, err
+	}
+	materialIDs, err := validateDumpRelations(dump.Seals, sealPositions, sealPayloads)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateDumpMaterialSets(objectIDs, materialIDs); err != nil {
+		return nil, err
+	}
+	if err := validateDumpREFs(dump.REFs, sealPayloads); err != nil {
+		return nil, err
+	}
+	if err := validateDumpTags(dump.Tags, sealPayloads); err != nil {
+		return nil, err
+	}
+	if err := validateDumpExcluded(dump.ExcludedObjects, objectIDs, sealPositions); err != nil {
+		return nil, err
+	}
+	return sealBytes, nil
+}
+
+func validateDumpObjects(objects []ObjectRecord) (map[string]struct{}, error) {
+	objectIDs := make(map[string]struct{}, len(objects))
+	for i, object := range objects {
+		if err := requireOrderedID(i, objects, object.ID); err != nil {
 			return nil, fmt.Errorf("objects: %w", err)
 		}
 		if got := domain.ComputeNativeBlobID(object.Data); !got.Equal(object.ID) {
@@ -235,44 +278,50 @@ func validateLogicalDumpV1(dump LogicalDumpV1) ([][]byte, error) {
 		}
 		objectIDs[object.ID.String()] = struct{}{}
 	}
+	return objectIDs, nil
+}
 
-	sealPositions := make(map[string]int, len(dump.Seals))
-	sealPayloads := make(map[string]Format3SealPayload, len(dump.Seals))
-	sealBytes := make([][]byte, len(dump.Seals))
-	for i, seal := range dump.Seals {
+func validateDumpSeals(seals []SealRecord) (map[string]int, map[string]Format3SealPayload, [][]byte, error) {
+	positions := make(map[string]int, len(seals))
+	payloads := make(map[string]Format3SealPayload, len(seals))
+	encodedSeals := make([][]byte, len(seals))
+	for i, seal := range seals {
 		if err := seal.OldSealID.ValidateNative(); err != nil {
-			return nil, fmt.Errorf("seal record %d old ID: %w", i, err)
+			return nil, nil, nil, fmt.Errorf("seal record %d old ID: %w", i, err)
 		}
-		if _, exists := sealPositions[seal.OldSealID.String()]; exists {
-			return nil, fmt.Errorf("duplicate old SealID %s", seal.OldSealID)
+		if _, exists := positions[seal.OldSealID.String()]; exists {
+			return nil, nil, nil, fmt.Errorf("duplicate old SealID %s", seal.OldSealID)
 		}
 		encoded, err := encodeFormat3Seal(seal.Payload)
 		if err != nil {
-			return nil, fmt.Errorf("encode old seal %s: %w", seal.OldSealID, err)
+			return nil, nil, nil, fmt.Errorf("encode old seal %s: %w", seal.OldSealID, err)
 		}
 		if got := domain.ComputeNativeBlobID(encoded); !got.Equal(seal.OldSealID) {
-			return nil, fmt.Errorf("old seal %s canonical payload hashes to %s", seal.OldSealID, got)
+			return nil, nil, nil, fmt.Errorf("old seal %s canonical payload hashes to %s", seal.OldSealID, got)
 		}
-		sealPositions[seal.OldSealID.String()] = i
-		sealPayloads[seal.OldSealID.String()] = seal.Payload
-		sealBytes[i] = encoded
+		positions[seal.OldSealID.String()] = i
+		payloads[seal.OldSealID.String()] = seal.Payload
+		encodedSeals[i] = encoded
 	}
+	return positions, payloads, encodedSeals, nil
+}
 
+func validateDumpRelations(seals []SealRecord, positions map[string]int, payloads map[string]Format3SealPayload) (map[string]struct{}, error) {
 	materialIDs := make(map[string]struct{})
-	for i, seal := range dump.Seals {
+	for i, seal := range seals {
 		if seal.Payload.Parent != nil {
-			if err := requireEarlierSeal(sealPositions, i, *seal.Payload.Parent, "parent"); err != nil {
+			if err := requireEarlierSeal(positions, i, *seal.Payload.Parent, "parent"); err != nil {
 				return nil, fmt.Errorf("seal %s: %w", seal.OldSealID, err)
 			}
-			if parent := sealPayloads[seal.Payload.Parent.String()]; parent.REF != seal.Payload.REF {
+			if parent := payloads[seal.Payload.Parent.String()]; parent.REF != seal.Payload.REF {
 				return nil, fmt.Errorf("seal %s parent %s belongs to REF %s, not %s", seal.OldSealID, seal.Payload.Parent, parent.REF, seal.Payload.REF)
 			}
 		}
 		for _, link := range seal.Payload.Links {
-			if err := requireEarlierSeal(sealPositions, i, link.TargetSeal, "Cause target"); err != nil {
+			if err := requireEarlierSeal(positions, i, link.TargetSeal, "Cause target"); err != nil {
 				return nil, fmt.Errorf("seal %s: %w", seal.OldSealID, err)
 			}
-			if target := sealPayloads[link.TargetSeal.String()]; target.REF != link.TargetREF {
+			if target := payloads[link.TargetSeal.String()]; target.REF != link.TargetREF {
 				return nil, fmt.Errorf("seal %s Cause target %s belongs to REF %s, not %s", seal.OldSealID, link.TargetSeal, target.REF, link.TargetREF)
 			}
 		}
@@ -281,69 +330,83 @@ func validateLogicalDumpV1(dump LogicalDumpV1) ([][]byte, error) {
 			materialIDs[attachment.Blob.ID.String()] = struct{}{}
 		}
 	}
-	for id := range materialIDs {
-		if _, exists := objectIDs[id]; !exists {
-			return nil, fmt.Errorf("referenced material object %s is absent from objects", id)
-		}
-	}
-	for id := range objectIDs {
-		if _, used := materialIDs[id]; !used {
-			return nil, fmt.Errorf("object %s is not referenced material; list it as excluded instead", id)
-		}
-	}
+	return materialIDs, nil
+}
 
-	for i, ref := range dump.REFs {
+func validateDumpMaterialSets(objects, materials map[string]struct{}) error {
+	for id := range materials {
+		if _, exists := objects[id]; !exists {
+			return fmt.Errorf("referenced material object %s is absent from objects", id)
+		}
+	}
+	for id := range objects {
+		if _, used := materials[id]; !used {
+			return fmt.Errorf("object %s is not referenced material; list it as excluded instead", id)
+		}
+	}
+	return nil
+}
+
+func validateDumpREFs(refs []RefRecord, payloads map[string]Format3SealPayload) error {
+	for i, ref := range refs {
 		if err := domain.ValidateREF(ref.Name); err != nil {
-			return nil, fmt.Errorf("REF record %d: %w", i, err)
+			return fmt.Errorf("REF record %d: %w", i, err)
 		}
-		if i > 0 && dump.REFs[i-1].Name >= ref.Name {
-			return nil, fmt.Errorf("REF records are not in strict name order at %q", ref.Name)
+		if i > 0 && refs[i-1].Name >= ref.Name {
+			return fmt.Errorf("REF records are not in strict name order at %q", ref.Name)
 		}
-		head, exists := sealPayloads[ref.Head.String()]
+		head, exists := payloads[ref.Head.String()]
 		if !exists {
-			return nil, fmt.Errorf("REF %s head %s is not an exported Seal", ref.Name, ref.Head)
+			return fmt.Errorf("REF %s head %s is not an exported Seal", ref.Name, ref.Head)
 		}
 		if head.REF != ref.Name {
-			return nil, fmt.Errorf("REF %s head %s belongs to REF %s", ref.Name, ref.Head, head.REF)
+			return fmt.Errorf("REF %s head %s belongs to REF %s", ref.Name, ref.Head, head.REF)
 		}
 	}
-	for i, tag := range dump.Tags {
+	return nil
+}
+
+func validateDumpTags(tags []TagRecord, payloads map[string]Format3SealPayload) error {
+	for i, tag := range tags {
 		if err := domain.ValidateREF(tag.REF); err != nil {
-			return nil, fmt.Errorf("tag record %d REF: %w", i, err)
+			return fmt.Errorf("tag record %d REF: %w", i, err)
 		}
 		if err := domain.ValidateTagName(tag.Name); err != nil {
-			return nil, fmt.Errorf("tag record %d name: %w", i, err)
+			return fmt.Errorf("tag record %d name: %w", i, err)
 		}
 		if i > 0 {
-			previous := dump.Tags[i-1]
+			previous := tags[i-1]
 			if previous.REF > tag.REF || previous.REF == tag.REF && previous.Name >= tag.Name {
-				return nil, fmt.Errorf("tag records are not in strict (REF, name) order at %s@%s", tag.REF, tag.Name)
+				return fmt.Errorf("tag records are not in strict (REF, name) order at %s@%s", tag.REF, tag.Name)
 			}
 		}
-		target, exists := sealPayloads[tag.Target.String()]
+		target, exists := payloads[tag.Target.String()]
 		if !exists {
-			return nil, fmt.Errorf("tag %s@%s target %s is not an exported Seal", tag.REF, tag.Name, tag.Target)
+			return fmt.Errorf("tag %s@%s target %s is not an exported Seal", tag.REF, tag.Name, tag.Target)
 		}
 		if target.REF != tag.REF {
-			return nil, fmt.Errorf("tag %s@%s target %s belongs to REF %s", tag.REF, tag.Name, tag.Target, target.REF)
+			return fmt.Errorf("tag %s@%s target %s belongs to REF %s", tag.REF, tag.Name, tag.Target, target.REF)
 		}
 	}
+	return nil
+}
 
-	for i, id := range dump.ExcludedObjects {
+func validateDumpExcluded(excluded []domain.ObjectID, objects map[string]struct{}, sealPositions map[string]int) error {
+	for i, id := range excluded {
 		if err := id.ValidateNative(); err != nil {
-			return nil, fmt.Errorf("excluded object %d: %w", i, err)
+			return fmt.Errorf("excluded object %d: %w", i, err)
 		}
-		if i > 0 && dump.ExcludedObjects[i-1].String() >= id.String() {
-			return nil, fmt.Errorf("excluded objects are not in strict ID order at %s", id)
+		if i > 0 && excluded[i-1].String() >= id.String() {
+			return fmt.Errorf("excluded objects are not in strict ID order at %s", id)
 		}
-		if _, exists := objectIDs[id.String()]; exists {
-			return nil, fmt.Errorf("excluded object %s is also exported material", id)
+		if _, exists := objects[id.String()]; exists {
+			return fmt.Errorf("excluded object %s is also exported material", id)
 		}
 		if _, exists := sealPositions[id.String()]; exists {
-			return nil, fmt.Errorf("excluded object %s is also an exported Seal", id)
+			return fmt.Errorf("excluded object %s is also an exported Seal", id)
 		}
 	}
-	return sealBytes, nil
+	return nil
 }
 
 func requireOrderedID(i int, objects []ObjectRecord, id domain.ObjectID) error {

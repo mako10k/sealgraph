@@ -57,6 +57,24 @@ func (s *RefStore) Resolve(ctx context.Context, ref string) (domain.ObjectID, er
 }
 
 func (s *RefStore) Update(ctx context.Context, ref string, oldID, newID *domain.ObjectID) error {
+	if err := validateRefUpdate(ctx, ref, oldID, newID); err != nil {
+		return err
+	}
+	if err := s.checkPrefixConflict(ref); err != nil {
+		return err
+	}
+	release, err := s.acquireLock(ref)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := s.checkCAS(ctx, ref, oldID); err != nil {
+		return err
+	}
+	return s.writeREF(ref, *newID)
+}
+
+func validateRefUpdate(ctx context.Context, ref string, oldID, newID *domain.ObjectID) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -74,24 +92,29 @@ func (s *RefStore) Update(ctx context.Context, ref string, oldID, newID *domain.
 			return fmt.Errorf("invalid expected REF value: %w", err)
 		}
 	}
+	return nil
+}
 
-	if err := s.checkPrefixConflict(ref); err != nil {
-		return err
-	}
+func (s *RefStore) acquireLock(ref string) (func(), error) {
 	lockPath := s.lockPath(ref)
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
-		return fmt.Errorf("create REF lock directory: %w", err)
+		return nil, fmt.Errorf("create REF lock directory: %w", err)
 	}
 	lock, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("REF %s is locked; retry after the active operation completes: %w", ref, err)
+			return nil, fmt.Errorf("REF %s is locked; retry after the active operation completes: %w", ref, err)
 		}
-		return fmt.Errorf("lock REF %s: %w", ref, err)
+		return nil, fmt.Errorf("lock REF %s: %w", ref, err)
 	}
-	lock.Close()
-	defer os.Remove(lockPath)
+	if err := lock.Close(); err != nil {
+		_ = os.Remove(lockPath)
+		return nil, fmt.Errorf("close REF %s lock: %w", ref, err)
+	}
+	return func() { _ = os.Remove(lockPath) }, nil
+}
 
+func (s *RefStore) checkCAS(ctx context.Context, ref string, oldID *domain.ObjectID) error {
 	current, resolveErr := s.Resolve(ctx, ref)
 	if oldID == nil {
 		if resolveErr == nil {
@@ -100,15 +123,18 @@ func (s *RefStore) Update(ctx context.Context, ref string, oldID, newID *domain.
 		if !errors.Is(resolveErr, store.ErrRefNotFound) {
 			return resolveErr
 		}
-	} else {
-		if resolveErr != nil {
-			return fmt.Errorf("%w for %s: expected %s but current head cannot be read: %v", store.ErrCASMismatch, ref, oldID, resolveErr)
-		}
-		if !current.Equal(*oldID) {
-			return fmt.Errorf("%w for %s: expected %s, found %s; recreate the candidate from the current head", store.ErrCASMismatch, ref, oldID, current)
-		}
+		return nil
 	}
+	if resolveErr != nil {
+		return fmt.Errorf("%w for %s: expected %s but current head cannot be read: %v", store.ErrCASMismatch, ref, oldID, resolveErr)
+	}
+	if !current.Equal(*oldID) {
+		return fmt.Errorf("%w for %s: expected %s, found %s; recreate the candidate from the current head", store.ErrCASMismatch, ref, oldID, current)
+	}
+	return nil
+}
 
+func (s *RefStore) writeREF(ref string, newID domain.ObjectID) error {
 	path := s.refPath(ref)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		if isNotDirectory(err) {

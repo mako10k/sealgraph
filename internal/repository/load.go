@@ -31,12 +31,7 @@ type collapseGroup struct {
 // to an absent target via an atomic no-replace directory rename.
 func LoadLogicalV1(ctx context.Context, workDir string, input []byte) ([]byte, error) {
 	target := filepath.Join(workDir, ".sealgraph")
-	if _, err := os.Lstat(target); err == nil {
-		return nil, fmt.Errorf("%s already exists; load requires an absent target and never merges or replaces a repository", target)
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("inspect load target %s: %w", target, err)
-	}
-	if err := rejectAbandonedLoadStaging(workDir); err != nil {
+	if err := preflightLoadTarget(workDir, target); err != nil {
 		return nil, err
 	}
 	dump, err := migration.DecodeLogicalDumpV1(input)
@@ -57,72 +52,9 @@ func LoadLogicalV1(ctx context.Context, workDir string, input []byte) ([]byte, e
 			_ = os.RemoveAll(staging)
 		}
 	}()
-	if err := prepareRepositoryLayout(staging); err != nil {
+	repo, mappings, oldToNew, err := buildStagedRepository(ctx, staging, dump)
+	if err != nil {
 		return nil, err
-	}
-	repo := newRepository(staging)
-	for _, object := range dump.Objects {
-		id, err := repo.objects.WriteBlob(ctx, object.Data)
-		if err != nil {
-			return nil, fmt.Errorf("write migrated material object %s: %w", object.ID, err)
-		}
-		if !id.Equal(object.ID) {
-			return nil, fmt.Errorf("migrated material object %s rewrote as %s", object.ID, id)
-		}
-	}
-
-	oldToNew := make(map[string]domain.ObjectID, len(dump.Seals))
-	mappings := make([]sealMapping, 0, len(dump.Seals))
-	for _, oldSeal := range dump.Seals {
-		var parent *domain.ObjectID
-		if oldSeal.Payload.Parent != nil {
-			mapped, ok := oldToNew[oldSeal.Payload.Parent.String()]
-			if !ok {
-				return nil, fmt.Errorf("old seal %s parent %s has no earlier mapping", oldSeal.OldSealID, oldSeal.Payload.Parent)
-			}
-			copy := mapped
-			parent = &copy
-		}
-		links := make([]domain.Link, len(oldSeal.Payload.Links))
-		for i, oldLink := range oldSeal.Payload.Links {
-			mapped, ok := oldToNew[oldLink.TargetSeal.String()]
-			if !ok {
-				return nil, fmt.Errorf("old seal %s Cause target %s has no earlier mapping", oldSeal.OldSealID, oldLink.TargetSeal)
-			}
-			links[i] = domain.Link{TargetSeal: mapped, Message: oldLink.Message}
-		}
-		payload := domain.SealPayload{
-			Schema: domain.SealSchema, ParentRevision: parent,
-			Content: oldSeal.Payload.Content, Attachments: oldSeal.Payload.Attachments,
-			Links: links, Root: oldSeal.Payload.Root, Draft: oldSeal.Payload.Draft,
-		}
-		encoded, err := canonical.EncodeSeal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("rewrite old seal %s as format 4: %w", oldSeal.OldSealID, err)
-		}
-		newID, err := repo.objects.WriteBlob(ctx, encoded)
-		if err != nil {
-			return nil, fmt.Errorf("write rewritten seal for %s: %w", oldSeal.OldSealID, err)
-		}
-		oldToNew[oldSeal.OldSealID.String()] = newID
-		mappings = append(mappings, sealMapping{Old: oldSeal.OldSealID, New: newID})
-	}
-	for _, ref := range dump.REFs {
-		head, ok := oldToNew[ref.Head.String()]
-		if !ok {
-			return nil, fmt.Errorf("REF %s old head %s has no mapping", ref.Name, ref.Head)
-		}
-		if err := repo.refs.Update(ctx, ref.Name, nil, &head); err != nil {
-			return nil, fmt.Errorf("publish staged REF %s: %w", ref.Name, err)
-		}
-	}
-	// REF publication uses transient lock directories inside staging. They are
-	// not migrated state; publish one empty runtime lock directory instead.
-	if err := os.RemoveAll(filepath.Join(staging, "locks")); err != nil {
-		return nil, fmt.Errorf("clear staged transient locks: %w", err)
-	}
-	if err := os.Mkdir(filepath.Join(staging, "locks"), 0o755); err != nil {
-		return nil, fmt.Errorf("recreate empty staged locks directory: %w", err)
 	}
 	if err := validateLoadedRepository(ctx, repo, dump.REFs, oldToNew); err != nil {
 		return nil, fmt.Errorf("validate staged format-4 repository: %w", err)
@@ -133,6 +65,125 @@ func LoadLogicalV1(ctx context.Context, workDir string, input []byte) ([]byte, e
 	}
 	published = true
 	return receipt, nil
+}
+
+func preflightLoadTarget(workDir, target string) error {
+	if _, err := os.Lstat(target); err == nil {
+		return fmt.Errorf("%s already exists; load requires an absent target and never merges or replaces a repository", target)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect load target %s: %w", target, err)
+	}
+	return rejectAbandonedLoadStaging(workDir)
+}
+
+func buildStagedRepository(ctx context.Context, staging string, dump migration.LogicalDumpV1) (*Repository, []sealMapping, map[string]domain.ObjectID, error) {
+	if err := prepareRepositoryLayout(staging); err != nil {
+		return nil, nil, nil, err
+	}
+	repo := newRepository(staging)
+	if err := writeMigratedObjects(ctx, repo, dump.Objects); err != nil {
+		return nil, nil, nil, err
+	}
+	mappings, oldToNew, err := rewriteMigratedSeals(ctx, repo, dump.Seals)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := publishMigratedREFs(ctx, repo, dump.REFs, oldToNew); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := resetStagedLocks(staging); err != nil {
+		return nil, nil, nil, err
+	}
+	return repo, mappings, oldToNew, nil
+}
+
+func writeMigratedObjects(ctx context.Context, repo *Repository, objects []migration.ObjectRecord) error {
+	for _, object := range objects {
+		id, err := repo.objects.WriteBlob(ctx, object.Data)
+		if err != nil {
+			return fmt.Errorf("write migrated material object %s: %w", object.ID, err)
+		}
+		if !id.Equal(object.ID) {
+			return fmt.Errorf("migrated material object %s rewrote as %s", object.ID, id)
+		}
+	}
+	return nil
+}
+
+func rewriteMigratedSeals(ctx context.Context, repo *Repository, seals []migration.SealRecord) ([]sealMapping, map[string]domain.ObjectID, error) {
+	oldToNew := make(map[string]domain.ObjectID, len(seals))
+	mappings := make([]sealMapping, 0, len(seals))
+	for _, oldSeal := range seals {
+		payload, err := rewriteSealPayload(oldSeal, oldToNew)
+		if err != nil {
+			return nil, nil, err
+		}
+		encoded, err := canonical.EncodeSeal(payload)
+		if err != nil {
+			return nil, nil, fmt.Errorf("rewrite old seal %s as format 4: %w", oldSeal.OldSealID, err)
+		}
+		newID, err := repo.objects.WriteBlob(ctx, encoded)
+		if err != nil {
+			return nil, nil, fmt.Errorf("write rewritten seal for %s: %w", oldSeal.OldSealID, err)
+		}
+		oldToNew[oldSeal.OldSealID.String()] = newID
+		mappings = append(mappings, sealMapping{Old: oldSeal.OldSealID, New: newID})
+	}
+	return mappings, oldToNew, nil
+}
+
+func rewriteSealPayload(oldSeal migration.SealRecord, oldToNew map[string]domain.ObjectID) (domain.SealPayload, error) {
+	parent, err := rewriteOptionalSealID(oldSeal.Payload.Parent, oldToNew, "parent")
+	if err != nil {
+		return domain.SealPayload{}, fmt.Errorf("old seal %s: %w", oldSeal.OldSealID, err)
+	}
+	links := make([]domain.Link, len(oldSeal.Payload.Links))
+	for i, oldLink := range oldSeal.Payload.Links {
+		mapped, ok := oldToNew[oldLink.TargetSeal.String()]
+		if !ok {
+			return domain.SealPayload{}, fmt.Errorf("old seal %s Cause target %s has no earlier mapping", oldSeal.OldSealID, oldLink.TargetSeal)
+		}
+		links[i] = domain.Link{TargetSeal: mapped, Message: oldLink.Message}
+	}
+	return domain.SealPayload{
+		Schema: domain.SealSchema, ParentRevision: parent,
+		Content: oldSeal.Payload.Content, Attachments: oldSeal.Payload.Attachments,
+		Links: links, Root: oldSeal.Payload.Root, Draft: oldSeal.Payload.Draft,
+	}, nil
+}
+
+func rewriteOptionalSealID(old *domain.ObjectID, mapping map[string]domain.ObjectID, relation string) (*domain.ObjectID, error) {
+	if old == nil {
+		return nil, nil
+	}
+	mapped, ok := mapping[old.String()]
+	if !ok {
+		return nil, fmt.Errorf("%s %s has no earlier mapping", relation, old)
+	}
+	return &mapped, nil
+}
+
+func publishMigratedREFs(ctx context.Context, repo *Repository, refs []migration.RefRecord, mapping map[string]domain.ObjectID) error {
+	for _, ref := range refs {
+		head, ok := mapping[ref.Head.String()]
+		if !ok {
+			return fmt.Errorf("REF %s old head %s has no mapping", ref.Name, ref.Head)
+		}
+		if err := repo.refs.Update(ctx, ref.Name, nil, &head); err != nil {
+			return fmt.Errorf("publish staged REF %s: %w", ref.Name, err)
+		}
+	}
+	return nil
+}
+
+func resetStagedLocks(staging string) error {
+	if err := os.RemoveAll(filepath.Join(staging, "locks")); err != nil {
+		return fmt.Errorf("clear staged transient locks: %w", err)
+	}
+	if err := os.Mkdir(filepath.Join(staging, "locks"), 0o755); err != nil {
+		return fmt.Errorf("recreate empty staged locks directory: %w", err)
+	}
+	return nil
 }
 
 func rejectAbandonedLoadStaging(workDir string) error {
@@ -164,24 +215,9 @@ func validateLoadedRepository(ctx context.Context, repo *Repository, expected []
 	if err := validateLayout(repo.dir); err != nil {
 		return err
 	}
-	names, err := repo.refs.List(ctx)
+	names, err := validateLoadedREFs(ctx, repo, expected, mapping)
 	if err != nil {
 		return err
-	}
-	if len(names) != len(expected) {
-		return fmt.Errorf("staged REF count is %d, expected %d", len(names), len(expected))
-	}
-	for i, record := range expected {
-		if names[i] != record.Name {
-			return fmt.Errorf("staged REF %d is %q, expected %q", i, names[i], record.Name)
-		}
-		head, err := repo.refs.Resolve(ctx, record.Name)
-		if err != nil {
-			return err
-		}
-		if !head.Equal(mapping[record.Head.String()]) {
-			return fmt.Errorf("staged REF %s target changed during validation", record.Name)
-		}
 	}
 	objects, err := repo.objects.List(ctx)
 	if err != nil {
@@ -191,45 +227,86 @@ func validateLoadedRepository(ctx context.Context, repo *Repository, expected []
 	for _, object := range objects {
 		objectSet[object.ID.String()] = struct{}{}
 	}
-	state := make(map[string]uint8)
-	var visit func(domain.ObjectID) error
-	visit = func(id domain.ObjectID) error {
-		switch state[id.String()] {
-		case 1:
-			return fmt.Errorf("combined revision/Cause rebuild cycle reaches %s", id)
-		case 2:
-			return nil
-		}
-		state[id.String()] = 1
-		payload, err := repo.LoadSeal(ctx, id)
-		if err != nil {
-			return err
-		}
-		if _, ok := objectSet[payload.Content.ID.String()]; !ok {
-			return fmt.Errorf("seal %s content %s is absent", id, payload.Content.ID)
-		}
-		for _, attachment := range payload.Attachments {
-			if _, ok := objectSet[attachment.Blob.ID.String()]; !ok {
-				return fmt.Errorf("seal %s attachment %q object %s is absent", id, attachment.Name, attachment.Blob.ID)
-			}
-		}
-		if payload.ParentRevision != nil {
-			if err := visit(*payload.ParentRevision); err != nil {
-				return err
-			}
-		}
-		for _, link := range payload.Links {
-			if err := visit(link.TargetSeal); err != nil {
-				return err
-			}
-		}
-		state[id.String()] = 2
-		return nil
+	return validateLoadedGraph(ctx, repo, names, objectSet)
+}
+
+func validateLoadedREFs(ctx context.Context, repo *Repository, expected []migration.RefRecord, mapping map[string]domain.ObjectID) ([]string, error) {
+	names, err := repo.refs.List(ctx)
+	if err != nil {
+		return nil, err
 	}
+	if len(names) != len(expected) {
+		return nil, fmt.Errorf("staged REF count is %d, expected %d", len(names), len(expected))
+	}
+	for i, record := range expected {
+		if names[i] != record.Name {
+			return nil, fmt.Errorf("staged REF %d is %q, expected %q", i, names[i], record.Name)
+		}
+		head, err := repo.refs.Resolve(ctx, record.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !head.Equal(mapping[record.Head.String()]) {
+			return nil, fmt.Errorf("staged REF %s target changed during validation", record.Name)
+		}
+	}
+	return names, nil
+}
+
+type loadedGraphValidator struct {
+	ctx       context.Context
+	repo      *Repository
+	objectSet map[string]struct{}
+	state     map[string]uint8
+}
+
+func validateLoadedGraph(ctx context.Context, repo *Repository, names []string, objectSet map[string]struct{}) error {
+	validator := loadedGraphValidator{ctx: ctx, repo: repo, objectSet: objectSet, state: make(map[string]uint8)}
 	for _, name := range names {
 		head, _ := repo.refs.Resolve(ctx, name)
-		if err := visit(head); err != nil {
+		if err := validator.visit(head); err != nil {
 			return fmt.Errorf("REF %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (validator *loadedGraphValidator) visit(id domain.ObjectID) error {
+	switch validator.state[id.String()] {
+	case 1:
+		return fmt.Errorf("combined revision/Cause rebuild cycle reaches %s", id)
+	case 2:
+		return nil
+	}
+	validator.state[id.String()] = 1
+	payload, err := validator.repo.LoadSeal(validator.ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := validator.validateMaterial(id, payload); err != nil {
+		return err
+	}
+	if payload.ParentRevision != nil {
+		if err := validator.visit(*payload.ParentRevision); err != nil {
+			return err
+		}
+	}
+	for _, link := range payload.Links {
+		if err := validator.visit(link.TargetSeal); err != nil {
+			return err
+		}
+	}
+	validator.state[id.String()] = 2
+	return nil
+}
+
+func (validator *loadedGraphValidator) validateMaterial(id domain.ObjectID, payload domain.SealPayload) error {
+	if _, ok := validator.objectSet[payload.Content.ID.String()]; !ok {
+		return fmt.Errorf("seal %s content %s is absent", id, payload.Content.ID)
+	}
+	for _, attachment := range payload.Attachments {
+		if _, ok := validator.objectSet[attachment.Blob.ID.String()]; !ok {
+			return fmt.Errorf("seal %s attachment %q object %s is absent", id, attachment.Name, attachment.Blob.ID)
 		}
 	}
 	return nil

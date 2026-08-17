@@ -1,8 +1,8 @@
 # Sealgraph requirements
 
 Status: normative format-4 contract accepted by ADR 0011. The checked-in Go
-runtime implements the canonical/candidate, selector, and explicit load core;
-active revision/graph behavior and tags remain gated.
+runtime implements the canonical/candidate, selector, explicit load, active
+revision/Cause graph, history, and impact core; tags remain gated.
 
 ## 1. Purpose
 
