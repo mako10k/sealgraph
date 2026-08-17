@@ -1,19 +1,18 @@
 # Sealgraph dogfooding plan
 
 Status: R0, R1, native-v2, candidate-lifecycle, and native-v3 material-identity
-rounds passed on 2026-08-14 and remain historical evidence. ADRs 0011 through
-0013 now accept the format-4 graph and tag-manifest contracts; the next tracked
-round must use explicit tag-preserving logical dump/load,
-must not rewrite format-3 dogfood in place, and must not claim migration before
-the new runtime passes. The tracked project repository currently contains only
-approved canonical format-3 standalone `.sealgraph` state; runtime-only paths
-remain ignored. See
+rounds passed on 2026-08-14 and remain historical evidence. The explicit
+tag-preserving format-3 dump/format-4 load and same-material sibling round
+passed on 2026-08-17. The tracked project repository now contains canonical
+format-4 standalone `.sealgraph` state; runtime-only paths remain ignored. See
 [`dogfooding-receipts/2026-08-14-r0.md`](dogfooding-receipts/2026-08-14-r0.md)
 and [`dogfooding-receipts/2026-08-14-r1.md`](dogfooding-receipts/2026-08-14-r1.md).
 The breaking format-2 regeneration and ADR dogfood are recorded in
 [`dogfooding-receipts/2026-08-14-native-v2.md`](dogfooding-receipts/2026-08-14-native-v2.md).
 The breaking format-3 material-identity regeneration is recorded in
 [`dogfooding-receipts/2026-08-14-native-v3-material-identity.md`](dogfooding-receipts/2026-08-14-native-v3-material-identity.md).
+The explicit format-4 conversion is recorded in
+[`dogfooding-receipts/2026-08-17-format4-load.md`](dogfooding-receipts/2026-08-17-format4-load.md).
 
 ## 1. Objective
 
@@ -279,3 +278,25 @@ The focused round must:
 This is a format-regeneration decision, not an automatic migration or authority
 claim. Any actor/time approval assertion must be modeled as separately sealed
 content and an explicit link.
+
+## 11. Explicit format-4 dump/load and sibling round
+
+After ADRs 0011 through 0013 and the format-4 runtime passed, export the
+tracked format-3 repository twice with the exact old read-only binary. Require
+byte-identical dumps and an unchanged complete source snapshot before loading
+one dump into an absent target with the current binary.
+
+The focused round must:
+
+1. retain every old-to-new Seal mapping and reject any unreported collapse;
+2. preserve all four scoped tags in the rename-safe REF manifests;
+3. publish no legacy tag tree, candidate, or mixed-format canonical state;
+4. revise the storage contract from one historical parent and derive a second
+   same-material child from that exact parent;
+5. prove both children are distinct active leaves, the parent is only a stale
+   revision, and no sibling is preferred automatically;
+6. keep all current REF statuses clean and record exact identities in a receipt.
+
+This round completes the tracked conversion gate only. It does not complete
+the recurring dogfood, Git sidecar, release, publication, or external tracker
+gates.

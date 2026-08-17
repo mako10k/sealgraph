@@ -72,6 +72,7 @@ milestone TAG_READY:
 
 milestone FORMAT4_DOGFOOD:
   title "Tracked dogfood is explicitly converted to format 4"
+  state reached
 
 milestone USABLE:
   title "Dogfood usability and inspection contracts work"
@@ -158,6 +159,7 @@ task TAG_CONTRACT REVISION_DAG -> TAG_READY:
 task FORMAT4_DOGFOOD_LOAD TAG_READY -> FORMAT4_DOGFOOD:
   title "Convert tracked dogfood by explicit dump/load and exercise a sibling revision"
   duration 2p
+  status done
 
 task CONTENT_INGEST FORMAT4_DOGFOOD -> USABLE:
   title "Add exact file input and deterministic manifests (SG-BL-001/002)"

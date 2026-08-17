@@ -407,8 +407,9 @@ Before Git sidecar:
    dual reader or owner-relative graph checks.
 3. `TAG_CONTRACT` is complete: ADR 0013 selects a rename-safe format-4
    manifest and narrow `mv` transaction without compatibility scaffolding.
-4. `FORMAT4_DOGFOOD_LOAD`: explicitly convert tracked provenance and exercise
-   sibling revision behavior without dropping format-3 tags.
+4. `FORMAT4_DOGFOOD_LOAD` is complete: tracked provenance was explicitly
+   converted and sibling revision behavior was exercised without dropping
+   format-3 tags.
 5. `CONTENT_INGEST`: SG-BL-001 and SG-BL-002.
 6. `HISTORY_INSPECTION`: revalidate SG-BL-003 and SG-BL-004 against
    `parent_revision` and exact target SealIDs.

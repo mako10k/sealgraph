@@ -1,9 +1,9 @@
 # Initial implementation plan
 
 Status: phases through the format-4 native core, active revision/Cause graph,
-and tag/REF-move contract are completed. `PLAN.pert` is the current perttool
-projection; the next frontier is explicit tracked dogfood conversion, not Git
-or release.
+tag/REF-move contract, and explicit tracked dogfood conversion are completed.
+`PLAN.pert` is the current perttool projection; the next frontier is the
+parallel content-ingest and operator-contract work, not Git or release.
 
 ## Current format-4 frontier
 
@@ -15,16 +15,16 @@ Proceed in this order; do not partially mix formats:
 4. [x] implement active revision indexing, `derive`, `add --parent`, active-leaf
    admission, stale cache/`--scan`, history, frontier, and bounded impact;
 5. [x] resolve the rename-safe tag namespace and narrow crash-safe `mv`;
-6. explicitly convert tracked dogfood and exercise a same-material sibling;
+6. [x] explicitly convert tracked dogfood and exercise a same-material sibling;
 7. add read-only native tree views before selecting a Git SDK;
 8. prove staged/commit/merge-stage behavior in temporary SHA-1/SHA-256
    repositories, then add validation-only hook dispatch.
 
-The runtime now writes format 4 with `ref_format = manifest-v1` and can load
-tag-bearing logical-v1 dumps. The tracked project `.sealgraph` remains format
-3 until the separately explicit dogfood conversion, and is therefore
-intentionally unreadable by the current runtime. Release claims stay blocked
-until the remaining dogfood and release gates pass.
+The runtime and tracked project dogfood now use format 4 with
+`ref_format = manifest-v1`. The source format-3 state remains available from
+outer Git history, and the explicit dump/load identity receipt records every
+rewritten Seal, REF, and tag. Release claims stay blocked until the remaining
+product, recurring-dogfood, and release gates pass.
 
 ## Historical implementation phases
 

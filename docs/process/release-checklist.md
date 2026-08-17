@@ -1,17 +1,16 @@
 # Standalone alpha release checklist
 
-Status: release-blocked by explicit format-4 dogfood conversion and the
-remaining product/Git gates. Completing this document does not authorize a tag,
-GitHub Release, package publication, or Git-sidecar release. Publication
-requires a separate explicit operator approval after an exact commit SHA and
-artifacts are frozen.
+Status: release-blocked by the remaining product, recurring-dogfood, and Git
+gates. Completing this document does not authorize a tag, GitHub Release,
+package publication, or Git-sidecar release. Publication requires a separate
+explicit operator approval after an exact commit SHA and artifacts are frozen.
 
 ## 1. Release identity and scope
 
 - Target: `v0.1.0-alpha.1`.
 - Product surface: standalone `sealgraph` only.
-- Repository format: native format 4. The tracked project dogfood remains
-  format 3 and is not runtime-compatible until explicit conversion.
+- Repository format: native format 4. The tracked project dogfood was converted
+  explicitly through the accepted logical dump/load boundary.
 - Compatibility policy: formats 1 through 3 remain unsupported by the
   format-4 runtime; pre-1.0 breaking
   regeneration is allowed and preferred over compatibility scaffolding.
@@ -32,7 +31,7 @@ artifacts are frozen.
       bounded impact.
 - [x] Resolve SG-BL-010's REF-scoped tag loose-path collision with an explicit
       pre-1.0 storage decision and tests.
-- [ ] Explicitly convert tracked dogfood through dump/load after the tag
+- [x] Explicitly convert tracked dogfood through dump/load after the tag
       contract and verify there is no tag loss, mixed-format state, or partial
       owner-check behavior.
 - [ ] Complete SG-BL-002's deterministic explicit-path manifest builder.

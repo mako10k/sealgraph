@@ -22,9 +22,11 @@ source export. The normative requirements are in
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
 ADR 0011, ADR 0012, and ADR 0013.
 
-The tracked project `.sealgraph` intentionally remains format 3 until the next
-explicit dogfood-conversion slice; the format-4 runtime does not open it
-directly or migrate it in place.
+The tracked project `.sealgraph` is now format 4. It was converted explicitly
+through the commit-`5b24d47` read-only logical dump and the format-4 empty-target
+loader; it was not opened or rewritten in place by the new runtime. The
+conversion and same-material sibling receipt is recorded in
+[`docs/process/dogfooding-receipts/2026-08-17-format4-load.md`](docs/process/dogfooding-receipts/2026-08-17-format4-load.md).
 
 ## Two product surfaces
 
