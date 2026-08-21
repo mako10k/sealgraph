@@ -1,7 +1,7 @@
 # v0.1.0-beta.4 release checklist
 
-Status: release candidate preparation in progress. Publication is separately
-approval-gated.
+Status: released and independently read back on 2026-08-21. Final evidence is
+recorded in [`release-v0.1.0-beta.4-receipt.md`](release-v0.1.0-beta.4-receipt.md).
 
 ## Frozen scope
 
@@ -29,10 +29,10 @@ approval-gated.
 - [x] Build twice into separate absent directories and prove byte-identical
       archives and checksum files.
 - [x] Run extracted-artifact smoke and confirm archive inventory.
-- [ ] Push the exact source SHA and require successful remote CI for it.
+- [x] Push the exact source SHA and require successful remote CI for it.
 
 Validated source: `8e7ca4bc9a20261cd1f09447849b9bd6ba9f796d`.
-GitHub Actions run: pending.
+GitHub Actions run: `32462204170` (success).
 
 ## Publication record
 
@@ -50,9 +50,9 @@ maximum tag writes: 1
 maximum GitHub Release writes: 1
 ```
 
-- [ ] Receive explicit approval of the completed record.
-- [ ] Create immutable `v0.1.0-beta.4` exactly once and push through secdat.
-- [ ] Create one GitHub prerelease with only the approved artifacts and notes.
-- [ ] Independently read back remote tag, prerelease metadata, asset identities,
+- [x] Receive explicit approval of the completed record.
+- [x] Create immutable `v0.1.0-beta.4` exactly once and push through secdat.
+- [x] Create one GitHub prerelease with only the approved artifacts and notes.
+- [x] Independently read back remote tag, prerelease metadata, asset identities,
       downloaded hashes, and extracted-artifact smoke.
-- [ ] Record a final beta.4 release receipt without moving the tag.
+- [x] Record a final beta.4 release receipt without moving the tag.

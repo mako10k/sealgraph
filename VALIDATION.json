@@ -9,5 +9,5 @@
 	"checksums_file_sha256": "481aa74c040eedd89d31bbd86a5015da80d37b153f741db87a51757c70c81c71",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
 	"result": "exact-source-and-artifact-validation-pass",
-	"note": "Source SHA 8e7ca4b was validated locally. Remote CI, tag, and GitHub prerelease publication remain separately approval-gated; publication readback will be recorded afterward."
+	"note": "Source SHA 8e7ca4b was validated locally; publication commit 3284c32 passed GitHub Actions run 32462204170. The immutable beta.4 tag, prerelease assets, downloaded hashes, artifact smoke, and local installation were independently read back."
 }
