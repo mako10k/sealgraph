@@ -1,7 +1,7 @@
 project SEALGRAPH:
   version 5
   title "Sealgraph initial implementation"
-  as_of 2026-08-17
+  as_of 2026-08-21
   duration_unit point
   velocity 1p/1d
   finish RECOVERY_READY
@@ -76,24 +76,31 @@ milestone FORMAT4_DOGFOOD:
 
 milestone USABLE:
   title "Dogfood usability and inspection contracts work"
+  state reached
 
 milestone DOGFOOD_R2:
   title "Recurring tracked dogfood passes"
+  state reached
 
 milestone READY:
   title "Standalone beta is ready for separately approved publication"
+  state reached
 
 milestone RECOVERY_DESIGN:
   title "Local REF recovery contract accepted"
+  state reached
 
 milestone RECOVERY_JOURNAL:
   title "Recovery journal and exact manifest primitives work"
+  state reached
 
 milestone RECOVERY_RUNTIME:
   title "Seal tag and move recovery work"
+  state reached
 
 milestone RECOVERY_READY:
   title "Issue 12 local recovery acceptance passes"
+  state reached
 
 task FORMAT_SPEC START -> FORMAT:
   title "Lock canonical payload, REF grammar, and object IDs"
@@ -204,25 +211,25 @@ task RECOVERY_CONTRACT READY -> RECOVERY_DESIGN:
 task RECOVERY_CORE RECOVERY_DESIGN -> RECOVERY_JOURNAL:
   title "Implement exact manifest CAS and crash-safe local recovery journal"
   duration 5p
-  status planned
+  status done
   source "ADR 0018 manifest transitions and publication"
 
 task RECOVERY_SEAL_TAG RECOVERY_JOURNAL -> RECOVERY_RUNTIME:
   title "Integrate and recover single-manifest seal and tag operations"
   duration 4p
-  status planned
+  status done
   source "Issue 12 seal tag and intervening mutation acceptance"
 
 task RECOVERY_MOVE RECOVERY_JOURNAL -> RECOVERY_RUNTIME:
   title "Integrate and recover atomic REF move operations"
   duration 3p
-  status planned
+  status done
   source "ADR 0018 atomicity limit"
 
 task RECOVERY_ACCEPTANCE RECOVERY_RUNTIME -> RECOVERY_READY:
   title "Add recovery CLI JSON fault tests and complete Issue 12 acceptance"
   duration 3p
-  status planned
+  status done
   source "ADR 0018 acceptance gate"
 
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
