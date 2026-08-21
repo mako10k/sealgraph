@@ -98,8 +98,32 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
 	case "recover":
 		return runRecover(ctx, workDir, args[1:], stdout, stderr), true
+	case "ref":
+		return runREF(ctx, workDir, args[1:], stdout, stderr), true
 	}
 	return 0, false
+}
+
+func runREF(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "ref requires drop REF")
+	}
+	if args[0] != "drop" {
+		return usageError(stderr, "unknown ref operation %q; expected drop", args[0])
+	}
+	if len(args) != 2 {
+		return usageError(stderr, "ref drop requires exactly one REF")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "ref drop", err)
+	}
+	result, err := repo.DropREF(ctx, args[1])
+	if err != nil {
+		return commandError(stderr, "ref drop", err)
+	}
+	fmt.Fprintf(stdout, "REF_DROPPED ref=%s head=%s tags=%d operation=%s\n", result.REF, result.Head, result.Tags, result.OperationID)
+	return 0
 }
 
 func runSource(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -1720,7 +1744,7 @@ func gitMisuseDiagnostic(stderr io.Writer, args []string) (int, bool) {
 		fmt.Fprintln(stderr, "reason: sealgraph does not delete workfiles or stage file deletion")
 		fmt.Fprintln(stderr, "hint: discard only unsealed state with `sealgraph candidate discard REF`")
 		fmt.Fprintln(stderr, "hint: inspect then remove only a binding with `sealgraph source show REF` and `sealgraph source unbind REF --from PATH`")
-		fmt.Fprintln(stderr, "hint: logical REF drop is unavailable until exact recovery is implemented")
+		fmt.Fprintln(stderr, "hint: drop only the logical REF handle with `sealgraph ref drop REF` (candidate and source binding must be handled separately)")
 		fmt.Fprintln(stderr, "help: sealgraph help concepts")
 		return 2, true
 	case "commit":

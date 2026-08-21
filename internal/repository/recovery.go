@@ -3,9 +3,11 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
+	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/recovery"
 	"github.com/mako10k/sealgraph/internal/store"
 )
@@ -27,6 +29,59 @@ type RecoveryTransitionInspection struct {
 type RecoveryResult struct {
 	ID   string
 	Kind string
+}
+
+type DropREFResult struct {
+	REF         string
+	Head        domain.ObjectID
+	Tags        int
+	OperationID string
+}
+
+func (r *Repository) DropREF(ctx context.Context, ref string) (DropREFResult, error) {
+	return withMutation(ctx, r.writer, "drop REF", func() (DropREFResult, error) {
+		if err := domain.ValidateREF(ref); err != nil {
+			return DropREFResult{}, err
+		}
+		if _, err := r.candidates.LoadSnapshot(ref); err == nil {
+			return DropREFResult{}, fmt.Errorf("candidate %s blocks REF drop; seal or discard it explicitly before retrying", ref)
+		} else if !errors.Is(err, ErrCandidateNotFound) {
+			return DropREFResult{}, fmt.Errorf("inspect candidate %s before REF drop: %w", ref, err)
+		}
+		if binding, _, err := r.sources.load(ref); err == nil {
+			return DropREFResult{}, fmt.Errorf("local source binding %s -> %q blocks REF drop; inspect it, then unbind explicitly before retrying", ref, binding.Path)
+		} else if !errors.Is(err, ErrSourceNotFound) {
+			return DropREFResult{}, fmt.Errorf("inspect local source %s before REF drop: %w", ref, err)
+		}
+		head, err := r.refs.Resolve(ctx, ref)
+		if err != nil {
+			return DropREFResult{}, err
+		}
+		tags, err := r.Tags(ctx, ref)
+		if err != nil {
+			return DropREFResult{}, err
+		}
+		refs, err := r.recoveryRefs()
+		if err != nil {
+			return DropREFResult{}, err
+		}
+		before, err := refs.Snapshot(ctx, ref)
+		if err != nil {
+			return DropREFResult{}, err
+		}
+		record, err := r.prepareRecovery("ref-drop", []recovery.Transition{{REF: ref, Before: before, After: nil}})
+		if err != nil {
+			return DropREFResult{}, err
+		}
+		if err := refs.ReplaceExact(ctx, ref, before, nil); err != nil {
+			return DropREFResult{}, err
+		}
+		result := DropREFResult{REF: ref, Head: head, Tags: len(tags), OperationID: record.ID}
+		if err := r.commitRecovery(record); err != nil {
+			return result, fmt.Errorf("REF %s was dropped but recovery record %s could not be marked COMMITTED: %w", ref, record.ID, err)
+		}
+		return result, nil
+	})
 }
 
 func (r *Repository) recoveryRefs() (store.RecoveryRefStore, error) {

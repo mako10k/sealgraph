@@ -499,8 +499,13 @@ cwd, environment values, credentials, or an actor/trusted-time assertion.
 
 Recovery eligibility requires exact current state to equal the complete logged
 post-operation REF-manifest state. Any intervening mutation rejects automatic
-recovery without partial writes. V1 covers successful `seal`, `tag`, and `mv`
-REF mutations using only an existing atomic shape: one-manifest restoration or
-inverse no-replace rename for one move. Candidate edits, arbitrary multi-file
+recovery without partial writes. V1 covers successful `seal`, `tag`, `mv`, and
+`ref drop` REF mutations using only an existing atomic shape: one-manifest
+restoration or inverse no-replace rename for one move. Candidate edits, arbitrary multi-file
 rollback, implicit most-recent selection, reset/reflog/undo semantics, object
 deletion, and garbage collection remain absent.
+
+`ref drop` removes exactly one complete current REF manifest from the active
+namespace. An exact candidate or local source binding blocks it. It MUST NOT
+remove or modify a workfile, source binding, candidate, immutable object, Seal,
+Link, or downstream Seal, and it has no recursive, prefix, batch, or force form.

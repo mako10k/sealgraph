@@ -159,6 +159,39 @@ func TestRecoveryClassifiesPreparedCrashStatesFromCurrentBytes(t *testing.T) {
 	requireRecoveryStatus(t, repo, notApplied.ID, "PREPARED_NOT_APPLIED")
 }
 
+func TestDropREFIsExactBlockedAndRecoverableWithTags(t *testing.T) {
+	_, repo := newFormat4Repository(t)
+	ctx := context.Background()
+	sealed := addAndSealRoot(t, repo, "root", "v1")
+	if _, err := repo.CreateTag(ctx, "root", "reviewed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("pending"), Root: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DropREF(ctx, "root"); err == nil || !strings.Contains(err.Error(), "candidate") {
+		t.Fatalf("candidate did not block drop: %v", err)
+	}
+	if err := repo.DiscardCandidate(ctx, "root"); err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := repo.DropREF(ctx, "root")
+	if err != nil || dropped.Head != sealed.ID || dropped.Tags != 1 || dropped.OperationID == "" {
+		t.Fatalf("dropped=%+v err=%v", dropped, err)
+	}
+	if _, err := repo.refs.Resolve(ctx, "root"); !errors.Is(err, store.ErrRefNotFound) {
+		t.Fatalf("dropped REF resolves: %v", err)
+	}
+	requireRecoveryStatus(t, repo, dropped.OperationID, "RECOVERABLE")
+	if _, err := repo.Recover(ctx, dropped.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	tags, err := repo.Tags(ctx, "root")
+	if err != nil || len(tags) != 1 || tags[0].Name != "reviewed" {
+		t.Fatalf("restored tags=%+v err=%v", tags, err)
+	}
+}
+
 func addAndSealRoot(t *testing.T, repo *Repository, ref, content string) SealResult {
 	t.Helper()
 	ctx := context.Background()

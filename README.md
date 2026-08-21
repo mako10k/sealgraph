@@ -49,6 +49,7 @@ sealgraph source show docs/requirements.md
 sealgraph show REQ-001
 sealgraph tag REQ-001 reviewed/1.0
 sealgraph mv REQ-001 requirements/REQ-001
+sealgraph ref drop obsolete/REQ-000
 sealgraph recover show
 
 # Explicit conversion into a different directory with no .sealgraph target:
@@ -144,6 +145,7 @@ sealgraph link
 sealgraph unlink
 sealgraph tag
 sealgraph mv
+sealgraph ref drop REF
 sealgraph candidate
 sealgraph source compare REF
 sealgraph seal

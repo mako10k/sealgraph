@@ -258,7 +258,7 @@ func validateRecord(record Record) error {
 	if record.Schema != Schema || !validID(record.ID) || (record.State != Prepared && record.State != Committed) {
 		return fmt.Errorf("invalid recovery record header")
 	}
-	if record.Kind != "seal" && record.Kind != "tag" && record.Kind != "mv" {
+	if record.Kind != "seal" && record.Kind != "tag" && record.Kind != "mv" && record.Kind != "ref-drop" {
 		return fmt.Errorf("unsupported recovery operation kind %q", record.Kind)
 	}
 	if len(record.Transitions) == 0 || len(record.Transitions) > 2 {
@@ -290,26 +290,39 @@ func validateKindShape(record Record) error {
 		if len(record.Transitions) != 1 || record.Transitions[0].After == nil {
 			return fmt.Errorf("seal recovery requires one transition to a present manifest")
 		}
+		return nil
 	case "tag":
-		if len(record.Transitions) != 1 || record.Transitions[0].Before == nil || record.Transitions[0].After == nil {
-			return fmt.Errorf("tag recovery requires one present-to-present transition")
-		}
+		return validateSingleShape(record.Transitions, true, true, "tag recovery requires one present-to-present transition")
+	case "ref-drop":
+		return validateSingleShape(record.Transitions, true, false, "ref-drop recovery requires one present-to-absent transition")
 	case "mv":
-		if len(record.Transitions) != 2 {
-			return fmt.Errorf("mv recovery requires exactly two transitions")
+		return validateMoveShape(record.Transitions)
+	}
+	return nil
+}
+
+func validateSingleShape(transitions []Transition, beforePresent, afterPresent bool, message string) error {
+	if len(transitions) != 1 || (transitions[0].Before != nil) != beforePresent || (transitions[0].After != nil) != afterPresent {
+		return errors.New(message)
+	}
+	return nil
+}
+
+func validateMoveShape(transitions []Transition) error {
+	if len(transitions) != 2 {
+		return fmt.Errorf("mv recovery requires exactly two transitions")
+	}
+	oldCount, newCount := 0, 0
+	for _, transition := range transitions {
+		if transition.Before != nil && transition.After == nil {
+			oldCount++
 		}
-		oldCount, newCount := 0, 0
-		for _, transition := range record.Transitions {
-			switch {
-			case transition.Before != nil && transition.After == nil:
-				oldCount++
-			case transition.Before == nil && transition.After != nil:
-				newCount++
-			}
+		if transition.Before == nil && transition.After != nil {
+			newCount++
 		}
-		if oldCount != 1 || newCount != 1 {
-			return fmt.Errorf("mv recovery requires one present-to-absent and one absent-to-present transition")
-		}
+	}
+	if oldCount != 1 || newCount != 1 {
+		return fmt.Errorf("mv recovery requires one present-to-absent and one absent-to-present transition")
 	}
 	return nil
 }

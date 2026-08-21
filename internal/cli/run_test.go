@@ -70,6 +70,7 @@ func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
 		{[]string{"help", "source"}, []string{"Subcommands:", "bind", "rebind", "unbind", "show", "list", "not Git tracked state"}},
 		{[]string{"source", "show", "--help"}, []string{"without opening its source file", "sealgraph source show REF"}},
 		{[]string{"help", "source", "rebind"}, []string{"--from OLD_PATH", "--file NEW_PATH", "Atomically replace"}},
+		{[]string{"help", "ref", "drop"}, []string{"sealgraph ref drop REF", "complete tag namespace", "Immutable objects remain valid"}},
 		{[]string{"help", "selectors"}, []string{"@SEAL_TOKEN", "4 through 64 lower-case hex", "There is no @latest", "full 64-character SealID"}},
 		{[]string{"help", "concepts"}, []string{"parent_revision", "CLEAN means", "never searches for Git"}},
 		{[]string{"help", "concepts", "root"}, []string{"not mean true, trusted, or approved"}},
@@ -130,7 +131,7 @@ func TestCLIGitShapedMisuseNavigatesToCanonicalVocabulary(t *testing.T) {
 		{[]string{"diff", "--cached", "spec"}, []string{"Git-shaped vocabulary", "index semantics", "candidate compare", "source compare"}},
 		{[]string{"diff", "--draft", "spec"}, []string{"DRAFT is an identity-bearing", "candidate compare"}},
 		{[]string{"candidate", "diff", "spec"}, []string{"retired Git-shaped vocabulary", "candidate compare"}},
-		{[]string{"rm", "spec"}, []string{"does not delete workfiles", "candidate discard", "source unbind", "unavailable until exact recovery"}},
+		{[]string{"rm", "spec"}, []string{"does not delete workfiles", "candidate discard", "source unbind", "sealgraph ref drop REF"}},
 		{[]string{"add", "-A"}, []string{"worktree-wide staging", "exactly one named REF", "sealgraph add REF"}},
 		{[]string{"checkout", "spec"}, []string{"not a checked-out branch", "sealgraph status"}},
 	}
@@ -474,6 +475,35 @@ func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
 	code, stdout, stderr = runCLI(t, dir, nil, "recover", id)
 	if code != 1 || stdout != "" || !strings.Contains(stderr, "ALREADY_RECOVERED") {
 		t.Fatalf("repeat recovery code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestCLIRefDropEmitsRecoverableReceipt(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "v1")
+	mustRunCLI(t, dir, "seal", "root")
+	if err := os.WriteFile(filepath.Join(dir, "root.txt"), []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "source", "bind", "root", "--file", "root.txt")
+	code, stdout, stderr := runCLI(t, dir, nil, "ref", "drop", "root")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "source binding") || !strings.Contains(stderr, "unbind explicitly") {
+		t.Fatalf("source-blocked drop code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	mustRunCLI(t, dir, "source", "unbind", "root", "--from", "root.txt")
+	output := mustRunCLI(t, dir, "ref", "drop", "root")
+	fields := strings.Fields(output)
+	if len(fields) != 5 || fields[0] != "REF_DROPPED" || !strings.HasPrefix(fields[4], "operation=") {
+		t.Fatalf("drop output=%q", output)
+	}
+	id := strings.TrimPrefix(fields[4], "operation=")
+	if show := mustRunCLI(t, dir, "recover", "show", id); !strings.Contains(show, "kind=ref-drop") || !strings.Contains(show, "status=RECOVERABLE") {
+		t.Fatalf("drop recovery=%q", show)
+	}
+	mustRunCLI(t, dir, "recover", id)
+	if show := mustRunCLI(t, dir, "show", "root"); !strings.Contains(show, "CURRENT_REFS root") {
+		t.Fatalf("restored REF show=%q", show)
 	}
 }
 

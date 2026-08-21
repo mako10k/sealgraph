@@ -65,6 +65,7 @@ func TestPrepareRejectsInvalidREFKindShapeAndManifestLimit(t *testing.T) {
 		{"seal deletion", "seal", []Transition{{REF: "root", Before: []byte("manifest")}}},
 		{"tag absent", "tag", []Transition{{REF: "root", After: []byte("manifest")}}},
 		{"move single", "mv", []Transition{{REF: "root", Before: []byte("manifest")}}},
+		{"drop absent", "ref-drop", []Transition{{REF: "root", After: []byte("manifest")}}},
 		{"oversized", "seal", []Transition{{REF: "root", After: make([]byte, MaxManifestBytes+1)}}},
 	}
 	for _, test := range tests {

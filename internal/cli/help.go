@@ -111,11 +111,17 @@ var commandHelpRegistry = map[string]commandHelp{
 		Subcommands: []string{"show"}, Details: []string{"Recovery restores exact prior REF-manifest state only when current state still equals the recorded after-state. It never changes Seal bytes or selects the latest operation implicitly."}, Related: []string{"status", "show", "concepts"},
 	},
 	"recover show": inspectionHelp("recover show", "List local recovery records or inspect one exact operation ID.", "sealgraph recover show [OPERATION_ID] [--format human|json]", nil),
-	"show":         inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with --format json"}}),
-	"log":          inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
-	"linklog":      inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
-	"compare":      inspectionHelp("compare", "Compare immutable Seal material and provenance.", "sealgraph compare REF [--format human|json]\nsealgraph compare SELECTOR SELECTOR [--format human|json]", nil),
-	"status":       inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
+	"ref": {
+		Path: "ref", Summary: "Manage one explicit logical REF handle without deleting immutable graph material.", Usage: []string{"sealgraph ref drop REF"}, Subcommands: []string{"drop"}, Details: []string{"REF operations never delete workfiles, candidates, source bindings, Seals, content, Links, or downstream Seals."}, Related: []string{"ref drop", "recover", "candidate discard", "source unbind"},
+	},
+	"ref drop": {
+		Path: "ref drop", Summary: "Remove exactly one current REF manifest with an explicit recovery receipt.", Usage: []string{"sealgraph ref drop REF"}, Arguments: []string{"REF (required): exact current logical REF; no selector, prefix, or batch form."}, Details: []string{"Candidate or source-binding state blocks the operation. The complete tag namespace leaves the active namespace with the REF. Immutable objects remain valid."}, Examples: []string{"sealgraph ref drop obsolete/spec"}, Related: []string{"recover", "candidate discard", "source unbind", "show"},
+	},
+	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with --format json"}}),
+	"log":     inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
+	"linklog": inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
+	"compare": inspectionHelp("compare", "Compare immutable Seal material and provenance.", "sealgraph compare REF [--format human|json]\nsealgraph compare SELECTOR SELECTOR [--format human|json]", nil),
+	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
 		Options: []helpOption{{"--frontier", "optional; keep only stale heads not blocked by another stale current head in strict Cause closure"}, {"--refs-only", "optional; stable REF-only line protocol; conflicts with --format json"}, {"--scan", "optional; bypass disposable cache reads"}, {"--format human|json", "optional, once; default human"}},

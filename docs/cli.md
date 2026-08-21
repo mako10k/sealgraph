@@ -344,6 +344,18 @@ Link, or infers hierarchy from slash spelling. Success is:
 MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N operation=OPERATION_ID
 ```
 
+### `sealgraph ref drop REF`
+
+Removes exactly one complete current REF manifest, including its tag namespace,
+from the active namespace. A candidate or local source binding at the exact REF
+blocks the operation. It never deletes a workfile, candidate, binding, Seal,
+content object, Link, or downstream Seal and has no recursive, prefix, batch,
+or force form. Success includes the recoverable receipt:
+
+```text
+REF_DROPPED ref=REF head=FULL_HEAD_ID tags=N operation=OPERATION_ID
+```
+
 ## 3. Immutable inspection
 
 ```sh
@@ -610,7 +622,7 @@ full operation ID and verifies every complete logged post-operation manifest
 before mutation. Human and `sealgraph/recover/v1` JSON output are buffered and
 never report partial success.
 
-Successful non-idempotent `seal`, `tag`, and `mv` output includes the exact
+Successful non-idempotent `seal`, `tag`, `mv`, and `ref drop` output includes the exact
 `operation=OPERATION_ID` receipt. `recover show` lists every readable local
 record plus isolated `CORRUPT` entries. `recover show OPERATION_ID` inspects one
 exact record. `recover OPERATION_ID` restores the exact complete prior manifest
