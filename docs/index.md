@@ -69,6 +69,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/standalone-beta-acceptance-2026-08-17.md`](process/standalone-beta-acceptance-2026-08-17.md)
 - [`process/release-v0.1.0-beta.2-receipt.md`](process/release-v0.1.0-beta.2-receipt.md)
 - [`process/release-v0.1.0-beta.3-checklist.md`](process/release-v0.1.0-beta.3-checklist.md)
+- [`process/release-v0.1.0-beta.3-receipt.md`](process/release-v0.1.0-beta.3-receipt.md)
 - [`process/dogfooding-receipts/2026-08-17-format4-load.md`](process/dogfooding-receipts/2026-08-17-format4-load.md)
 - [`process/dogfooding-receipts/2026-08-17-r2-recurring.md`](process/dogfooding-receipts/2026-08-17-r2-recurring.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)

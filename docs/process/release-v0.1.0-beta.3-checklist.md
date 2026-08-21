@@ -1,8 +1,7 @@
 # v0.1.0-beta.3 release checklist
 
-Status: exact source and artifacts validated; publication approval pending.
-This file records the version-specific gate; it is not publication authority
-or a release receipt.
+Status: released and independently read back on 2026-08-21. Final evidence is
+recorded in [`release-v0.1.0-beta.3-receipt.md`](release-v0.1.0-beta.3-receipt.md).
 
 ## Frozen scope
 
@@ -51,9 +50,9 @@ maximum tag writes: 1
 maximum GitHub Release writes: 1
 ```
 
-- [ ] Receive explicit approval of the completed record.
-- [ ] Create immutable `v0.1.0-beta.3` exactly once and push through secdat.
-- [ ] Create one GitHub prerelease with only the approved artifacts and notes.
-- [ ] Independently read back remote tag, prerelease metadata, asset identities,
+- [x] Receive explicit approval of the completed record.
+- [x] Create immutable `v0.1.0-beta.3` exactly once and push through secdat.
+- [x] Create one GitHub prerelease with only the approved artifacts and notes.
+- [x] Independently read back remote tag, prerelease metadata, asset identities,
       downloaded hashes, and extracted-artifact smoke.
-- [ ] Record a final beta.3 release receipt without moving the tag.
+- [x] Record a final beta.3 release receipt without moving the tag.
