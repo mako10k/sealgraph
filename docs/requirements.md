@@ -202,9 +202,9 @@ revision parent. A parent does not satisfy the required Cause of a non-root
 Seal and parent draft state does not automatically propagate. There is no
 generic ignore-validation escape hatch.
 
-## 5. Attachments
+## 5. Format-4 attachment compatibility
 
-Content may include zero or more named attachments.
+Format-4 Seals and candidates may contain zero or more named attachments.
 
 Attachment bytes are immutable blobs.
 
@@ -212,12 +212,25 @@ A seal MUST commit to each attachment's blob identity and stable semantic metada
 
 Renaming an attachment changes the seal state even if the attachment bytes are unchanged.
 
-An attachment is contained evidence/artifact data. A link is an external provenance relation. The two MUST remain semantically distinct.
+An attachment is contained evidence/artifact data. A link is an external
+provenance relation. The two remain semantically distinct in format 4 and MUST
+NOT be silently converted into one another.
+
+As accepted by ADR 0021, the product MUST NOT add attachment mutation commands
+for format 4. It MUST continue to decode, validate, inspect, compare, preserve,
+dump/load, and include existing attachments in canonical identity. New related
+material should use primary content, an independently sealed content result
+plus an exact Link, or explicit manifest content according to its semantics.
+
+Machine-local source selection SHOULD remain in explicit local binding state
+where practical. Binding is non-canonical and MUST NOT replace portable
+content identity, exact provenance, or another semantic claim that a different
+repository or machine must verify.
 
 ## 6. Working candidate
 
-`add`, `derive`, `link`, `unlink`, `attach`, and `detach` edit the next
-candidate state for one destination REF.
+`add`, `derive`, `link`, and `unlink` edit the next candidate state for one
+destination REF. Format-4 attachment mutation is intentionally absent.
 
 `add` MAY specify dependencies atomically with content creation/update:
 

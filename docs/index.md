@@ -35,6 +35,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0018-local-ref-recovery-journal.md`](adr/0018-local-ref-recovery-journal.md)
 - [`adr/0019-local-file-tracking-and-implicit-add.md`](adr/0019-local-file-tracking-and-implicit-add.md)
 - [`adr/0020-sealgraph-native-operation-vocabulary.md`](adr/0020-sealgraph-native-operation-vocabulary.md)
+- [`adr/0021-do-not-expand-attachments.md`](adr/0021-do-not-expand-attachments.md)
 
 ## Agent-auditable design
 

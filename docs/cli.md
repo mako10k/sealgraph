@@ -248,13 +248,18 @@ stored target after the REF advances. Candidate inspection prints the exact
 selector required. Missing or ambiguous target edges are errors. Unlink never
 changes content, attachments, root/draft, another Link, REF HEAD, or a Seal.
 
-### Planned `sealgraph attach` / `sealgraph detach`
+### Intentionally absent attachment mutation
 
-These mutation commands are not exposed by the current standalone beta. Their
-planned contract changes named immutable attachment material in one candidate;
-attachment names are unique, and attachments remain semantically distinct from
-Cause Links. Attachment-bearing repositories are still readable, inspectable,
-and loadable.
+`sealgraph attach` and `sealgraph detach` are not planned for format 4. As
+accepted by ADR 0021, attachment-bearing repositories remain readable,
+inspectable, comparable, validatable, and loadable, but new workflows use
+primary content, independently sealed related content plus exact Links, or
+explicit manifest content. Existing attachments are never silently flattened,
+deleted, or converted to Links.
+
+Machine-local workfile selection remains `source bind` or `add --bind-source`.
+Binding is not canonical provenance and cannot replace an exact portable
+content or Link identity.
 
 ### `sealgraph candidate`
 

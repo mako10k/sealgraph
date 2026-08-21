@@ -146,5 +146,6 @@ document the defect, and release a new prerelease version after a new gate.
       result in a release receipt.
 - [ ] Verify installation from the downloaded artifact in a clean temporary
       environment.
-- [ ] Keep Git-sidecar, attachment mutation, file sync, signatures, and other
-      deferred work explicitly outside the standalone beta.
+- [ ] Keep Git-sidecar, file sync, signatures, and other deferred work
+      explicitly outside the standalone beta; attachment mutation remains
+      intentionally unplanned under ADR 0021.

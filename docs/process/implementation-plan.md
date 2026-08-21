@@ -143,11 +143,18 @@ the accepted contract is recorded in
 dogfood receipt is
 [`2026-08-14-candidate-lifecycle.md`](dogfooding-receipts/2026-08-14-candidate-lifecycle.md).
 
-## Phase 3 — attachments
+## Attachment expansion — intentionally not planned
 
-- attachment blob import
-- attachment metadata hashing
-- attachment CLI integration with the existing semantic diff model
+ADR 0021 retires the planned format-4 attachment mutation phase. The runtime
+continues to read, validate, preserve, compare, and migrate existing
+attachment-bearing state, but it does not add `attach` or `detach` commands.
+New workflows use primary content, independently sealed related content plus
+exact Links, explicit manifests, and non-canonical local source bindings
+according to their distinct semantics.
+
+Removing the canonical field is deferred to a separately accepted
+Content/Link/Context semantic-format decision with representative projection
+evidence. No format-4 attachment is converted automatically.
 
 ## Phase 4 — integrity/forensics
 
@@ -166,8 +173,9 @@ first artifact scope is Linux amd64 and excludes the unimplemented
 Release; publication requires a separately approved exact-SHA gate.
 
 The beta reaches `READY` without passing through `GIT`. Cross-command JSON and
-link-message contracts are complete; attachment mutation, file synchronization,
-and Git sidecar remain outside the beta as listed in the checklist.
+link-message contracts are complete; attachment mutation is intentionally not
+planned, while file synchronization and Git sidecar remain outside the beta as
+listed in the checklist.
 
 ## Separately gated future — Git sidecar
 

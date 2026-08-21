@@ -159,7 +159,7 @@ selector spelling.
 Coordinates:
 
 - candidate lifecycle;
-- content/attachment object writes;
+- content object writes and preservation of existing attachment objects;
 - exact selector resolution;
 - explicit parent selection and derivation;
 - normal Cause-closure admission;
