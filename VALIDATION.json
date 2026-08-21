@@ -1,13 +1,13 @@
 {
   "target_go": "1.26",
   "validation_go": "1.26.5",
-	"release_candidate": "0.1.0-beta.4",
-	"scope": "standalone Linux amd64; native comparison vocabulary, Bash completion, explicit local REF recovery, recoverable ref drop, and retained source bindings; no Git sidecar",
-	"fresh_checkout_source": "8e7ca4bc9a20261cd1f09447849b9bd6ba9f796d",
+	"release_candidate": "0.1.0-beta.5",
+	"scope": "standalone Linux amd64; routine revision-cache observation mismatch is a silent miss while invalid cache still warns; retained beta.4 capabilities; no Git sidecar",
+	"fresh_checkout_source": "6cfd6cfde869366e65fffb1e8c3d48cd22d0fafb",
 	"fsck_inventory": "objects=4,seals=2,material_objects=2,refs=2,tags=0,active_seals=2,historical_or_detached=0,unreferenced_objects=0",
-	"artifact_sha256": "eff9136499c24e71ec909448591f0c4ae268afd157cc4aaf58844407b253e1b0",
-	"checksums_file_sha256": "481aa74c040eedd89d31bbd86a5015da80d37b153f741db87a51757c70c81c71",
+	"artifact_sha256": "45e2832b67a62d2302c062f9a54826b0df3805ab49e34a3992d97712838f97f1",
+	"checksums_file_sha256": "8540ea3ae680b81b070f28e004d266263128ee28faff29b9c000c6c9a3b9fa5f",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
 	"result": "exact-source-and-artifact-validation-pass",
-	"note": "Source SHA 8e7ca4b was validated locally; publication commit 3284c32 passed GitHub Actions run 32462204170. The immutable beta.4 tag, prerelease assets, downloaded hashes, artifact smoke, and local installation were independently read back."
+	"note": "Source SHA 6cfd6cf was validated locally. Remote CI, immutable beta.5 tag, prerelease publication, independent asset readback, and installation remain pending."
 }
