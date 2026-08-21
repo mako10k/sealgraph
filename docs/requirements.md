@@ -269,7 +269,7 @@ the one it sealed.
 The product is expected to provide:
 
 - `show`
-- `diff`
+- `compare`
 - `status`
 - `log`
 - `linklog`
@@ -278,7 +278,7 @@ The product is expected to provide:
 - `stale`
 - `fsck`
 
-`diff` MUST be capable of representing content, attachment, link, and material metadata differences.
+`compare` MUST be capable of representing content, attachment, link, and material metadata differences.
 
 `status` MUST distinguish at least candidate modifications/unsealed state,
 draft, self-stale revision, and direct/transitive Cause staleness.
@@ -473,6 +473,14 @@ The product MUST expose explicit create, read-one, read-all, compare-and-replace
 and compare-and-remove operations for local bindings. Binding inspection MUST
 NOT open source files. There is no implicit retarget, restore-last, binding
 reflog, deletion staging, or automatic cross-machine import.
+
+As accepted by ADR 0020, source comparison MAY open exactly the selected bound
+file and MUST compare it with candidate content when present, otherwise current
+HEAD content. It MUST identify the baseline, use the same stable non-symlink
+read boundary as add, and MUST NOT write an object or candidate. Canonical
+comparison names are `compare`, `candidate compare`, and `source compare`.
+Git-shaped names are diagnostics only and MUST require an explicit retry with
+the canonical vocabulary.
 
 ## 15. Local operational recovery
 

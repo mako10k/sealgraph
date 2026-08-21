@@ -111,6 +111,12 @@ secdat exec ... -- go test ./...
 
 Exact supply/route/demand policy belongs to deployment-specific configuration, not this repository scaffold.
 
+Sealgraph's Bash completion follows secdat's thin-wrapper pattern: a hidden
+binary-owned `__completion --bash` protocol keeps help and completion vocabulary
+aligned while the shell wrapper handles file completion. Sealgraph does not
+depend on secdat at runtime, and its completion protocol never reads secrets or
+invokes secdat.
+
 Rules:
 
 - never put secret plaintext in `.sealgraph`,

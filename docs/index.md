@@ -34,6 +34,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0017-generic-link-metadata-and-query-boundary.md`](adr/0017-generic-link-metadata-and-query-boundary.md)
 - [`adr/0018-local-ref-recovery-journal.md`](adr/0018-local-ref-recovery-journal.md)
 - [`adr/0019-local-file-tracking-and-implicit-add.md`](adr/0019-local-file-tracking-and-implicit-add.md)
+- [`adr/0020-sealgraph-native-operation-vocabulary.md`](adr/0020-sealgraph-native-operation-vocabulary.md)
 
 ## Agent-auditable design
 

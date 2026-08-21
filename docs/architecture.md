@@ -196,6 +196,7 @@ Parsing and presentation only:
 - deterministic status/stale/impact rendering;
 - stable narrow line protocols;
 - explicit error and next-action text.
+- registry-backed completion candidates and Git-shaped misuse navigation.
 
 ### `internal/pathmanifest`
 
@@ -220,6 +221,11 @@ It does not change canonical REF manifests, candidate/Seal schemas, discover
 Git, watch directories, expand globs, or perform automatic add/seal. The
 repository package coordinates binding changes with candidate mutation under
 the native writer guard.
+
+The Bash completion wrapper delegates parsing and candidate selection to a
+hidden read-only CLI protocol. Repository-aware completion reads only REF,
+candidate, and binding metadata; it does not bootstrap, open bound workfiles,
+inspect Git, or update cache state.
 
 ### Later Git view adapter
 

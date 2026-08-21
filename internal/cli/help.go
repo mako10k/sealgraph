@@ -48,8 +48,8 @@ var commandHelpRegistry = map[string]commandHelp{
 		Examples:  []string{"sealgraph add premise --root --content 'External premise'", "sealgraph add docs/spec.md --root --bind-source", "sealgraph add design/api --content-file design.md --depend-on requirements/api", "sealgraph add revised/api --parent design/api@abcd --content 'new material'"}, Related: []string{"source", "seal", "link", "candidate show", "selectors"},
 	},
 	"source": {
-		Path: "source", Summary: "Manage non-canonical local REF-to-file source bindings.", Usage: []string{"sealgraph source <bind|rebind|unbind|show|list> ..."},
-		Subcommands: []string{"bind", "rebind", "unbind", "show", "list"}, Details: []string{"A local source binding is not Git tracked state and never changes a candidate by itself."}, Related: []string{"add", "status"},
+		Path: "source", Summary: "Manage and compare non-canonical local REF-to-file source bindings.", Usage: []string{"sealgraph source <bind|rebind|unbind|show|list|compare> ..."},
+		Subcommands: []string{"bind", "rebind", "unbind", "show", "list", "compare"}, Details: []string{"A local source binding is not Git tracked state and never changes a candidate by itself."}, Related: []string{"add", "status"},
 	},
 	"source bind": {
 		Path: "source bind", Summary: "Create one absent local source binding.", Usage: []string{"sealgraph source bind REF --file PATH [--format human|json]"}, Options: []helpOption{{"--file PATH", "required portable relative regular-file path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"Same binding is idempotent. A different existing path requires source rebind."}, Related: []string{"source show", "source rebind", "add"},
@@ -60,8 +60,9 @@ var commandHelpRegistry = map[string]commandHelp{
 	"source unbind": {
 		Path: "source unbind", Summary: "Remove one exact observed local source binding.", Usage: []string{"sealgraph source unbind REF --from PATH [--format human|json]"}, Options: []helpOption{{"--from PATH", "required exact observed current path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"No candidate, REF, object, or Seal is removed."}, Related: []string{"source show", "source bind"},
 	},
-	"source show": inspectionHelp("source show", "Show one local source binding without opening its source file.", "sealgraph source show REF [--format human|json]", nil),
-	"source list": inspectionHelp("source list", "List local source bindings without opening source files.", "sealgraph source list [--format human|json]", nil),
+	"source show":    inspectionHelp("source show", "Show one local source binding without opening its source file.", "sealgraph source show REF [--format human|json]", nil),
+	"source list":    inspectionHelp("source list", "List local source bindings without opening source files.", "sealgraph source list [--format human|json]", nil),
+	"source compare": inspectionHelp("source compare", "Compare one bound workfile with its candidate-or-HEAD content baseline.", "sealgraph source compare REF [--format human|json]", nil),
 	"derive": {
 		Path: "derive", Summary: "Create an absent REF candidate by copying one Seal's material and using it as parent_revision.",
 		Usage: []string{"sealgraph derive NEW_REF --from SOURCE_SELECTOR"}, Arguments: []string{"NEW_REF (required): absent destination REF."},
@@ -90,30 +91,30 @@ var commandHelpRegistry = map[string]commandHelp{
 		Details: []string{"This is REF_ONLY and PATH_NOT_MOVED. Candidates or local source bindings at either name block the move. mv does not recurse, move a file/candidate, create an alias, or rewrite Seals or Links."}, Examples: []string{"sealgraph mv design/api archive/design-api"}, Related: []string{"source show", "source unbind", "candidate show", "candidate discard", "tag"},
 	},
 	"candidate": {
-		Path: "candidate", Summary: "Inspect, compare, or explicitly discard mutable candidate state.", Usage: []string{"sealgraph candidate <show|diff|discard> ..."}, Subcommands: []string{"show", "diff", "discard"}, Details: []string{"Candidate operations never rebase, relink, repair, or seal automatically."}, Related: []string{"candidate show", "candidate diff", "candidate discard", "seal"},
+		Path: "candidate", Summary: "Inspect, compare, or explicitly discard mutable candidate state.", Usage: []string{"sealgraph candidate <show|compare|discard> ..."}, Subcommands: []string{"show", "compare", "discard"}, Details: []string{"Candidate operations never rebase, relink, repair, or seal automatically."}, Related: []string{"candidate show", "candidate compare", "candidate discard", "seal"},
 	},
 	"candidate show": {
-		Path: "candidate show", Summary: "Inspect one candidate and its parent_revision and expected REF-head relations.", Usage: []string{"sealgraph candidate show REF [--raw-content]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only"}}, Details: []string{"Inspection validates material and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate diff", "candidate discard", "seal"},
+		Path: "candidate show", Summary: "Inspect one candidate and its parent_revision and expected REF-head relations.", Usage: []string{"sealgraph candidate show REF [--raw-content]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only"}}, Details: []string{"Inspection validates material and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate compare", "candidate discard", "seal"},
 	},
-	"candidate diff": {
-		Path: "candidate diff", Summary: "Compare one candidate with its recorded parent_revision.", Usage: []string{"sealgraph candidate diff REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"Publication expectation is reported separately from immutable material differences."}, Examples: []string{"sealgraph candidate diff design/api"}, Related: []string{"candidate show", "diff", "seal"},
+	"candidate compare": {
+		Path: "candidate compare", Summary: "Compare one candidate with its recorded parent_revision.", Usage: []string{"sealgraph candidate compare REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"Publication expectation is reported separately from immutable material differences."}, Examples: []string{"sealgraph candidate compare design/api"}, Related: []string{"candidate show", "compare", "seal"},
 	},
 	"candidate discard": {
 		Path: "candidate discard", Summary: "Explicitly remove exactly one candidate and no canonical state.", Usage: []string{"sealgraph candidate discard REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"This removes no Seal, object, REF, tag, or descendant candidate. There is no recursive or force form."}, Examples: []string{"sealgraph candidate discard design/api"}, Related: []string{"candidate show", "add"},
 	},
 	"seal": {
 		Path: "seal", Summary: "Publish at most one new immutable Seal for exactly one REF.", Usage: []string{"sealgraph seal REF"}, Arguments: []string{"REF (required): REF whose candidate is reviewed and published."},
-		Details: []string{"A normal non-draft candidate requires every direct and reachable Cause target to be a non-draft active revision leaf. Draft may preserve intentional historical provenance. There is no --all, --force, automatic relink, or automatic stale repair."}, Examples: []string{"sealgraph seal premise", "sealgraph candidate diff design/api\nsealgraph seal design/api"}, Related: []string{"candidate show", "candidate diff", "status", "stale", "concepts stale"},
+		Details: []string{"A normal non-draft candidate requires every direct and reachable Cause target to be a non-draft active revision leaf. Draft may preserve intentional historical provenance. There is no --all, --force, automatic relink, or automatic stale repair."}, Examples: []string{"sealgraph seal premise", "sealgraph candidate compare design/api\nsealgraph seal design/api"}, Related: []string{"candidate show", "candidate compare", "status", "stale", "concepts stale"},
 	},
 	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with --format json"}}),
 	"log":     inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
 	"linklog": inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
-	"diff":    inspectionHelp("diff", "Compare immutable Seal material and provenance.", "sealgraph diff REF [--format human|json]\nsealgraph diff SELECTOR SELECTOR [--format human|json]", nil),
+	"compare": inspectionHelp("compare", "Compare immutable Seal material and provenance.", "sealgraph compare REF [--format human|json]\nsealgraph compare SELECTOR SELECTOR [--format human|json]", nil),
 	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
 		Options: []helpOption{{"--frontier", "optional; keep only stale heads not blocked by another stale current head in strict Cause closure"}, {"--refs-only", "optional; stable REF-only line protocol; conflicts with --format json"}, {"--scan", "optional; bypass disposable cache reads"}, {"--format human|json", "optional, once; default human"}},
-		Details: []string{"Stale is derived current review state. It is not structural impact, candidate state, approval, or an automatic repair plan. --scan does not repair canonical state."}, Examples: []string{"sealgraph stale --frontier", "sealgraph stale --frontier --refs-only --scan"}, Related: []string{"status", "show", "candidate diff", "concepts stale", "impact"},
+		Details: []string{"Stale is derived current review state. It is not structural impact, candidate state, approval, or an automatic repair plan. --scan does not repair canonical state."}, Examples: []string{"sealgraph stale --frontier", "sealgraph stale --frontier --refs-only --scan"}, Related: []string{"status", "show", "candidate compare", "concepts stale", "impact"},
 	},
 	"impact": {
 		Path: "impact", Summary: "Report current downstream Cause reachability from a selected Seal or its revision ancestors.", Usage: []string{"sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]"}, Arguments: []string{"SELECTOR (required): REF, @SEAL_TOKEN, or REF@TOKEN."},
@@ -273,14 +274,14 @@ Add dependency rationale:
 
 Review a candidate explicitly:
   sealgraph candidate show design/api
-  sealgraph candidate diff design/api
+  sealgraph candidate compare design/api
   sealgraph seal design/api
 
 Review stale provenance upstream-first:
   sealgraph stale --frontier
   sealgraph status design/api
   sealgraph show requirements/api
-  sealgraph candidate diff design/api
+  sealgraph candidate compare design/api
   sealgraph seal design/api
 
 Inspect structural impact:

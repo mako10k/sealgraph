@@ -63,6 +63,34 @@ type AddOptions struct {
 	Draft        bool
 }
 
+type CompletionNames struct {
+	REFs       []string
+	Candidates []string
+	Sources    []string
+}
+
+// CompletionNames returns names from repository metadata only. It never opens
+// a bound workfile, writes cache state, or bootstraps a repository.
+func (r *Repository) CompletionNames(ctx context.Context) (CompletionNames, error) {
+	refs, err := r.refs.List(ctx)
+	if err != nil {
+		return CompletionNames{}, err
+	}
+	candidates, err := r.candidates.List()
+	if err != nil {
+		return CompletionNames{}, err
+	}
+	bindings, err := r.sources.list()
+	if err != nil {
+		return CompletionNames{}, err
+	}
+	sources := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		sources = append(sources, binding.REF)
+	}
+	return CompletionNames{REFs: refs, Candidates: candidates, Sources: sources}, nil
+}
+
 func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
 	return withMutation(ctx, r.writer, "add candidate", func() (domain.Candidate, error) {
 		return r.addLocked(ctx, options, false, true, true)

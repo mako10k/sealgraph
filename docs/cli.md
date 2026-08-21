@@ -181,6 +181,7 @@ by the current format-4 CLI.
 sealgraph source bind REF --file PATH
 sealgraph source show REF [--format human|json]
 sealgraph source list [--format human|json]
+sealgraph source compare REF [--format human|json]
 sealgraph source rebind REF --from OLD_PATH --file NEW_PATH
 sealgraph source unbind REF --from PATH
 ```
@@ -192,7 +193,10 @@ exact old path. Show/list inspect binding records without opening source files;
 an empty list succeeds and uses REF byte order. JSON uses
 `sealgraph/source/v1`.
 
-Source binding does not import, watch, or seal. Mutation receipts say
+Source binding does not import, watch, or seal. `source compare` is the one
+operation in this group that opens the selected bound workfile; show/list and
+binding mutations inspect or validate only the state required by their
+contracts. Mutation receipts say
 `candidate=UNCHANGED`; `add REF` is the explicit refresh. A binding at either
 endpoint blocks REF-only `mv`; inspect, unbind, move, and bind explicitly.
 There is no restore-last, binding reflog, automatic backup/import, or deletion
@@ -256,7 +260,7 @@ and loadable.
 
 ```sh
 sealgraph candidate show REF [--raw-content]
-sealgraph candidate diff REF
+sealgraph candidate compare REF
 sealgraph candidate discard REF
 ```
 
@@ -264,7 +268,7 @@ sealgraph candidate discard REF
 and publication expectation. It displays `PARENT_REVISION`,
 `EXPECTED_REF_HEAD`, current destination HEAD, and their relations separately.
 
-`candidate diff` compares content, attachments, exact Links/messages,
+`candidate compare` compares content, attachments, exact Links/messages,
 root/draft, and `parent_revision` with the immutable parent when present.
 Current HEAD versus `expected_ref_head` is separate publication state.
 
@@ -343,7 +347,7 @@ MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N
 
 ```sh
 sealgraph show SELECTOR [--raw-content]
-sealgraph diff SELECTOR [SELECTOR]
+sealgraph compare SELECTOR [SELECTOR]
 sealgraph log REF
 sealgraph linklog REF
 sealgraph graph
@@ -358,9 +362,20 @@ current observation, never immutable owner fields.
 first. Parent cycles or unreadable/noncanonical Seals fail. It does not compare
 embedded names or act as a Git reflog.
 
-`diff REF` compares current HEAD with its parent and fails for an initial Seal.
+`compare REF` compares current HEAD with its parent and fails for an initial Seal.
 Two explicit selectors compare any two canonical Seals. A mode claiming one
 revision line must validate parent ancestry rather than REF ownership.
+
+`source compare REF` safely reads one bound regular workfile and compares its
+prospective native blob identity with candidate content when present, otherwise
+with current HEAD content. Binding-only state reports baseline `NONE`. It does
+not write the workfile bytes into object storage or mutate candidate state.
+
+Git-shaped `diff`, `diff --cached`, `diff --staged`, and `diff --draft` are
+diagnostic routes, not aliases. They explain the missing Git state assumption
+and navigate to `compare`, `candidate compare`, or `source compare` for an
+explicit retry. The same non-mutating navigation applies to Git-shaped `rm`,
+worktree-wide `add`, checkout, reset, restore, and clean attempts.
 
 `linklog REF` compares exact target SealID sets between adjacent revisions. It
 reports add, remove, ancestry-based repoint, and Link-message change. Ambiguous
@@ -563,9 +578,10 @@ explicit path/digest claim builder only. Attachment fields are
 read, preserved by load, and inspected, but beta does not expose `attach` or
 `detach` mutation commands.
 
-`show`, `status`, `stale`, `graph`, `impact`, `log`, `linklog`, and `diff`
+`show`, `status`, `stale`, `graph`, `impact`, `log`, `linklog`, and `compare`
 accept `--format human|json` in any argument position. Human is the default;
-JSON uses a command-specific `sealgraph/<command>/v1` schema. Raw content and
+JSON uses a command-specific `sealgraph/<command>/v1` schema; source comparison
+uses `sealgraph/source-compare/v1`. Raw content and
 the REF-only line protocol cannot be combined with JSON. JSON contains full
 ObjectID strings and arrays of ObjectIDs for paths, not presentation strings.
 

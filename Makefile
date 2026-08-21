@@ -3,8 +3,11 @@ DEADCODE_VERSION := v0.49.0
 MAX_CYCLOMATIC_COMPLEXITY := 20
 VERSION ?= 0.1.0-dev
 DIST_DIR ?= dist
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+BASH_COMPLETION_DIR ?= $(PREFIX)/share/bash-completion/completions
 
-.PHONY: fmt vet test test-race clone-check complexity-check deadcode-check static-analysis check build build-git-sidecar-placeholder beta-artifacts beta-artifact-smoke
+.PHONY: fmt vet test test-race completion-check clone-check complexity-check deadcode-check static-analysis check build install uninstall build-git-sidecar-placeholder beta-artifacts beta-artifact-smoke
 
 fmt:
 	gofmt -w .
@@ -18,6 +21,9 @@ test:
 test-race:
 	go test -race ./...
 
+completion-check: build
+	bash tests/completion_regression.sh ./bin/sealgraph
+
 clone-check:
 	npm run clone-check
 
@@ -29,11 +35,19 @@ deadcode-check:
 
 static-analysis: vet clone-check complexity-check deadcode-check
 
-check: fmt static-analysis test
+check: fmt static-analysis test completion-check
 
 build:
 	mkdir -p bin
 	go build -buildvcs=false -trimpath -ldflags "-X github.com/mako10k/sealgraph/internal/cli.Version=$(VERSION)" -o bin/sealgraph ./cmd/sealgraph
+
+install: build
+	install -d "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(BASH_COMPLETION_DIR)"
+	install -m 0755 bin/sealgraph "$(DESTDIR)$(BINDIR)/sealgraph"
+	install -m 0644 completions/sealgraph.bash "$(DESTDIR)$(BASH_COMPLETION_DIR)/sealgraph"
+
+uninstall:
+	rm -f "$(DESTDIR)$(BINDIR)/sealgraph" "$(DESTDIR)$(BASH_COMPLETION_DIR)/sealgraph"
 
 build-git-sidecar-placeholder:
 	mkdir -p bin

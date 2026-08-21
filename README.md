@@ -143,11 +143,12 @@ sealgraph unlink
 sealgraph tag
 sealgraph mv
 sealgraph candidate
+sealgraph source compare REF
 sealgraph seal
 sealgraph show
 sealgraph log
 sealgraph linklog
-sealgraph diff
+sealgraph compare
 sealgraph status
 sealgraph stale [--frontier] [--refs-only] [--scan]
 sealgraph impact [--all-paths] [--max-paths N]
@@ -192,10 +193,16 @@ make build
 install -m 0755 bin/sealgraph "$HOME/.local/bin/sealgraph"
 ```
 
-Uninstall by removing only the installed binary:
+Install the binary and Bash completion together with:
 
 ```sh
-rm "$HOME/.local/bin/sealgraph"
+make install PREFIX="$HOME/.local"
+```
+
+Uninstall both installed files with:
+
+```sh
+make uninstall PREFIX="$HOME/.local"
 ```
 
 No command installs hooks, services, configuration, or a Git plugin. Release

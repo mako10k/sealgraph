@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/store"
 	"github.com/mako10k/sealgraph/internal/workfile"
 )
 
@@ -45,6 +46,16 @@ type LocalSourceAddResult struct {
 	SourceMode    string
 	SourcePath    string
 	SourceBinding string
+}
+
+type SourceCompareResult struct {
+	REF             string
+	Path            string
+	Baseline        string
+	BaselineContent *domain.ContentRef
+	WorkfileID      domain.ObjectID
+	WorkfileBytes   int
+	Relation        string
 }
 
 type sourceWire struct {
@@ -258,6 +269,59 @@ func (r *Repository) SourceShow(ref string) (SourceBinding, error) {
 }
 
 func (r *Repository) SourceList() ([]SourceBinding, error) { return r.sources.list() }
+
+func (r *Repository) SourceCompare(ctx context.Context, ref string) (SourceCompareResult, error) {
+	binding, _, err := r.sources.load(ref)
+	if err != nil {
+		return SourceCompareResult{}, err
+	}
+	data, err := workfile.ReadStable(r.workDir, binding.Path)
+	if err != nil {
+		return SourceCompareResult{}, err
+	}
+	result := SourceCompareResult{REF: ref, Path: binding.Path, Baseline: "NONE", WorkfileID: domain.ComputeNativeBlobID(data), WorkfileBytes: len(data), Relation: "WORKFILE_ADDED"}
+	candidates, err := r.candidates.List()
+	if err != nil {
+		return SourceCompareResult{}, err
+	}
+	if containsString(candidates, ref) {
+		inspection, err := r.InspectCandidate(ctx, ref)
+		if err != nil {
+			return SourceCompareResult{}, err
+		}
+		result.Baseline = "CANDIDATE"
+		result.BaselineContent = &inspection.Candidate.Content
+	} else if head, err := r.refs.Resolve(ctx, ref); err == nil {
+		payload, err := r.LoadSeal(ctx, head)
+		if err != nil {
+			return SourceCompareResult{}, err
+		}
+		if _, err := r.readRepositoryBlob(ctx, payload.Content, fmt.Sprintf("HEAD content for %s", ref)); err != nil {
+			return SourceCompareResult{}, err
+		}
+		result.Baseline = "HEAD"
+		result.BaselineContent = &payload.Content
+	} else if !errors.Is(err, store.ErrRefNotFound) {
+		return SourceCompareResult{}, fmt.Errorf("resolve current HEAD for source comparison %s: %w", ref, err)
+	}
+	if result.BaselineContent != nil {
+		if result.BaselineContent.ID.Equal(result.WorkfileID) {
+			result.Relation = "WORKFILE_MATCHES_" + result.Baseline
+		} else {
+			result.Relation = "WORKFILE_DIFFERS_FROM_" + result.Baseline
+		}
+	}
+	after, _, err := r.sources.load(ref)
+	if err != nil || after != binding {
+		return SourceCompareResult{}, fmt.Errorf("local source binding for %s changed during comparison; no result is authoritative", ref)
+	}
+	return result, nil
+}
+
+func containsString(values []string, target string) bool {
+	index := sort.SearchStrings(values, target)
+	return index < len(values) && values[index] == target
+}
 
 func (r *Repository) SourceBind(ctx context.Context, ref, path string) (SourceBinding, error) {
 	return withMutation(ctx, r.writer, "bind local source", func() (SourceBinding, error) {

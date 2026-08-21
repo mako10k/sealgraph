@@ -110,6 +110,39 @@ func TestStatusReportsWorkfileAgainstCandidateThenHead(t *testing.T) {
 	}
 }
 
+func TestSourceCompareUsesCandidateThenHeadAndSupportsBindingOnly(t *testing.T) {
+	dir, repo := newFormat4Repository(t)
+	writeSourceFile(t, dir, "spec.md", "v1")
+	writeSourceFile(t, dir, "only.md", "only")
+	ctx := context.Background()
+	if _, err := repo.SourceBind(ctx, "only", "only.md"); err != nil {
+		t.Fatal(err)
+	}
+	comparison, err := repo.SourceCompare(ctx, "only")
+	if err != nil || comparison.Baseline != "NONE" || comparison.Relation != "WORKFILE_ADDED" || comparison.BaselineContent != nil {
+		t.Fatalf("binding-only comparison=%+v err=%v", comparison, err)
+	}
+	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec", Path: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	comparison, err = repo.SourceCompare(ctx, "spec")
+	if err != nil || comparison.Baseline != "CANDIDATE" || comparison.Relation != "WORKFILE_MATCHES_CANDIDATE" {
+		t.Fatalf("candidate comparison=%+v err=%v", comparison, err)
+	}
+	if _, err := repo.Seal(ctx, "spec"); err != nil {
+		t.Fatal(err)
+	}
+	comparison, err = repo.SourceCompare(ctx, "spec")
+	if err != nil || comparison.Baseline != "HEAD" || comparison.Relation != "WORKFILE_MATCHES_HEAD" {
+		t.Fatalf("HEAD comparison=%+v err=%v", comparison, err)
+	}
+	writeSourceFile(t, dir, "spec.md", "v2")
+	comparison, err = repo.SourceCompare(ctx, "spec")
+	if err != nil || comparison.Relation != "WORKFILE_DIFFERS_FROM_HEAD" {
+		t.Fatalf("changed comparison=%+v err=%v", comparison, err)
+	}
+}
+
 func writeSourceFile(t *testing.T, root, relative, content string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(relative))

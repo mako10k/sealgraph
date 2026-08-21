@@ -64,7 +64,7 @@ func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
 		{[]string{"help"}, []string{"Commands:", "Navigation explains explicit next actions"}},
 		{[]string{"help", "add"}, []string{"sealgraph add REF", "--depend-on SELECTOR", "repeatable", "mutually exclusive"}},
 		{[]string{"add", "--help"}, []string{"sealgraph add REF", "--content-file PATH|-"}},
-		{[]string{"help", "candidate"}, []string{"Subcommands:", "show", "diff", "discard"}},
+		{[]string{"help", "candidate"}, []string{"Subcommands:", "show", "compare", "discard"}},
 		{[]string{"help", "candidate", "show"}, []string{"sealgraph candidate show REF", "--raw-content"}},
 		{[]string{"candidate", "show", "--help"}, []string{"expected REF-head relations", "sealgraph candidate show REF"}},
 		{[]string{"help", "source"}, []string{"Subcommands:", "bind", "rebind", "unbind", "show", "list", "not Git tracked state"}},
@@ -92,19 +92,13 @@ func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
 	}
 }
 
-func TestCLIUsageAndUnknownNavigation(t *testing.T) {
-	tests := []struct {
-		args    []string
-		markers []string
-	}{
-		{[]string{"impcat", "x"}, []string{`error: unknown command "impcat"`, "possible command: impact", "sealgraph help impact"}},
-		{[]string{"candidate", "foo"}, []string{`unknown candidate operation "foo"`, "sealgraph candidate <show|diff|discard>", "sealgraph help candidate"}},
-		{[]string{"show"}, []string{"show requires exactly one", "usage: sealgraph show SELECTOR", "help: sealgraph help show"}},
-		{[]string{"impact", "--unknown", "root"}, []string{"flag provided but not defined", "usage: sealgraph impact", "help: sealgraph help impact"}},
-		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
-		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
-		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
-	}
+type cliDiagnosticCase struct {
+	args    []string
+	markers []string
+}
+
+func assertCLIUsageDiagnostics(t *testing.T, tests []cliDiagnosticCase) {
+	t.Helper()
 	for _, test := range tests {
 		code, stdout, stderr := runCLI(t, t.TempDir(), nil, test.args...)
 		if code != 2 || stdout != "" {
@@ -116,6 +110,31 @@ func TestCLIUsageAndUnknownNavigation(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestCLIUsageAndUnknownNavigation(t *testing.T) {
+	tests := []cliDiagnosticCase{
+		{[]string{"impcat", "x"}, []string{`error: unknown command "impcat"`, "possible command: impact", "sealgraph help impact"}},
+		{[]string{"candidate", "foo"}, []string{`unknown candidate operation "foo"`, "sealgraph candidate <show|compare|discard>", "sealgraph help candidate"}},
+		{[]string{"show"}, []string{"show requires exactly one", "usage: sealgraph show SELECTOR", "help: sealgraph help show"}},
+		{[]string{"impact", "--unknown", "root"}, []string{"flag provided but not defined", "usage: sealgraph impact", "help: sealgraph help impact"}},
+		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
+		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
+		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
+	}
+	assertCLIUsageDiagnostics(t, tests)
+}
+
+func TestCLIGitShapedMisuseNavigatesToCanonicalVocabulary(t *testing.T) {
+	tests := []cliDiagnosticCase{
+		{[]string{"diff", "--cached", "spec"}, []string{"Git-shaped vocabulary", "index semantics", "candidate compare", "source compare"}},
+		{[]string{"diff", "--draft", "spec"}, []string{"DRAFT is an identity-bearing", "candidate compare"}},
+		{[]string{"candidate", "diff", "spec"}, []string{"retired Git-shaped vocabulary", "candidate compare"}},
+		{[]string{"rm", "spec"}, []string{"does not delete workfiles", "candidate discard", "source unbind", "unavailable until exact recovery"}},
+		{[]string{"add", "-A"}, []string{"worktree-wide staging", "exactly one named REF", "sealgraph add REF"}},
+		{[]string{"checkout", "spec"}, []string{"not a checked-out branch", "sealgraph status"}},
+	}
+	assertCLIUsageDiagnostics(t, tests)
 }
 
 func TestLocalSourceErrorsProvideExplicitNextActions(t *testing.T) {
@@ -181,7 +200,7 @@ func TestCLIHelpUseCaseInvocationsAreAcceptedByTheRuntime(t *testing.T) {
 	mustRunCLI(t, dir, "tag", "requirements/api", "reviewed/1.0")
 	mustRunCLI(t, dir, "add", "design/api", "--content-file", "design.md", "--depend-on", "requirements/api")
 	mustRunCLI(t, dir, "candidate", "show", "design/api")
-	mustRunCLI(t, dir, "candidate", "diff", "design/api")
+	mustRunCLI(t, dir, "candidate", "compare", "design/api")
 	mustSealCLI(t, dir, "design/api")
 	mustRunCLI(t, dir, "show", "requirements/api@reviewed/1.0")
 	mustRunCLI(t, dir, "show", "@"+requirementID[:12])
@@ -206,7 +225,7 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 		{"impact", "sealgraph/impact/v1", []string{"impact", "@" + fixture.root2, "--format", "json"}},
 		{"log", "sealgraph/log/v1", []string{"log", "root", "--format", "json"}},
 		{"linklog", "sealgraph/linklog/v1", []string{"linklog", "middle", "--format", "json"}},
-		{"diff", "sealgraph/diff/v1", []string{"diff", "root", "--format", "json"}},
+		{"compare", "sealgraph/compare/v1", []string{"compare", "root", "--format", "json"}},
 	}
 	for _, test := range commands {
 		t.Run(test.name, func(t *testing.T) {
@@ -373,10 +392,48 @@ func TestCLILocalSourceLifecycleAndContentlessRefresh(t *testing.T) {
 	if !strings.Contains(status, "WORKFILE_MATCHES_CANDIDATE") {
 		t.Fatalf("status=%q", status)
 	}
+	comparison := mustRunCLI(t, dir, "source", "compare", "spec.md")
+	if !strings.Contains(comparison, "baseline=CANDIDATE") || !strings.Contains(comparison, "WORKFILE_MATCHES_CANDIDATE") {
+		t.Fatalf("source compare=%q", comparison)
+	}
+	comparisonJSON := decodeCLIJSON(t, mustRunCLI(t, dir, "source", "compare", "spec.md", "--format=json"))
+	if comparisonJSON["schema"] != "sealgraph/source-compare/v1" || comparisonJSON["relation"] != "WORKFILE_MATCHES_CANDIDATE" {
+		t.Fatalf("source compare JSON=%v", comparisonJSON)
+	}
 	mustRunCLI(t, dir, "source", "unbind", "spec.md", "--from", "spec.md")
 	code, stdout, stderr := runCLI(t, dir, nil, "add", "spec.md")
 	if code != 1 || stdout != "" || !strings.Contains(stderr, "has no local source binding") {
 		t.Fatalf("fallback code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestCLIBashCompletionUsesCanonicalVocabularyAndMetadataOnly(t *testing.T) {
+	dir := t.TempDir()
+	mode := mustRunCLI(t, dir, "__completion", "--bash", "")
+	for _, value := range []string{"__sealgraph_completion_mode=plain", "compare", "candidate", "source"} {
+		if !strings.Contains(mode, value) {
+			t.Fatalf("top-level completion lacks %q: %s", value, mode)
+		}
+	}
+	if strings.Contains(mode, "\ndiff\n") || strings.Contains(mode, "\nrm\n") {
+		t.Fatalf("completion advertised Git-shaped names: %s", mode)
+	}
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	if err := os.WriteFile(filepath.Join(dir, "source.md"), []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "source", "bind", "bound", "--file", "source.md")
+	candidates := mustRunCLI(t, dir, "__completion", "--bash", "candidate", "compare", "")
+	if !strings.Contains(candidates, "\nroot\n") || strings.Contains(candidates, "\nbound\n") {
+		t.Fatalf("candidate completion=%q", candidates)
+	}
+	sources := mustRunCLI(t, dir, "__completion", "--bash", "source", "compare", "")
+	if !strings.Contains(sources, "\nbound\n") || strings.Contains(sources, "\nroot\n") {
+		t.Fatalf("source completion=%q", sources)
+	}
+	if output := mustRunCLI(t, dir, "__completion", "--bash", "source", "bind", "x", "--file", ""); output != "__sealgraph_completion_mode=file\n" {
+		t.Fatalf("file completion=%q", output)
 	}
 }
 
@@ -597,7 +654,7 @@ func verifyCLIDeriveAndHistory(t *testing.T, fixture cliRevisionFixture) {
 		t.Fatalf("derive stdout=%q", stdout)
 	}
 	mustSealCLI(t, fixture.dir, "preserved")
-	stdout = mustRunCLI(t, fixture.dir, "diff", "root")
+	stdout = mustRunCLI(t, fixture.dir, "compare", "root")
 	if !strings.Contains(stdout, "FROM "+fixture.root1) || !strings.Contains(stdout, "TO "+fixture.root2) {
 		t.Fatalf("diff stdout=%q", stdout)
 	}

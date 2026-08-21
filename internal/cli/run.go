@@ -46,6 +46,9 @@ func RunGitPlugin(args []string, stdout, stderr io.Writer) int {
 }
 
 func runStandaloneAtWithInput(workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) >= 2 && args[0] == "__completion" && args[1] == "--bash" {
+		return runBashCompletion(workDir, args[2:], stdout)
+	}
 	if len(args) == 0 || (len(args) == 1 && isHelp(args[0])) {
 		printRootHelp(stdout)
 		return 0
@@ -99,7 +102,7 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 
 func runSource(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "source requires one of bind, rebind, unbind, show, or list")
+		return usageError(stderr, "source requires one of bind, rebind, unbind, show, list, or compare")
 	}
 	switch args[0] {
 	case "bind":
@@ -112,6 +115,8 @@ func runSource(ctx context.Context, workDir string, args []string, stdout, stder
 		return runSourceShow(workDir, args[1:], stdout, stderr)
 	case "list":
 		return runSourceList(workDir, args[1:], stdout, stderr)
+	case "compare":
+		return runSourceCompare(ctx, workDir, args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "source subcommand %q is unknown", args[0])
 	}
@@ -270,6 +275,37 @@ func runSourceList(workDir string, args []string, stdout, stderr io.Writer) int 
 	return 0
 }
 
+func runSourceCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) != 1 {
+		return usageError(stderr, "source compare requires exactly one REF")
+	}
+	if err := domain.ValidateREF(args[0]); err != nil {
+		return usageError(stderr, "invalid source comparison REF: %v", err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source compare", err)
+	}
+	result, err := repo.SourceCompare(ctx, args[0])
+	if err != nil {
+		return commandError(stderr, "source compare", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source compare", sourceCompareJSON(result))
+	}
+	baseline := "-"
+	if result.BaselineContent != nil {
+		baseline = formatContentRef(*result.BaselineContent)
+	}
+	fmt.Fprintf(stdout, "SOURCE_COMPARE ref=%s path=%s baseline=%s relation=%s\n", result.REF, quoteHumanString(result.Path), result.Baseline, result.Relation)
+	fmt.Fprintf(stdout, "BASELINE_CONTENT %s\nWORKFILE_CONTENT native:blob:%s bytes=%d\n", baseline, result.WorkfileID, result.WorkfileBytes)
+	return 0
+}
+
 func printSources(stdout io.Writer, bindings []repository.SourceBinding) {
 	for _, binding := range bindings {
 		fmt.Fprintf(stdout, "LOCAL_SOURCE ref=%s path=%s\n", binding.REF, quoteHumanString(binding.Path))
@@ -305,8 +341,8 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 		return runLog(ctx, workDir, args[1:], stdout, stderr)
 	case "linklog":
 		return runLinkLog(ctx, workDir, args[1:], stdout, stderr)
-	case "diff":
-		return runDiff(ctx, workDir, args[1:], stdout, stderr)
+	case "compare":
+		return runCompare(ctx, workDir, args[1:], stdout, stderr)
 	case "status":
 		return runStatus(ctx, workDir, args[1:], stdout, stderr)
 	case "stale":
@@ -320,6 +356,9 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 	case "load":
 		return runLoad(ctx, workDir, args[1:], stdin, stdout, stderr)
 	default:
+		if code, ok := gitMisuseDiagnostic(stderr, args); ok {
+			return code
+		}
 		return unknownCommandError(stderr, args[0])
 	}
 }
@@ -415,6 +454,13 @@ type addCLIOptions struct {
 }
 
 func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "." || args[0] == "-A" || args[0] == "-u") {
+		fmt.Fprintf(stderr, "error: 'add %s' assumes Git worktree-wide staging and is not supported\n", args[0])
+		fmt.Fprintln(stderr, "reason: sealgraph add updates exactly one named REF candidate and never discovers files")
+		fmt.Fprintln(stderr, "hint: retry with `sealgraph add REF` or `sealgraph add REF --content-file PATH`")
+		fmt.Fprintln(stderr, "help: sealgraph help add")
+		return 2
+	}
 	options, code := parseAddCLIOptions(args, stderr)
 	if code != 0 {
 		return code
@@ -797,17 +843,19 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 
 func runCandidate(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "candidate requires show, diff, or discard")
+		return usageError(stderr, "candidate requires show, compare, or discard")
 	}
 	switch args[0] {
 	case "show":
 		return runCandidateShow(ctx, workDir, args[1:], stdout, stderr)
+	case "compare":
+		return runCandidateCompare(ctx, workDir, args[1:], stdout, stderr)
 	case "diff":
-		return runCandidateDiff(ctx, workDir, args[1:], stdout, stderr)
+		return gitCandidateDiffDiagnostic(stderr)
 	case "discard":
 		return runCandidateDiscard(ctx, workDir, args[1:], stdout, stderr)
 	default:
-		return usageError(stderr, "unknown candidate operation %q; expected show, diff, or discard", args[0])
+		return usageError(stderr, "unknown candidate operation %q; expected show, compare, or discard", args[0])
 	}
 }
 
@@ -843,9 +891,9 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 	return 0
 }
 
-func runCandidateDiff(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+func runCandidateCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
-		return usageError(stderr, "candidate diff requires exactly one logical REF")
+		return usageError(stderr, "candidate compare requires exactly one logical REF")
 	}
 	ref := args[0]
 	if err := domain.ValidateREF(ref); err != nil {
@@ -853,11 +901,11 @@ func runCandidateDiff(ctx context.Context, workDir string, args []string, stdout
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
-		return commandError(stderr, "candidate diff", err)
+		return commandError(stderr, "candidate compare", err)
 	}
 	result, err := repo.DiffCandidate(ctx, ref)
 	if err != nil {
-		return commandError(stderr, "candidate diff", err)
+		return commandError(stderr, "candidate compare", err)
 	}
 	printCandidateDiff(stdout, result)
 	return 0
@@ -985,38 +1033,38 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	return 0
 }
 
-func runDiff(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+func runCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	args, outputJSON, err := extractInspectionFormat(args)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
 	if len(args) != 1 && len(args) != 2 {
-		return usageError(stderr, "diff requires one current REF or two Seal selectors")
+		return usageError(stderr, "compare requires one current REF or two Seal selectors")
 	}
 	for _, arg := range args {
 		if _, err := repository.ParseSelector(arg); err != nil {
-			return usageError(stderr, "invalid diff selector %q: %v", arg, err)
+			return usageError(stderr, "invalid compare selector %q: %v", arg, err)
 		}
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
-		return commandError(stderr, "diff", err)
+		return commandError(stderr, "compare", err)
 	}
 	var result history.SealDiff
 	if len(args) == 1 {
 		selector, _ := repository.ParseSelector(args[0])
 		if selector.Kind != repository.SelectorCurrentREF {
-			return usageError(stderr, "one-argument diff requires a current REF; provide two selectors for an explicit comparison")
+			return usageError(stderr, "one-argument compare requires a current REF; provide two selectors for an explicit comparison")
 		}
 		result, err = repo.DiffCurrent(ctx, selector.REF)
 	} else {
 		result, err = repo.DiffSelectors(ctx, args[0], args[1])
 	}
 	if err != nil {
-		return commandError(stderr, "diff", err)
+		return commandError(stderr, "compare", err)
 	}
 	if outputJSON {
-		return writeInspectionJSON(stdout, stderr, "diff", diffJSON(result))
+		return writeInspectionJSON(stdout, stderr, "compare", compareJSON(result))
 	}
 	printSealDiff(stdout, result)
 	return 0
@@ -1577,6 +1625,70 @@ func unknownCommandError(stderr io.Writer, command string) int {
 		return 2
 	}
 	return usageDiagnostic(stderr, "", fmt.Sprintf("unknown command %q", command), hint)
+}
+
+func gitMisuseDiagnostic(stderr io.Writer, args []string) (int, bool) {
+	if len(args) == 0 {
+		return 0, false
+	}
+	command := args[0]
+	switch command {
+	case "diff":
+		fmt.Fprintln(stderr, "error: 'diff' is Git-shaped vocabulary and is not a sealgraph command")
+		if containsArg(args[1:], "--draft") {
+			fmt.Fprintln(stderr, "reason: DRAFT is an identity-bearing provenance property, not mutable candidate state")
+		} else if containsArg(args[1:], "--cached") || containsArg(args[1:], "--staged") {
+			fmt.Fprintln(stderr, "reason: cached/staged assumes Git index semantics; sealgraph candidates and source bindings are distinct states")
+		} else {
+			fmt.Fprintln(stderr, "reason: sealgraph comparison reports semantic material and provenance rather than a Git patch")
+		}
+		fmt.Fprintln(stderr, "hint: compare immutable Seals with `sealgraph compare SELECTOR [SELECTOR]`")
+		fmt.Fprintln(stderr, "hint: compare candidate state with `sealgraph candidate compare REF`")
+		fmt.Fprintln(stderr, "hint: compare a bound workfile with `sealgraph source compare REF`")
+		fmt.Fprintln(stderr, "help: sealgraph help compare")
+		return 2, true
+	case "rm", "remove":
+		fmt.Fprintf(stderr, "error: '%s' is a Git-shaped deletion operation and is not a sealgraph command\n", command)
+		fmt.Fprintln(stderr, "reason: sealgraph does not delete workfiles or stage file deletion")
+		fmt.Fprintln(stderr, "hint: discard only unsealed state with `sealgraph candidate discard REF`")
+		fmt.Fprintln(stderr, "hint: inspect then remove only a binding with `sealgraph source show REF` and `sealgraph source unbind REF --from PATH`")
+		fmt.Fprintln(stderr, "hint: logical REF drop is unavailable until exact recovery is implemented")
+		fmt.Fprintln(stderr, "help: sealgraph help concepts")
+		return 2, true
+	case "commit":
+		return gitConceptDiagnostic(stderr, "commit", "a Seal publication advances exactly one REF from one reviewed candidate", "sealgraph candidate compare REF", "sealgraph seal REF"), true
+	case "checkout", "switch", "branch":
+		return gitConceptDiagnostic(stderr, command, "a sealgraph REF is a movable logical identity, not a checked-out branch", "sealgraph status", "sealgraph show REF"), true
+	case "reset", "restore", "clean":
+		return gitConceptDiagnostic(stderr, command, "sealgraph has no combined worktree/index reset operation", "sealgraph candidate discard REF", "sealgraph source show REF"), true
+	}
+	return 0, false
+}
+
+func gitCandidateDiffDiagnostic(stderr io.Writer) int {
+	fmt.Fprintln(stderr, "error: 'candidate diff' is retired Git-shaped vocabulary")
+	fmt.Fprintln(stderr, "reason: candidate comparison is semantic pre-publication state comparison, not a Git patch")
+	fmt.Fprintln(stderr, "hint: retry explicitly with `sealgraph candidate compare REF`")
+	fmt.Fprintln(stderr, "help: sealgraph help candidate compare")
+	return 2
+}
+
+func gitConceptDiagnostic(stderr io.Writer, command, reason, first, second string) int {
+	fmt.Fprintf(stderr, "error: '%s' is Git-shaped vocabulary and is not a sealgraph command\n", command)
+	fmt.Fprintf(stderr, "reason: %s\n", reason)
+	fmt.Fprintf(stderr, "hint: inspect the intended state with `%s`\n", first)
+	fmt.Fprintf(stderr, "hint: use the explicit sealgraph operation `%s` only after review\n", second)
+	fmt.Fprintln(stderr, "help: sealgraph help concepts")
+	return 2
+}
+
+func containsArg(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target {
+			return true
+		}
+	}
+	return false
 }
 
 func nearestCommand(input string) string {

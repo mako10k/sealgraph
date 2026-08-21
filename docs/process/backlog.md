@@ -154,7 +154,7 @@ commands made the receipt longer and made an omitted generation easy to miss.
   inspection action and no repair.
 - Read-only history commands do not mutate canonical or runtime state.
 
-## SG-BL-004 — Semantic `diff` between exact seal generations
+## SG-BL-004 — Semantic comparison between exact seal generations
 
 - Status: completed; GitHub Issue #4 closed on 2026-08-14
 - Priority: P1
@@ -164,6 +164,8 @@ commands made the receipt longer and made an omitted generation easy to miss.
   parent, canonical-order invariance, and read-only behavior. Tracker closure
   followed passing remote CI for
   `46d9ea2cc496a3807f600e8b4a58c2e95891d163`.
+  ADR 0020 later renamed the pre-1.0 public command from Git-shaped `diff` to
+  sealgraph-native `compare`; the comparison semantics remain unchanged.
 
 ### Dogfood observation
 
@@ -249,7 +251,7 @@ to whitespace and presentation changes.
 ### Required design
 
 - Add a versioned format such as `--format json` for `show`, `status`, `stale`,
-  `graph`, `impact`, `log`, `linklog`, and `diff`.
+  `graph`, `impact`, `log`, `linklog`, and `compare`.
 - Preserve ADR 0010's already stable `stale --refs-only` one-REF-per-line stream
   as a narrow shell-composition format; JSON remains separate and structured.
 - Represent ObjectIDs and graph paths as structured values, not formatted

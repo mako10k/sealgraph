@@ -116,6 +116,14 @@ func statusJSON(value repository.RefStatus) map[string]any {
 	return map[string]any{"ref": value.REF, "head_seal_id": idValue(value.Head), "candidate_to_head": candidateRelation, "draft": value.Draft, "stale": map[string]any{"self": value.StaleSelf, "direct_target_seal_ids": direct, "transitive_paths": transitive}, "sealed_state_labels": sealedStatusLabels(value.Labels()), "local_source": source}
 }
 
+func sourceCompareJSON(value repository.SourceCompareResult) map[string]any {
+	var baseline any
+	if value.BaselineContent != nil {
+		baseline = contentJSON(*value.BaselineContent)
+	}
+	return map[string]any{"schema": "sealgraph/source-compare/v1", "ref": value.REF, "path": value.Path, "baseline": value.Baseline, "baseline_content": baseline, "workfile_content": map[string]any{"store": domain.NativeStore, "type": domain.BlobType, "object_id": value.WorkfileID.String(), "bytes": value.WorkfileBytes}, "relation": value.Relation}
+}
+
 func sealedStatusLabels(labels []string) []string {
 	result := append([]string(nil), labels...)
 	for i := range result {
@@ -211,7 +219,7 @@ func attachmentChangeJSON(change history.AttachmentChangeRecord) map[string]any 
 	}
 	return map[string]any{"kind": string(change.Kind), "name": change.Name, "before": before, "after": after}
 }
-func diffJSON(diff history.SealDiff) map[string]any {
+func compareJSON(diff history.SealDiff) map[string]any {
 	attachments := make([]any, 0, len(diff.Attachments))
 	for _, change := range diff.Attachments {
 		attachments = append(attachments, attachmentChangeJSON(change))
@@ -220,7 +228,7 @@ func diffJSON(diff history.SealDiff) map[string]any {
 	for _, change := range diff.Links {
 		links = append(links, linkChangeJSON(change))
 	}
-	return map[string]any{"schema": "sealgraph/diff/v1", "from_seal_id": diff.From.String(), "to_seal_id": diff.To.String(), "content": map[string]any{"changed": diff.Content.Changed, "before": contentJSON(diff.Content.Before), "after": contentJSON(diff.Content.After)}, "attachments": attachments, "links": links, "root": map[string]any{"changed": diff.Root.Changed, "before": diff.Root.Before, "after": diff.Root.After}, "draft": map[string]any{"changed": diff.Draft.Changed, "before": diff.Draft.Before, "after": diff.Draft.After}, "parent_revision": map[string]any{"changed": diff.Parent.Changed, "before": idValue(diff.Parent.Before), "after": idValue(diff.Parent.After)}}
+	return map[string]any{"schema": "sealgraph/compare/v1", "from_seal_id": diff.From.String(), "to_seal_id": diff.To.String(), "content": map[string]any{"changed": diff.Content.Changed, "before": contentJSON(diff.Content.Before), "after": contentJSON(diff.Content.After)}, "attachments": attachments, "links": links, "root": map[string]any{"changed": diff.Root.Changed, "before": diff.Root.Before, "after": diff.Root.After}, "draft": map[string]any{"changed": diff.Draft.Changed, "before": diff.Draft.Before, "after": diff.Draft.After}, "parent_revision": map[string]any{"changed": diff.Parent.Changed, "before": idValue(diff.Parent.Before), "after": idValue(diff.Parent.After)}}
 }
 
 func fsckJSON(report repository.FsckReport) map[string]any {
