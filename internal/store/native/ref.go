@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -35,6 +36,61 @@ func (s *RefStore) Resolve(ctx context.Context, ref string) (domain.ObjectID, er
 		return domain.ObjectID{}, err
 	}
 	return manifest.Head, nil
+}
+
+func (s *RefStore) Snapshot(ctx context.Context, ref string) ([]byte, error) {
+	manifest, err := s.loadManifest(ctx, ref)
+	if err != nil {
+		if errors.Is(err, store.ErrRefNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return encodeRefManifest(manifest)
+}
+
+func (s *RefStore) PreviewUpdate(ctx context.Context, ref string, oldID, newID *domain.ObjectID) ([]byte, error) {
+	if err := validateRefUpdate(ctx, ref, oldID, newID); err != nil {
+		return nil, err
+	}
+	manifest, err := s.manifestForUpdate(ctx, ref, oldID)
+	if err != nil {
+		return nil, err
+	}
+	manifest.Head = *newID
+	return encodeRefManifest(manifest)
+}
+
+func (s *RefStore) PreviewTag(ctx context.Context, ref, name string, id, expectedHead domain.ObjectID) ([]byte, error) {
+	manifest, err := s.loadManifest(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	if !manifest.Head.Equal(expectedHead) {
+		return nil, fmt.Errorf("%w for %s tag preview", store.ErrCASMismatch, ref)
+	}
+	for _, existing := range manifest.Tags {
+		if existing.Name == name {
+			if existing.Seal.Equal(id) {
+				return encodeRefManifest(manifest)
+			}
+			return nil, store.ErrTagConflict
+		}
+	}
+	manifest.Tags = append(manifest.Tags, store.Tag{Name: name, Seal: id})
+	return encodeRefManifest(manifest)
+}
+
+func (s *RefStore) ManifestTargets(data []byte) ([]domain.ObjectID, error) {
+	manifest, err := decodeRefManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	targets := []domain.ObjectID{manifest.Head}
+	for _, tag := range manifest.Tags {
+		targets = append(targets, tag.Seal)
+	}
+	return targets, nil
 }
 
 func (s *RefStore) Update(ctx context.Context, ref string, oldID, newID *domain.ObjectID) error {
@@ -125,6 +181,76 @@ func (s *RefStore) Move(ctx context.Context, oldRef, newRef string) error {
 		return fmt.Errorf("REF move %s to %s committed but directory durability failed: %w; inspect both names before any retry", oldRef, newRef, err)
 	}
 	return nil
+}
+
+func (s *RefStore) ReplaceExact(ctx context.Context, ref string, expected, replacement []byte) error {
+	if err := domain.ValidateREF(ref); err != nil {
+		return err
+	}
+	var replacementManifest refManifest
+	if replacement != nil {
+		decoded, err := decodeRefManifest(replacement)
+		if err != nil {
+			return fmt.Errorf("replacement REF %s manifest is invalid: %w", ref, err)
+		}
+		replacementManifest = decoded
+	}
+	release, err := s.acquireLocks(ref)
+	if err != nil {
+		return err
+	}
+	defer release()
+	current, err := s.Snapshot(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(current, expected) {
+		return fmt.Errorf("%w for exact REF %s manifest replacement", store.ErrCASMismatch, ref)
+	}
+	if replacement != nil {
+		return s.writeManifest(ref, replacementManifest)
+	}
+	path := s.manifestPath(ref)
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove exact REF %s manifest: %w", ref, err)
+	}
+	if err := syncDirectory(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("REF %s removal committed but directory durability failed: %w", ref, err)
+	}
+	return nil
+}
+
+func (s *RefStore) MoveExact(ctx context.Context, oldRef, newRef string, oldExpected, newExpected []byte) error {
+	if err := validateRefMove(ctx, oldRef, newRef); err != nil {
+		return err
+	}
+	release, err := s.acquireLocks(oldRef, newRef)
+	if err != nil {
+		return err
+	}
+	defer release()
+	oldCurrent, err := s.Snapshot(ctx, oldRef)
+	if err != nil {
+		return err
+	}
+	newCurrent, err := s.Snapshot(ctx, newRef)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(oldCurrent, oldExpected) || !bytes.Equal(newCurrent, newExpected) {
+		return fmt.Errorf("%w for exact REF move %s to %s", store.ErrCASMismatch, oldRef, newRef)
+	}
+	if oldCurrent == nil || newCurrent != nil {
+		return fmt.Errorf("exact REF move requires present source and absent destination")
+	}
+	if err := s.ensureRefDirectory(newRef); err != nil {
+		return err
+	}
+	oldPath, newPath := s.manifestPath(oldRef), s.manifestPath(newRef)
+	if err := fsatomic.RenameNoReplace(oldPath, newPath); err != nil {
+		return err
+	}
+	return syncMovedDirectories(filepath.Dir(oldPath), filepath.Dir(newPath))
 }
 
 func validateRefMove(ctx context.Context, oldRef, newRef string) error {

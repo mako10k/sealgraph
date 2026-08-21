@@ -293,10 +293,11 @@ observation. Draft may preserve active, historical, detached, draft, or
 non-draft exact Causes. Parent admissibility is separate; parent never replaces
 the Cause requirement. There is no generic validation bypass.
 
-All native mutations hold one repository-wide writer guard. Successful
-expected-old REF CAS is publication. Candidate cleanup removes only the exact
-version sealed; a newer candidate is retained and reported. Dangling immutable
-objects after failed CAS are reported, not deleted.
+All native mutations hold one repository-wide writer guard. Before successful
+REF publication, `seal` durably prepares one local recovery record. Success is
+`SEALED REF FULL_SEAL_ID operation=OPERATION_ID`. Candidate cleanup removes
+only the exact version sealed; a newer candidate is retained and reported.
+Dangling immutable objects after failed CAS are reported, not deleted.
 
 ### `sealgraph tag`
 
@@ -323,7 +324,7 @@ scope. Repeating the same binding is idempotent. Retarget, delete, force, and
 automatic tag creation do not exist. Success is:
 
 ```text
-TAGGED REF "TAGNAME" FULL_SEAL_ID
+TAGGED REF "TAGNAME" FULL_SEAL_ID operation=OPERATION_ID
 ```
 
 ### `sealgraph mv`
@@ -340,7 +341,7 @@ prefix REF, rewrites a candidate, creates an old-name alias, modifies a Seal or
 Link, or infers hierarchy from slash spelling. Success is:
 
 ```text
-MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N
+MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N operation=OPERATION_ID
 ```
 
 ## 3. Immutable inspection
@@ -593,7 +594,7 @@ is structural rather than stale-only, root is a provenance boundary rather
 than trust, and Seal/link history is not Git commit/reflog history. Standalone
 commands do not discover or inspect Git.
 
-## 10. Accepted recovery surface (not yet implemented)
+## 10. Explicit local recovery
 
 The initial explicit local-recovery surface is:
 
@@ -608,6 +609,14 @@ already-recovered, and corrupt local-record state. Recovery requires one exact
 full operation ID and verifies every complete logged post-operation manifest
 before mutation. Human and `sealgraph/recover/v1` JSON output are buffered and
 never report partial success.
+
+Successful non-idempotent `seal`, `tag`, and `mv` output includes the exact
+`operation=OPERATION_ID` receipt. `recover show` lists every readable local
+record plus isolated `CORRUPT` entries. `recover show OPERATION_ID` inspects one
+exact record. `recover OPERATION_ID` restores the exact complete prior manifest
+state only when current state still equals the recorded after-state. Bash
+completion may enumerate full local operation IDs but never selects one
+implicitly.
 
 There is no `recover last`, `recover REF`, ID-prefix selection, reset, reflog,
 checkout, undo/redo, object deletion, or implicit corrective Seal. `link` and

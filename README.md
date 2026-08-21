@@ -49,6 +49,7 @@ sealgraph source show docs/requirements.md
 sealgraph show REQ-001
 sealgraph tag REQ-001 reviewed/1.0
 sealgraph mv REQ-001 requirements/REQ-001
+sealgraph recover show
 
 # Explicit conversion into a different directory with no .sealgraph target:
 sealgraph load --format logical-v1 < repository.dump.json
@@ -56,8 +57,9 @@ sealgraph load --format logical-v1 < repository.dump.json
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
 
-`v0.1.0-beta.3` is standalone-only and includes the ADR 0019 local
-source-binding slice. The runtime still has no watcher, automatic
+The development tree is standalone-only and includes the ADR 0019 local
+source-binding slice plus the ADR 0018 explicit local REF recovery journal.
+The runtime still has no watcher, automatic
 add/seal, filesystem synchronization, Git discovery, or Git sidecar. Local
 source binding is explicit machine-local input configuration. `manifest` reads
 only explicitly named files and emits a deterministic path/digest claim; it
@@ -145,6 +147,8 @@ sealgraph mv
 sealgraph candidate
 sealgraph source compare REF
 sealgraph seal
+sealgraph recover show [OPERATION_ID]
+sealgraph recover OPERATION_ID
 sealgraph show
 sealgraph log
 sealgraph linklog

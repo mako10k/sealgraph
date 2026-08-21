@@ -176,7 +176,7 @@ Coordinates:
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.
 
-### `internal/recovery` (accepted, not yet implemented)
+### `internal/recovery`
 
 - strict versioned PREPARED/COMMITTED operation records;
 - exact present/absent REF-manifest before/after transitions;

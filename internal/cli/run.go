@@ -96,6 +96,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runCandidate(ctx, workDir, args[1:], stdout, stderr), true
 	case "seal":
 		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
+	case "recover":
+		return runRecover(ctx, workDir, args[1:], stdout, stderr), true
 	}
 	return 0, false
 }
@@ -711,7 +713,8 @@ func runTag(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "tag", err)
 	}
-	fmt.Fprintf(stdout, "TAGGED %s %s %s\n", result.REF, strconv.Quote(result.Name), result.Seal)
+	fmt.Fprintf(stdout, "TAGGED %s %s %s", result.REF, strconv.Quote(result.Name), result.Seal)
+	printOperationID(stdout, result.OperationID)
 	return 0
 }
 
@@ -753,7 +756,8 @@ func runMove(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "mv", err)
 	}
-	fmt.Fprintf(stdout, "MOVED %s %s %s tags=%d\n", result.OldREF, result.NewREF, result.Head, result.Tags)
+	fmt.Fprintf(stdout, "MOVED %s %s %s tags=%d", result.OldREF, result.NewREF, result.Head, result.Tags)
+	printOperationID(stdout, result.OperationID)
 	return 0
 }
 
@@ -776,8 +780,72 @@ func runSeal(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "seal", err)
 	}
-	fmt.Fprintf(stdout, "SEALED %s %s\n", ref, result.ID)
+	fmt.Fprintf(stdout, "SEALED %s %s operation=%s\n", ref, result.ID, result.OperationID)
 	return 0
+}
+
+func printOperationID(stdout io.Writer, id string) {
+	if id != "" {
+		fmt.Fprintf(stdout, " operation=%s", id)
+	}
+	fmt.Fprintln(stdout)
+}
+
+func runRecover(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) == 0 {
+		return usageError(stderr, "recover requires show [OPERATION_ID] or one exact OPERATION_ID")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "recover", err)
+	}
+	if args[0] == "show" {
+		if len(args) > 2 {
+			return usageError(stderr, "recover show accepts at most one exact OPERATION_ID")
+		}
+		id := ""
+		if len(args) == 2 {
+			id = args[1]
+		}
+		inspections, err := repo.RecoveryShow(ctx, id)
+		if err != nil {
+			return commandError(stderr, "recover show", err)
+		}
+		if outputJSON {
+			return writeInspectionJSON(stdout, stderr, "recover show", recoveryInspectionsJSON(inspections))
+		}
+		printRecoveryInspections(stdout, inspections)
+		return 0
+	}
+	if len(args) != 1 {
+		return usageError(stderr, "recover requires exactly one full OPERATION_ID")
+	}
+	result, err := repo.Recover(ctx, args[0])
+	if err != nil {
+		return commandError(stderr, "recover", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "recover", map[string]any{"schema": "sealgraph/recover/v1", "operation_id": result.ID, "kind": result.Kind, "result": "RECOVERED"})
+	}
+	fmt.Fprintf(stdout, "RECOVERED operation=%s kind=%s\n", result.ID, result.Kind)
+	return 0
+}
+
+func printRecoveryInspections(stdout io.Writer, inspections []repository.RecoveryInspection) {
+	for _, inspection := range inspections {
+		fmt.Fprintf(stdout, "RECOVERY operation=%s kind=%s journal=%s status=%s", inspection.ID, inspection.Kind, inspection.Journal, inspection.Status)
+		if inspection.Corrupt != "" {
+			fmt.Fprintf(stdout, " error=%s", quoteHumanString(inspection.Corrupt))
+		}
+		fmt.Fprintln(stdout)
+		for _, transition := range inspection.Transitions {
+			fmt.Fprintf(stdout, "  REF %s current=%s\n", transition.REF, transition.Current)
+		}
+	}
 }
 
 func runShow(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {

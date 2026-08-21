@@ -41,7 +41,11 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 	}
 	if len(prior) == 1 {
 		if entry, ok := commandHelpRegistry[prior[0]]; ok && len(entry.Subcommands) != 0 {
-			return "plain", append(append([]string{}, entry.Subcommands...), commandOptions(entry)...)
+			values := append(append([]string{}, entry.Subcommands...), commandOptions(entry)...)
+			if prior[0] == "recover" {
+				values = append(values, repositoryCompletionValues(workDir, "recover")...)
+			}
+			return "plain", values
 		}
 	}
 	path := prior[0]
@@ -107,6 +111,8 @@ func repositoryCompletionValues(workDir, path string) []string {
 		return names.Candidates
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
+	case "recover", "recover show":
+		return names.RecoveryIDs
 	default:
 		return names.REFs
 	}

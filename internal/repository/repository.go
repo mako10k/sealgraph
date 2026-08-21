@@ -12,6 +12,7 @@ import (
 
 	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/recovery"
 	"github.com/mako10k/sealgraph/internal/store"
 	"github.com/mako10k/sealgraph/internal/store/native"
 )
@@ -24,6 +25,7 @@ type Repository struct {
 	tags       store.TagStore
 	candidates candidateStore
 	sources    sourceStore
+	recovery   *recovery.Store
 	writer     writerGuard
 }
 
@@ -45,6 +47,7 @@ func newRepository(dir string) *Repository {
 		tags:       native.NewTagStore(dir),
 		candidates: candidates,
 		sources:    sourceStore{candidates: candidates},
+		recovery:   recovery.NewStore(dir),
 		writer:     newWriterGuard(filepath.Join(dir, "locks")),
 	}
 }
@@ -64,9 +67,10 @@ type AddOptions struct {
 }
 
 type CompletionNames struct {
-	REFs       []string
-	Candidates []string
-	Sources    []string
+	REFs        []string
+	Candidates  []string
+	Sources     []string
+	RecoveryIDs []string
 }
 
 // CompletionNames returns names from repository metadata only. It never opens
@@ -88,7 +92,17 @@ func (r *Repository) CompletionNames(ctx context.Context) (CompletionNames, erro
 	for _, binding := range bindings {
 		sources = append(sources, binding.REF)
 	}
-	return CompletionNames{REFs: refs, Candidates: candidates, Sources: sources}, nil
+	recoveryEntries, err := r.recovery.List()
+	if err != nil {
+		return CompletionNames{}, err
+	}
+	recoveryIDs := make([]string, 0, len(recoveryEntries))
+	for _, entry := range recoveryEntries {
+		if entry.Record != nil {
+			recoveryIDs = append(recoveryIDs, entry.ID)
+		}
+	}
+	return CompletionNames{REFs: refs, Candidates: candidates, Sources: sources, RecoveryIDs: recoveryIDs}, nil
 }
 
 func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
@@ -280,8 +294,9 @@ func (r *Repository) resolveDependencies(ctx context.Context, dependencies []Dep
 }
 
 type SealResult struct {
-	ID      domain.ObjectID
-	Payload domain.SealPayload
+	ID          domain.ObjectID
+	Payload     domain.SealPayload
+	OperationID string
 }
 
 func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
@@ -297,32 +312,9 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 			return SealResult{}, err
 		}
 		candidate := snapshot.Candidate
-		if err := r.validatePublicationExpectation(ctx, candidate); err != nil {
+		admission, err := r.validateSealCandidate(ctx, candidate)
+		if err != nil {
 			return SealResult{}, err
-		}
-		if _, err := r.readRepositoryBlob(ctx, candidate.Content, fmt.Sprintf("candidate content for %s", ref)); err != nil {
-			return SealResult{}, err
-		}
-		for _, attachment := range candidate.Attachments {
-			if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("candidate attachment %q for %s", attachment.Name, ref)); err != nil {
-				return SealResult{}, err
-			}
-		}
-		if candidate.ParentRevision != nil {
-			if err := r.validateRevisionChain(ctx, *candidate.ParentRevision); err != nil {
-				return SealResult{}, fmt.Errorf("candidate parent revision %s is invalid: %w", candidate.ParentRevision, err)
-			}
-		}
-		if err := r.validateCauseClosure(ctx, candidate.Links, !candidate.Draft); err != nil {
-			return SealResult{}, err
-		}
-		var admission *headObservation
-		if !candidate.Draft && !candidate.Root {
-			observed, err := r.requireActiveLeafClosure(ctx, candidate.Links)
-			if err != nil {
-				return SealResult{}, err
-			}
-			admission = &observed
 		}
 		payload := domain.SealPayload{
 			Schema: domain.SealSchema, ParentRevision: candidate.ParentRevision,
@@ -342,16 +334,65 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 				return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
 			}
 		}
+		recoveryRefs, err := r.recoveryRefs()
+		if err != nil {
+			return SealResult{}, err
+		}
+		before, err := recoveryRefs.Snapshot(ctx, ref)
+		if err != nil {
+			return SealResult{}, err
+		}
+		after, err := recoveryRefs.PreviewUpdate(ctx, ref, candidate.ExpectedREFHead, &sealID)
+		if err != nil {
+			return SealResult{}, err
+		}
+		recoveryRecord, err := r.prepareRecovery("seal", []recovery.Transition{{REF: ref, Before: before, After: after}})
+		if err != nil {
+			return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced because recovery preparation failed: %w", sealID, ref, err)
+		}
 		if err := r.refs.Update(ctx, ref, candidate.ExpectedREFHead, &sealID); err != nil {
 			return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
 		}
 		payload, _ = domain.NormalizeSeal(payload)
-		result := SealResult{ID: sealID, Payload: payload}
+		result := SealResult{ID: sealID, Payload: payload, OperationID: recoveryRecord.ID}
+		if err := r.commitRecovery(recoveryRecord); err != nil {
+			return result, fmt.Errorf("REF %s was published at seal %s but recovery record %s could not be marked COMMITTED: %w; inspect the REF and recovery record before retrying", ref, sealID, recoveryRecord.ID, err)
+		}
 		if err := r.candidates.RemoveIfUnchanged(ref, snapshot.Bytes); err != nil {
 			return result, fmt.Errorf("REF %s was published at seal %s, but its candidate was retained because cleanup could not prove it was unchanged: %w; inspect the candidate explicitly", ref, sealID, err)
 		}
 		return result, nil
 	})
+}
+
+func (r *Repository) validateSealCandidate(ctx context.Context, candidate domain.Candidate) (*headObservation, error) {
+	if err := r.validatePublicationExpectation(ctx, candidate); err != nil {
+		return nil, err
+	}
+	if _, err := r.readRepositoryBlob(ctx, candidate.Content, fmt.Sprintf("candidate content for %s", candidate.REF)); err != nil {
+		return nil, err
+	}
+	for _, attachment := range candidate.Attachments {
+		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("candidate attachment %q for %s", attachment.Name, candidate.REF)); err != nil {
+			return nil, err
+		}
+	}
+	if candidate.ParentRevision != nil {
+		if err := r.validateRevisionChain(ctx, *candidate.ParentRevision); err != nil {
+			return nil, fmt.Errorf("candidate parent revision %s is invalid: %w", candidate.ParentRevision, err)
+		}
+	}
+	if err := r.validateCauseClosure(ctx, candidate.Links, !candidate.Draft); err != nil {
+		return nil, err
+	}
+	if candidate.Draft || candidate.Root {
+		return nil, nil
+	}
+	observed, err := r.requireActiveLeafClosure(ctx, candidate.Links)
+	if err != nil {
+		return nil, err
+	}
+	return &observed, nil
 }
 
 func (r *Repository) validatePublicationExpectation(ctx context.Context, candidate domain.Candidate) error {

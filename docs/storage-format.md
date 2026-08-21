@@ -347,8 +347,8 @@ line-ending transformation over canonical paths are unsupported.
 
 ## 12. Non-canonical local recovery journal
 
-The accepted recovery boundary reserves `.sealgraph/logs/recovery/` for
-versioned local operation records. This directory is not canonical repository
+The recovery boundary uses `.sealgraph/logs/recovery/` for versioned local
+operation records. This directory is not canonical repository
 state and is excluded from outer Git, logical dump/load, Seal identity, REF
 identity, graph derivation, and canonical `fsck` validity.
 
@@ -362,5 +362,14 @@ A durable `PREPARED` record precedes canonical mutation and an atomic record
 replacement marks `COMMITTED` afterward. Exact current state equal to before,
 after, or neither classifies not-applied/already-restored, recoverable, or
 intervened state. Journal status alone is never sufficient to mutate a REF.
-The runtime schema bytes and fixed limits are frozen with the implementation
-slice before any journal writer is enabled.
+
+The runtime schema is canonical JSON plus LF with schema
+`sealgraph/recovery/v1`. Operation IDs are exactly 32 lowercase hexadecimal
+characters generated from 16 random bytes and filenames are
+`OPERATION_ID.json`. Byte slices use JSON base64 strings; absence uses `null`.
+Unknown members, non-canonical encoding, invalid REF names, operation-shape
+mismatches, and records over 64 MiB are rejected. Each present before/after
+manifest is limited to 16 MiB. V1 permits exactly one transition for `seal` or
+`tag` and exactly two sorted transitions for `mv`; `seal` ends present, `tag`
+is present-to-present, and `mv` contains one present-to-absent plus one
+absent-to-present transition.

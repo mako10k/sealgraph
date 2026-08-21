@@ -1,25 +1,29 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 
 	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/recovery"
 	"github.com/mako10k/sealgraph/internal/store"
 )
 
 type TagResult struct {
-	REF  string
-	Name string
-	Seal domain.ObjectID
+	REF         string
+	Name        string
+	Seal        domain.ObjectID
+	OperationID string
 }
 
 type MoveResult struct {
-	OldREF string
-	NewREF string
-	Head   domain.ObjectID
-	Tags   int
+	OldREF      string
+	NewREF      string
+	Head        domain.ObjectID
+	Tags        int
+	OperationID string
 }
 
 func (r *Repository) CreateTag(ctx context.Context, selectorText, name string) (TagResult, error) {
@@ -42,10 +46,33 @@ func (r *Repository) CreateTag(ctx context.Context, selectorText, name string) (
 		if err != nil {
 			return TagResult{}, fmt.Errorf("resolve tag scope %s HEAD: %w", selector.REF, err)
 		}
+		recoveryRefs, err := r.recoveryRefs()
+		if err != nil {
+			return TagResult{}, err
+		}
+		before, err := recoveryRefs.Snapshot(ctx, selector.REF)
+		if err != nil {
+			return TagResult{}, err
+		}
+		after, err := recoveryRefs.PreviewTag(ctx, selector.REF, name, resolved.ID, head)
+		if err != nil {
+			return TagResult{}, err
+		}
+		if bytes.Equal(before, after) {
+			return TagResult{REF: selector.REF, Name: name, Seal: resolved.ID}, nil
+		}
+		record, err := r.prepareRecovery("tag", []recovery.Transition{{REF: selector.REF, Before: before, After: after}})
+		if err != nil {
+			return TagResult{}, err
+		}
 		if err := r.tags.Create(ctx, selector.REF, name, resolved.ID, head); err != nil {
 			return TagResult{}, err
 		}
-		return TagResult{REF: selector.REF, Name: name, Seal: resolved.ID}, nil
+		result := TagResult{REF: selector.REF, Name: name, Seal: resolved.ID, OperationID: record.ID}
+		if err := r.commitRecovery(record); err != nil {
+			return result, fmt.Errorf("tag was published but recovery record %s could not be marked COMMITTED: %w", record.ID, err)
+		}
+		return result, nil
 	})
 }
 
@@ -94,10 +121,33 @@ func (r *Repository) MoveREF(ctx context.Context, oldRef, newRef string) (MoveRe
 		if err != nil {
 			return MoveResult{}, err
 		}
+		recoveryRefs, err := r.recoveryRefs()
+		if err != nil {
+			return MoveResult{}, err
+		}
+		oldBefore, err := recoveryRefs.Snapshot(ctx, oldRef)
+		if err != nil {
+			return MoveResult{}, err
+		}
+		newBefore, err := recoveryRefs.Snapshot(ctx, newRef)
+		if err != nil {
+			return MoveResult{}, err
+		}
+		if newBefore != nil {
+			return MoveResult{}, fmt.Errorf("move destination REF %s already exists", newRef)
+		}
+		record, err := r.prepareRecovery("mv", []recovery.Transition{{REF: oldRef, Before: oldBefore, After: nil}, {REF: newRef, Before: newBefore, After: oldBefore}})
+		if err != nil {
+			return MoveResult{}, err
+		}
 		if err := r.refs.Move(ctx, oldRef, newRef); err != nil {
 			return MoveResult{}, err
 		}
-		return MoveResult{OldREF: oldRef, NewREF: newRef, Head: head, Tags: len(tags)}, nil
+		result := MoveResult{OldREF: oldRef, NewREF: newRef, Head: head, Tags: len(tags), OperationID: record.ID}
+		if err := r.commitRecovery(record); err != nil {
+			return result, fmt.Errorf("REF move committed but recovery record %s could not be marked COMMITTED: %w", record.ID, err)
+		}
+		return result, nil
 	})
 }
 

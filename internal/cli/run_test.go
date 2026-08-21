@@ -437,6 +437,46 @@ func TestCLIBashCompletionUsesCanonicalVocabularyAndMetadataOnly(t *testing.T) {
 	}
 }
 
+func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--content", "v1")
+	sealOutput := mustRunCLI(t, dir, "seal", "root")
+	fields := strings.Fields(sealOutput)
+	if len(fields) != 4 || !strings.HasPrefix(fields[3], "operation=") {
+		t.Fatalf("seal output=%q", sealOutput)
+	}
+	id := strings.TrimPrefix(fields[3], "operation=")
+	show := mustRunCLI(t, dir, "recover", "show", id)
+	if !strings.Contains(show, "status=RECOVERABLE") || !strings.Contains(show, "current=AFTER") {
+		t.Fatalf("recover show=%q", show)
+	}
+	jsonOutput := decodeCLIJSON(t, mustRunCLI(t, dir, "recover", "show", id, "--format=json"))
+	if jsonOutput["schema"] != "sealgraph/recover/v1" {
+		t.Fatalf("recover JSON=%v", jsonOutput)
+	}
+	completion := mustRunCLI(t, dir, "__completion", "--bash", "recover", "")
+	if !strings.Contains(completion, "\nshow\n") || !strings.Contains(completion, "\n"+id+"\n") {
+		t.Fatalf("recover completion=%q", completion)
+	}
+	code, stdout, stderr := runCLI(t, dir, nil, "recover", id[:12])
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "exactly 32 lower-case hexadecimal") {
+		t.Fatalf("prefix recovery code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	recovered := decodeCLIJSON(t, mustRunCLI(t, dir, "recover", id, "--format", "json"))
+	if recovered["result"] != "RECOVERED" || recovered["operation_id"] != id {
+		t.Fatalf("recover result=%v", recovered)
+	}
+	show = mustRunCLI(t, dir, "recover", "show", id)
+	if !strings.Contains(show, "status=ALREADY_RECOVERED") || !strings.Contains(show, "current=BEFORE") {
+		t.Fatalf("recovered show=%q", show)
+	}
+	code, stdout, stderr = runCLI(t, dir, nil, "recover", id)
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "ALREADY_RECOVERED") {
+		t.Fatalf("repeat recovery code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func TestCLIManifestFeedsAddWithoutRepositoryMutation(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o600); err != nil {
@@ -490,7 +530,7 @@ func TestCLIFormat4RootAndSelectorShow(t *testing.T) {
 	if code != 0 || !strings.HasPrefix(stdout, "SEALED root ") {
 		t.Fatalf("seal code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	id := strings.TrimSpace(strings.TrimPrefix(stdout, "SEALED root "))
+	id := strings.Fields(stdout)[2]
 	code, stdout, stderr = runCLI(t, dir, nil, "show", "@"+id[:12])
 	if code != 0 || !strings.Contains(stdout, "CURRENT_REFS root") || !strings.Contains(stdout, "PARENT_REVISION -") || strings.Contains(stdout, "target_ref") {
 		t.Fatalf("show code=%d stdout=%s stderr=%s", code, stdout, stderr)
@@ -604,7 +644,11 @@ func mustRunCLI(t *testing.T, dir string, args ...string) string {
 func mustSealCLI(t *testing.T, dir, ref string) string {
 	t.Helper()
 	stdout := mustRunCLI(t, dir, "seal", ref)
-	return strings.TrimSpace(strings.TrimPrefix(stdout, "SEALED "+ref+" "))
+	fields := strings.Fields(stdout)
+	if len(fields) < 4 || fields[0] != "SEALED" || fields[1] != ref || !strings.HasPrefix(fields[3], "operation=") {
+		t.Fatalf("unexpected seal receipt: %q", stdout)
+	}
+	return fields[2]
 }
 
 type cliRevisionFixture struct {

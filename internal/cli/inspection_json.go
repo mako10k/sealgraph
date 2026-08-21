@@ -124,6 +124,18 @@ func sourceCompareJSON(value repository.SourceCompareResult) map[string]any {
 	return map[string]any{"schema": "sealgraph/source-compare/v1", "ref": value.REF, "path": value.Path, "baseline": value.Baseline, "baseline_content": baseline, "workfile_content": map[string]any{"store": domain.NativeStore, "type": domain.BlobType, "object_id": value.WorkfileID.String(), "bytes": value.WorkfileBytes}, "relation": value.Relation}
 }
 
+func recoveryInspectionsJSON(values []repository.RecoveryInspection) map[string]any {
+	items := make([]any, 0, len(values))
+	for _, value := range values {
+		transitions := make([]any, 0, len(value.Transitions))
+		for _, transition := range value.Transitions {
+			transitions = append(transitions, map[string]any{"ref": transition.REF, "current": transition.Current})
+		}
+		items = append(items, map[string]any{"operation_id": value.ID, "kind": value.Kind, "journal_state": value.Journal, "status": value.Status, "transitions": transitions, "error": value.Corrupt})
+	}
+	return map[string]any{"schema": "sealgraph/recover/v1", "operations": items}
+}
+
 func sealedStatusLabels(labels []string) []string {
 	result := append([]string(nil), labels...)
 	for i := range result {

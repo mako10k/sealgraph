@@ -44,6 +44,18 @@ type RefStore interface {
 	List(ctx context.Context) ([]string, error)
 }
 
+// RecoveryRefStore exposes exact canonical manifest transitions for the
+// standalone recovery coordinator. Git-backed views need not implement it.
+type RecoveryRefStore interface {
+	RefStore
+	Snapshot(ctx context.Context, ref string) ([]byte, error)
+	PreviewUpdate(ctx context.Context, ref string, oldID, newID *domain.ObjectID) ([]byte, error)
+	PreviewTag(ctx context.Context, ref, name string, id, expectedHead domain.ObjectID) ([]byte, error)
+	ManifestTargets(data []byte) ([]domain.ObjectID, error)
+	ReplaceExact(ctx context.Context, ref string, expected, replacement []byte) error
+	MoveExact(ctx context.Context, oldRef, newRef string, oldExpected, newExpected []byte) error
+}
+
 type Tag struct {
 	Name string
 	Seal domain.ObjectID
