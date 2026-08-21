@@ -18,20 +18,20 @@ approval-gated.
 
 ## Exact-source gate
 
-- [ ] Freeze one clean source commit SHA containing runtime, tests, help,
+- [x] Freeze one clean source commit SHA containing runtime, tests, help,
       documentation, CI version, release notes, and this checklist.
-- [ ] Run gofmt clean-tree check, `go vet ./...`, `go test ./...`, and
+- [x] Run gofmt clean-tree check, `go vet ./...`, `go test ./...`, and
       `go test -race ./...` on that SHA.
-- [ ] Run `npm ci`, completion, clone, complexity, and dead-code checks.
-- [ ] Audit checked-in llmthink decisions used by this implementation.
-- [ ] Run `perttool document check PLAN.pert` and
+- [x] Run `npm ci`, completion, clone, complexity, and dead-code checks.
+- [x] Audit checked-in llmthink decisions used by this implementation.
+- [x] Run `perttool document check PLAN.pert` and
       `perttool dag analyze PLAN.pert`.
-- [ ] Build twice into separate absent directories and prove byte-identical
+- [x] Build twice into separate absent directories and prove byte-identical
       archives and checksum files.
-- [ ] Run extracted-artifact smoke and confirm archive inventory.
+- [x] Run extracted-artifact smoke and confirm archive inventory.
 - [ ] Push the exact source SHA and require successful remote CI for it.
 
-Validated source: pending.
+Validated source: `8e7ca4bc9a20261cd1f09447849b9bd6ba9f796d`.
 GitHub Actions run: pending.
 
 ## Publication record
@@ -40,12 +40,12 @@ Fill and obtain explicit operator approval before any tag or Release write:
 
 ```text
 release version: 0.1.0-beta.4
-validated source SHA: pending
+validated source SHA: 8e7ca4bc9a20261cd1f09447849b9bd6ba9f796d
 artifact: sealgraph_0.1.0-beta.4_linux_amd64.tar.gz
-artifact SHA-256: pending
+artifact SHA-256: eff9136499c24e71ec909448591f0c4ae268afd157cc4aaf58844407b253e1b0
 checksums artifact: sealgraph_0.1.0-beta.4_checksums.txt
-checksums file SHA-256: pending
-release-note SHA-256: pending
+checksums file SHA-256: 481aa74c040eedd89d31bbd86a5015da80d37b153f741db87a51757c70c81c71
+release-note SHA-256: cae36b1cc9187effca5cac97e8bd578d5f31748fb0602ec86bfc832a7a0e65ab
 maximum tag writes: 1
 maximum GitHub Release writes: 1
 ```

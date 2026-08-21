@@ -1,13 +1,13 @@
 {
   "target_go": "1.26",
   "validation_go": "1.26.5",
-	"release_candidate": "0.1.0-beta.3",
-	"scope": "standalone Linux amd64; explicit non-canonical local source bindings and add-time import; no watch, automatic add/seal, or Git sidecar",
-	"fresh_checkout_source": "9c80756490b63baa4641f3b5680cfd6e9b065816",
+	"release_candidate": "0.1.0-beta.4",
+	"scope": "standalone Linux amd64; native comparison vocabulary, Bash completion, explicit local REF recovery, recoverable ref drop, and retained source bindings; no Git sidecar",
+	"fresh_checkout_source": "8e7ca4bc9a20261cd1f09447849b9bd6ba9f796d",
 	"fsck_inventory": "objects=4,seals=2,material_objects=2,refs=2,tags=0,active_seals=2,historical_or_detached=0,unreferenced_objects=0",
-	"artifact_sha256": "4421d8627b892a829b4dc4011ab0f9faabcc0d53494544cd537a0f962e5921c8",
-	"checksums_file_sha256": "c768b430581b8492265b38f78972d98380319483d870f0214d02bfaeac551b50",
+	"artifact_sha256": "eff9136499c24e71ec909448591f0c4ae268afd157cc4aaf58844407b253e1b0",
+	"checksums_file_sha256": "481aa74c040eedd89d31bbd86a5015da80d37b153f741db87a51757c70c81c71",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
 	"result": "exact-source-and-artifact-validation-pass",
-	"note": "Source SHA 9c80756 was validated locally and by GitHub Actions run 32451570635. Tag and GitHub prerelease publication remain separately approval-gated; publication readback will be recorded afterward."
+	"note": "Source SHA 8e7ca4b was validated locally. Remote CI, tag, and GitHub prerelease publication remain separately approval-gated; publication readback will be recorded afterward."
 }
