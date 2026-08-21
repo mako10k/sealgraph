@@ -41,12 +41,27 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"add": {
 		Path: "add", Summary: "Create or update the working candidate for exactly one REF.",
-		Usage:     []string{"sealgraph add REF (--content CONTENT | --content-file PATH_OR_DASH) [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]..."},
+		Usage:     []string{"sealgraph add REF [--content CONTENT | --content-file PATH_OR_DASH] [--bind-source] [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]..."},
 		Arguments: []string{"REF (required): destination logical REF; it is not a branch or checkout target."},
-		Options:   []helpOption{{"--content CONTENT", "required exactly once unless --content-file is used"}, {"--content-file PATH|-", "required exactly once unless --content is used; '-' reads exact stdin bytes"}, {"--parent SELECTOR", "optional, once; exact revision parent for an absent destination only"}, {"--root", "optional flag; declare this generation a provenance boundary"}, {"--draft", "optional flag; preserve provisional or historical Cause provenance"}, {"--depend-on SELECTOR", "optional, repeatable; replaces the dependency set when present"}},
-		Details:   []string{"--content and --content-file are mutually exclusive. A root has no Cause Links. Existing dependency Links remain unless --depend-on is supplied. Bare REF dependencies resolve HEAD now; candidates persist full SealIDs."},
-		Examples:  []string{"sealgraph add premise --root --content 'External premise'", "sealgraph add design/api --content-file design.md --depend-on requirements/api", "sealgraph add revised/api --parent design/api@abcd --content 'new material'"}, Related: []string{"seal", "link", "candidate show", "selectors"},
+		Options:   []helpOption{{"--content CONTENT", "optional exact bytes; conflicts with --content-file and --bind-source"}, {"--content-file PATH|-", "optional exact file/stdin source; named PATH may use --bind-source"}, {"--bind-source", "bind the named source after candidate publication; never retargets"}, {"--parent SELECTOR", "optional, once; exact revision parent for an absent destination only"}, {"--root", "optional flag; declare this generation a provenance boundary"}, {"--draft", "optional flag; preserve provisional or historical Cause provenance"}, {"--depend-on SELECTOR", "optional, repeatable; replaces the dependency set when present"}},
+		Details:   []string{"--content and --content-file are mutually exclusive. Without explicit content, add refreshes from a bound source while preserving semantic state. REF-as-path is initial-create-only. Existing REF/candidate without a binding fails. A root has no Cause Links. Bare REF dependencies resolve HEAD now."},
+		Examples:  []string{"sealgraph add premise --root --content 'External premise'", "sealgraph add docs/spec.md --root --bind-source", "sealgraph add design/api --content-file design.md --depend-on requirements/api", "sealgraph add revised/api --parent design/api@abcd --content 'new material'"}, Related: []string{"source", "seal", "link", "candidate show", "selectors"},
 	},
+	"source": {
+		Path: "source", Summary: "Manage non-canonical local REF-to-file source bindings.", Usage: []string{"sealgraph source <bind|rebind|unbind|show|list> ..."},
+		Subcommands: []string{"bind", "rebind", "unbind", "show", "list"}, Details: []string{"A local source binding is not Git tracked state and never changes a candidate by itself."}, Related: []string{"add", "status"},
+	},
+	"source bind": {
+		Path: "source bind", Summary: "Create one absent local source binding.", Usage: []string{"sealgraph source bind REF --file PATH [--format human|json]"}, Options: []helpOption{{"--file PATH", "required portable relative regular-file path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"Same binding is idempotent. A different existing path requires source rebind."}, Related: []string{"source show", "source rebind", "add"},
+	},
+	"source rebind": {
+		Path: "source rebind", Summary: "Atomically replace one observed local source binding.", Usage: []string{"sealgraph source rebind REF --from OLD_PATH --file NEW_PATH [--format human|json]"}, Options: []helpOption{{"--from OLD_PATH", "required exact observed current path"}, {"--file NEW_PATH", "required validated new source path"}, {"--format human|json", "optional, once; default human"}}, Related: []string{"source show", "source bind"},
+	},
+	"source unbind": {
+		Path: "source unbind", Summary: "Remove one exact observed local source binding.", Usage: []string{"sealgraph source unbind REF --from PATH [--format human|json]"}, Options: []helpOption{{"--from PATH", "required exact observed current path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"No candidate, REF, object, or Seal is removed."}, Related: []string{"source show", "source bind"},
+	},
+	"source show": inspectionHelp("source show", "Show one local source binding without opening its source file.", "sealgraph source show REF [--format human|json]", nil),
+	"source list": inspectionHelp("source list", "List local source bindings without opening source files.", "sealgraph source list [--format human|json]", nil),
 	"derive": {
 		Path: "derive", Summary: "Create an absent REF candidate by copying one Seal's material and using it as parent_revision.",
 		Usage: []string{"sealgraph derive NEW_REF --from SOURCE_SELECTOR"}, Arguments: []string{"NEW_REF (required): absent destination REF."},
@@ -72,7 +87,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"mv": {
 		Path: "mv", Summary: "Atomically move exactly one REF manifest and its complete tag namespace.", Usage: []string{"sealgraph mv OLD_REF NEW_REF"}, Arguments: []string{"OLD_REF and NEW_REF are required, distinct, explicit REFs; destination must be absent."},
-		Details: []string{"Candidates at either name block the move. mv does not recurse, move a candidate, create an alias, or rewrite Seals or Links."}, Examples: []string{"sealgraph mv design/api archive/design-api"}, Related: []string{"candidate show", "candidate discard", "tag"},
+		Details: []string{"This is REF_ONLY and PATH_NOT_MOVED. Candidates or local source bindings at either name block the move. mv does not recurse, move a file/candidate, create an alias, or rewrite Seals or Links."}, Examples: []string{"sealgraph mv design/api archive/design-api"}, Related: []string{"source show", "source unbind", "candidate show", "candidate discard", "tag"},
 	},
 	"candidate": {
 		Path: "candidate", Summary: "Inspect, compare, or explicitly discard mutable candidate state.", Usage: []string{"sealgraph candidate <show|diff|discard> ..."}, Subcommands: []string{"show", "diff", "discard"}, Details: []string{"Candidate operations never rebase, relink, repair, or seal automatically."}, Related: []string{"candidate show", "candidate diff", "candidate discard", "seal"},
@@ -94,7 +109,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"log":     inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
 	"linklog": inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
 	"diff":    inspectionHelp("diff", "Compare immutable Seal material and provenance.", "sealgraph diff REF [--format human|json]\nsealgraph diff SELECTOR SELECTOR [--format human|json]", nil),
-	"status":  inspectionHelp("status", "Report candidate, draft, revision-stale, and Cause-stale facts.", "sealgraph status [REF] [--format human|json]", nil),
+	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
 		Options: []helpOption{{"--frontier", "optional; keep only stale heads not blocked by another stale current head in strict Cause closure"}, {"--refs-only", "optional; stable REF-only line protocol; conflicts with --format json"}, {"--scan", "optional; bypass disposable cache reads"}, {"--format human|json", "optional, once; default human"}},
@@ -132,7 +147,7 @@ func printRootHelp(w io.Writer) {
 		fmt.Fprintf(w, "  %-10s %s\n", path, entry.Summary)
 	}
 	fmt.Fprint(w, "\nTopics:\n  selectors  exact selector grammar and resolution\n  concepts   provenance concepts and common distinctions\n  usecases   copyable explicit review workflows\n\nHelp routes:\n  sealgraph --help\n  sealgraph help <command>\n  sealgraph <command> --help\n  sealgraph help candidate show\n\nEach seal operation advances exactly one REF. Navigation explains explicit next actions; it never repairs, relinks, reseals, or selects a REF automatically. Standalone operation uses only explicit inputs and .sealgraph; it does not discover or inspect Git.\n")
-	fmt.Fprint(w, "\nSemantic legend:\n  CLEAN does not compare working files.\n  REF is a movable logical identity, not a branch or checkout target.\n  STRUCTURAL_IMPACT is Cause reachability; stale is current review state.\n  root marks a provenance boundary, not truth or trust.\n  log/linklog are Seal revision/Cause histories, not Git histories.\n")
+	fmt.Fprint(w, "\nSemantic legend:\n  status separates CANDIDATE_TO_HEAD from WORKFILE_TO_BASELINE.\n  local source binding is not Git tracked membership.\n  REF is a movable logical identity, not a branch or checkout target.\n  STRUCTURAL_IMPACT is Cause reachability; stale is current review state.\n  root marks a provenance boundary, not truth or trust.\n  log/linklog are Seal revision/Cause histories, not Git histories.\n")
 }
 
 func printCommandHelp(w io.Writer, entry commandHelp) {

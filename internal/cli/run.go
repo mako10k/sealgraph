@@ -77,6 +77,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runInit(workDir, args[1:], stdout, stderr), true
 	case "add":
 		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr), true
+	case "source":
+		return runSource(ctx, workDir, args[1:], stdout, stderr), true
 	case "derive":
 		return runDerive(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
@@ -93,6 +95,204 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
 	}
 	return 0, false
+}
+
+func runSource(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "source requires one of bind, rebind, unbind, show, or list")
+	}
+	switch args[0] {
+	case "bind":
+		return runSourceBind(ctx, workDir, args[1:], stdout, stderr)
+	case "rebind":
+		return runSourceRebind(ctx, workDir, args[1:], stdout, stderr)
+	case "unbind":
+		return runSourceUnbind(ctx, workDir, args[1:], stdout, stderr)
+	case "show":
+		return runSourceShow(workDir, args[1:], stdout, stderr)
+	case "list":
+		return runSourceList(workDir, args[1:], stdout, stderr)
+	default:
+		return usageError(stderr, "source subcommand %q is unknown", args[0])
+	}
+}
+
+func sourceREFAndFlags(args []string, command string, configure func(*flag.FlagSet)) (string, *flag.FlagSet, error) {
+	if len(args) == 0 {
+		return "", nil, fmt.Errorf("%s requires exactly one REF", command)
+	}
+	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	configure(flags)
+	if err := flags.Parse(args[1:]); err != nil {
+		return "", flags, err
+	}
+	if flags.NArg() != 0 {
+		return "", flags, fmt.Errorf("%s accepts exactly one REF; unexpected argument %q", command, flags.Arg(0))
+	}
+	return args[0], flags, nil
+}
+
+func runSourceBind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, formatErr := extractInspectionFormat(args)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
+	var path singleString
+	ref, _, err := sourceREFAndFlags(args, "source bind", func(flags *flag.FlagSet) {
+		flags.Var(&path, "file", "working-directory-relative source path")
+	})
+	if err != nil {
+		return usageDiagnostic(stderr, "source bind", err.Error(), "provide one REF and one --file PATH")
+	}
+	if !path.set || path.value == "" {
+		return usageError(stderr, "source bind requires exactly one non-empty --file PATH")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source bind", err)
+	}
+	binding, err := repo.SourceBind(ctx, ref, path.value)
+	if err != nil {
+		return commandError(stderr, "source bind", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source bind", sourceMutationJSON("bind", binding.REF, "", binding.Path))
+	}
+	fmt.Fprintf(stdout, "SOURCE_BOUND ref=%s before=null after=%s candidate=UNCHANGED\n", binding.REF, quoteHumanString(binding.Path))
+	return 0
+}
+
+func runSourceRebind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, formatErr := extractInspectionFormat(args)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
+	var oldPath, newPath singleString
+	ref, _, err := sourceREFAndFlags(args, "source rebind", func(flags *flag.FlagSet) {
+		flags.Var(&oldPath, "from", "required exact currently observed path")
+		flags.Var(&newPath, "file", "new working-directory-relative source path")
+	})
+	if err != nil {
+		return usageDiagnostic(stderr, "source rebind", err.Error(), "provide one REF, --from OLD_PATH, and --file NEW_PATH")
+	}
+	if !oldPath.set || oldPath.value == "" || !newPath.set || newPath.value == "" {
+		return usageError(stderr, "source rebind requires non-empty --from OLD_PATH and --file NEW_PATH")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source rebind", err)
+	}
+	binding, err := repo.SourceRebind(ctx, ref, oldPath.value, newPath.value)
+	if err != nil {
+		return commandError(stderr, "source rebind", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source rebind", sourceMutationJSON("rebind", binding.REF, oldPath.value, binding.Path))
+	}
+	fmt.Fprintf(stdout, "SOURCE_REBOUND ref=%s before=%s after=%s candidate=UNCHANGED\n", binding.REF, quoteHumanString(oldPath.value), quoteHumanString(binding.Path))
+	return 0
+}
+
+func runSourceUnbind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, formatErr := extractInspectionFormat(args)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
+	var oldPath singleString
+	ref, _, err := sourceREFAndFlags(args, "source unbind", func(flags *flag.FlagSet) {
+		flags.Var(&oldPath, "from", "required exact currently observed path")
+	})
+	if err != nil {
+		return usageDiagnostic(stderr, "source unbind", err.Error(), "provide one REF and --from PATH")
+	}
+	if !oldPath.set || oldPath.value == "" {
+		return usageError(stderr, "source unbind requires exactly one non-empty --from PATH")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source unbind", err)
+	}
+	binding, err := repo.SourceUnbind(ctx, ref, oldPath.value)
+	if err != nil {
+		return commandError(stderr, "source unbind", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source unbind", sourceMutationJSON("unbind", binding.REF, binding.Path, ""))
+	}
+	fmt.Fprintf(stdout, "SOURCE_UNBOUND ref=%s before=%s after=null candidate=UNCHANGED\n", binding.REF, quoteHumanString(binding.Path))
+	return 0
+}
+
+func runSourceShow(workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) != 1 {
+		return usageError(stderr, "source show requires exactly one REF")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source show", err)
+	}
+	binding, err := repo.SourceShow(args[0])
+	if err != nil {
+		return commandError(stderr, "source show", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source show", sourceJSON("show", []repository.SourceBinding{binding}))
+	}
+	printSources(stdout, []repository.SourceBinding{binding})
+	return 0
+}
+
+func runSourceList(workDir string, args []string, stdout, stderr io.Writer) int {
+	args, outputJSON, err := extractInspectionFormat(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) != 0 {
+		return usageError(stderr, "source list accepts no positional arguments")
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "source list", err)
+	}
+	bindings, err := repo.SourceList()
+	if err != nil {
+		return commandError(stderr, "source list", err)
+	}
+	if outputJSON {
+		return writeInspectionJSON(stdout, stderr, "source list", sourceJSON("list", bindings))
+	}
+	printSources(stdout, bindings)
+	return 0
+}
+
+func printSources(stdout io.Writer, bindings []repository.SourceBinding) {
+	for _, binding := range bindings {
+		fmt.Fprintf(stdout, "LOCAL_SOURCE ref=%s path=%s\n", binding.REF, quoteHumanString(binding.Path))
+	}
+}
+
+func sourceJSON(operation string, bindings []repository.SourceBinding) map[string]any {
+	items := make([]any, 0, len(bindings))
+	for _, binding := range bindings {
+		items = append(items, map[string]any{"ref": binding.REF, "path": binding.Path})
+	}
+	return map[string]any{"schema": "sealgraph/source/v1", "operation": operation, "bindings": items}
+}
+
+func sourceMutationJSON(operation, ref, before, after string) map[string]any {
+	var beforeValue, afterValue any
+	if before != "" {
+		beforeValue = before
+	}
+	if after != "" {
+		afterValue = after
+	}
+	return map[string]any{"schema": "sealgraph/source/v1", "operation": operation, "ref": ref, "before_path": beforeValue, "after_path": afterValue, "candidate": "UNCHANGED"}
 }
 
 func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -203,49 +403,23 @@ func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader
 	return 0
 }
 
+type addCLIOptions struct {
+	ref         string
+	content     trackedString
+	contentFile trackedString
+	depends     stringList
+	parent      singleString
+	root        singleBool
+	draft       singleBool
+	bindSource  bool
+}
+
 func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		return usageError(stderr, "add requires exactly one REF")
+	options, code := parseAddCLIOptions(args, stderr)
+	if code != 0 {
+		return code
 	}
-	ref := args[0]
-	flags := flag.NewFlagSet("add", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	var content trackedString
-	var contentFile trackedString
-	var depends stringList
-	var parent singleString
-	flags.Var(&content, "content", "exact content bytes supplied as a command argument")
-	flags.Var(&contentFile, "content-file", "read exact content bytes from a regular file, or '-' for stdin")
-	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
-	flags.Var(&parent, "parent", "exact revision parent for an absent destination REF")
-	root := flags.Bool("root", false, "declare a provenance root")
-	draft := flags.Bool("draft", false, "mark the candidate draft")
-	if err := flags.Parse(args[1:]); err != nil {
-		return flagUsageError(stderr, "add", err)
-	}
-	if flags.NArg() != 0 {
-		return usageError(stderr, "add accepts exactly one REF; unexpected argument %q", flags.Arg(0))
-	}
-	if content.set == contentFile.set {
-		return usageError(stderr, "add requires exactly one of --content or --content-file")
-	}
-	if parent.set {
-		if parent.value == "" {
-			return usageError(stderr, "add --parent requires a non-empty Seal selector")
-		}
-		if _, err := repository.ParseSelector(parent.value); err != nil {
-			return usageError(stderr, "invalid add parent selector: %v", err)
-		}
-	}
-	contentBytes := []byte(content.value)
-	if contentFile.set {
-		var err error
-		contentBytes, err = readContentInput(workDir, contentFile.value, stdin)
-		if err != nil {
-			return usageError(stderr, "invalid --content-file: %v", err)
-		}
-	}
-	dependencies, err := parseDependencies(depends, "")
+	dependencies, err := parseDependencies(options.depends, "")
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -253,11 +427,85 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
-	candidate, err := repo.Add(ctx, repository.AddOptions{REF: ref, Content: contentBytes, Dependencies: dependencies, Parent: parent.value, Root: *root, Draft: *draft})
+	if !options.content.set && (!options.contentFile.set || options.contentFile.value != "-") {
+		return runLocalSourceAdd(ctx, repo, options, dependencies, stdout, stderr)
+	}
+	return runExplicitBytesAdd(ctx, repo, workDir, options, dependencies, stdin, stdout, stderr)
+}
+
+func parseAddCLIOptions(args []string, stderr io.Writer) (addCLIOptions, int) {
+	if len(args) == 0 {
+		return addCLIOptions{}, usageError(stderr, "add requires exactly one REF")
+	}
+	options := addCLIOptions{ref: args[0]}
+	flags := flag.NewFlagSet("add", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.Var(&options.content, "content", "exact content bytes supplied as a command argument")
+	flags.Var(&options.contentFile, "content-file", "read exact content bytes from a regular file, or '-' for stdin")
+	flags.Var(&options.depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
+	flags.Var(&options.parent, "parent", "exact revision parent for an absent destination REF")
+	flags.Var(&options.root, "root", "declare a provenance root")
+	flags.Var(&options.draft, "draft", "mark the candidate draft")
+	flags.BoolVar(&options.bindSource, "bind-source", false, "persist the named local source after candidate update")
+	if err := flags.Parse(args[1:]); err != nil {
+		return addCLIOptions{}, flagUsageError(stderr, "add", err)
+	}
+	if flags.NArg() != 0 {
+		return addCLIOptions{}, usageError(stderr, "add accepts exactly one REF; unexpected argument %q", flags.Arg(0))
+	}
+	if options.content.set && options.contentFile.set {
+		return addCLIOptions{}, usageError(stderr, "add accepts at most one of --content or --content-file")
+	}
+	if options.bindSource && (options.content.set || (options.contentFile.set && options.contentFile.value == "-")) {
+		return addCLIOptions{}, usageError(stderr, "add --bind-source requires a named file source and cannot be used with --content or --content-file -")
+	}
+	if options.parent.set {
+		if options.parent.value == "" {
+			return addCLIOptions{}, usageError(stderr, "add --parent requires a non-empty Seal selector")
+		}
+		if _, err := repository.ParseSelector(options.parent.value); err != nil {
+			return addCLIOptions{}, usageError(stderr, "invalid add parent selector: %v", err)
+		}
+	}
+	return options, 0
+}
+
+func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options addCLIOptions, dependencies []repository.Dependency, stdout, stderr io.Writer) int {
+	path := ""
+	if options.contentFile.set {
+		path = options.contentFile.value
+	}
+	result, err := repo.AddLocalSource(ctx, repository.LocalSourceAddOptions{
+		REF: options.ref, Path: path, BindSource: options.bindSource, PreserveSemantics: !options.contentFile.set,
+		Dependencies: dependencies, Parent: options.parent.value,
+		Root: options.root.value, RootSet: options.root.set, Draft: options.draft.value, DraftSet: options.draft.set,
+	})
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
-	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
+	candidate := result.Candidate
+	nextSource := "ready"
+	if result.SourceBinding == "NONE" {
+		nextSource = "requires-explicit-file-or-source-bind"
+	}
+	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=%s source_path=%s source_binding=%s next_source=%s\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft, result.SourceMode, quoteHumanString(result.SourcePath), result.SourceBinding, nextSource)
+	return 0
+}
+
+func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workDir string, options addCLIOptions, dependencies []repository.Dependency, stdin io.Reader, stdout, stderr io.Writer) int {
+	contentBytes := []byte(options.content.value)
+	if options.contentFile.set {
+		var err error
+		contentBytes, err = readContentInput(workDir, options.contentFile.value, stdin)
+		if err != nil {
+			return usageError(stderr, "invalid --content-file: %v", err)
+		}
+	}
+	candidate, err := repo.Add(ctx, repository.AddOptions{REF: options.ref, Content: contentBytes, Dependencies: dependencies, Parent: options.parent.value, Root: options.root.value, Draft: options.draft.value})
+	if err != nil {
+		return commandError(stderr, "add", err)
+	}
+	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=explicit-bytes source_binding=NONE\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
 	return 0
 }
 
@@ -959,11 +1207,11 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 		return commandError(stderr, "status", err)
 	}
 	if outputJSON {
-		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v1", statuses, nil))
+		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v2", statuses, nil))
 	}
 	fmt.Fprintln(stdout, "SEALED_STATE")
 	if len(statuses) == 0 {
-		fmt.Fprintln(stdout, "CLEAN")
+		fmt.Fprintln(stdout, "NO_REFS_CANDIDATES_OR_LOCAL_SOURCES")
 		return 0
 	}
 	printStatuses(stdout, statuses)
@@ -1164,11 +1412,18 @@ func printGraph(stdout io.Writer, nodes []repository.GraphNode) {
 
 func printStatuses(stdout io.Writer, statuses []repository.RefStatus) {
 	for _, status := range statuses {
-		fmt.Fprintf(stdout, "%s %s", status.REF, strings.Join(status.Labels(), ","))
+		candidateRelation := "NO_CANDIDATE"
+		if status.Unsealed {
+			candidateRelation = "UNSEALED"
+		}
+		fmt.Fprintf(stdout, "%s CANDIDATE_TO_HEAD=%s SEALED_STATE=%s", status.REF, candidateRelation, strings.Join(sealedStatusLabels(status.Labels()), ","))
 		if status.Head != nil {
 			fmt.Fprintf(stdout, " %s", status.Head)
 		}
 		fmt.Fprintln(stdout)
+		if status.Source != nil {
+			fmt.Fprintf(stdout, "  WORKFILE_TO_%s=%s path=%s\n", status.Source.Baseline, status.Source.Relation, quoteHumanString(status.Source.Path))
+		}
 	}
 }
 
@@ -1359,6 +1614,9 @@ func editDistance(left, right string) int {
 }
 
 func domainNavigation(command, message string) (string, []string) {
+	if reason, hints, ok := localSourceNavigation(message); ok {
+		return reason, hints
+	}
 	switch {
 	case strings.Contains(message, "has no working candidate") || strings.Contains(message, "candidate not found"):
 		if command == "candidate discard" {
@@ -1377,6 +1635,27 @@ func domainNavigation(command, message string) (string, []string) {
 		return "the coherent repository observation changed before output could be committed", []string{"inspect current state and rerun the read-only command; no partial result is authoritative"}
 	default:
 		return "the requested operation could not satisfy its repository or provenance contract", []string{fmt.Sprintf("inspect the failure and the contract in `sealgraph help %s`; no repair was performed", command)}
+	}
+}
+
+func localSourceNavigation(message string) (string, []string, bool) {
+	switch {
+	case strings.Contains(message, "has no local source binding") || strings.Contains(message, "local source binding not found"):
+		return "the REF has no machine-local source binding; no file path was inferred", []string{"inspect all bindings with `sealgraph source list`", "bind one exact path with `sealgraph source bind REF --file PATH`, or provide `sealgraph add REF --content-file PATH` explicitly"}, true
+	case strings.Contains(message, "is already") && strings.Contains(message, "source rebind"):
+		return "source bind is create-only and does not silently retarget an existing binding", []string{"inspect the exact current path with `sealgraph source show REF`", "replace it with `sealgraph source rebind REF --from OLD_PATH --file NEW_PATH`"}, true
+	case strings.Contains(message, "not expected") && strings.Contains(message, "local source"):
+		return "the local source changed after the operator's observation; no compare-and-change mutation was applied", []string{"read the current binding with `sealgraph source show REF` and retry only with its exact path"}, true
+	case strings.Contains(message, "is bound to") && strings.Contains(message, "explicit source"):
+		return "candidate input and the next contentless-refresh source would disagree", []string{"inspect the binding with `sealgraph source show REF`", "use `source rebind` to change it atomically or `source unbind` before a one-time explicit file add"}, true
+	case strings.Contains(message, "CHANGED_DURING_READ"):
+		return "the named working file changed or was replaced during exact-byte observation", []string{"wait until the file is stable, inspect its current identity, and rerun; no plausible candidate or status result was produced"}, true
+	case strings.Contains(message, "blocks REF-only move"):
+		return "mv changes only the logical REF manifest and never moves a working file or local source binding", []string{"inspect the binding with `sealgraph source show REF`", "explicitly unbind it, move the REF, then bind the new REF to the intended path"}, true
+	case strings.Contains(message, "binding was not published"):
+		return "the candidate was published before the requested local binding and may already contain the new bytes", []string{"inspect `sealgraph candidate show REF` and `sealgraph source show REF` before retrying; do not assume both local files changed"}, true
+	default:
+		return "", nil, false
 	}
 }
 

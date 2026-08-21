@@ -2,6 +2,11 @@
 
 Status: accepted for implementation on 2026-08-17 by explicit operator approval.
 
+ADR 0019 supersedes only this ADR's working-file-related `CLEAN` presentation:
+status v2 separates sealed/candidate facts from an explicit local
+workfile/baseline relation. The remaining inspection terminology stays in
+force.
+
 ## Context
 
 Human inspection text was being scraped by dogfood receipts, familiar Git words

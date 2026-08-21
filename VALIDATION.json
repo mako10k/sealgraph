@@ -1,13 +1,13 @@
 {
   "target_go": "1.26",
   "validation_go": "1.26.5",
-	"release_candidate": "0.1.0-beta.2",
-	"scope": "standalone Linux amd64; no file sync; no Git sidecar",
-	"fresh_checkout_source": "2f92400e93d64b12b8a371d346ca1b299b3a7fdb",
-	"fsck_inventory": "objects=13,seals=7,material_objects=6,refs=6,tags=4,active_seals=7,historical_or_detached=0,unreferenced_objects=0",
-	"artifact_sha256": "cff205d0760d3db467dfe0dcd6230fac5de75bf40151b03c1d1ebdef1a079c43",
-	"checksums_file_sha256": "6db5c2de167111157e943fa40e73d293d5c7fda64d0a44c36087ca4e4ba94a1b",
+	"release_candidate": "0.1.0-beta.3",
+	"scope": "standalone Linux amd64; explicit non-canonical local source bindings and add-time import; no watch, automatic add/seal, or Git sidecar",
+	"fresh_checkout_source": "PENDING_EXACT_SOURCE_SHA",
+	"fsck_inventory": "PENDING_EXACT_SOURCE_VALIDATION",
+	"artifact_sha256": "PENDING_DETERMINISTIC_BUILD",
+	"checksums_file_sha256": "PENDING_DETERMINISTIC_BUILD",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
-	"result": "exact-source-and-artifact-validation-pass",
-	"note": "Source SHA 2f92400 was validated locally and by GitHub Actions run 32001221506. Publication readback is recorded separately after the one-time tag and prerelease writes."
+	"result": "release-candidate-preparation",
+	"note": "Exact source SHA, artifact digests, CI run, and publication readback are filled only after their respective gates complete."
 }

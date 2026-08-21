@@ -21,6 +21,11 @@ integration. A separately adopted sidecar would add Git-aware read views
 of the same `.sealgraph` files; it is not another Seal schema, ObjectID system,
 or Git-commit interpretation of the revision DAG.
 
+ADR 0019 adds a bounded local working-file association. This is explicit
+working-file input convenience, not synchronization: it never watches files,
+creates candidates automatically, or changes the candidate-only sealing
+boundary.
+
 ```text
                     domain / canonical / revision / graph / history
                                       ^
@@ -201,6 +206,20 @@ Parsing and presentation only:
 
 It does not open `.sealgraph`, inspect Git, expand globs, walk directories,
 write objects/candidates, or approve/seal its output.
+
+### Local source adapter
+
+- stores one versioned non-canonical REF-to-relative-path association below
+  the runtime index;
+- safely reads and revalidates exact regular-file bytes without following
+  symbolic links;
+- reports working-file state relative to candidate content or current HEAD;
+- supplies bytes to an explicit `add`, never directly to `seal`.
+
+It does not change canonical REF manifests, candidate/Seal schemas, discover
+Git, watch directories, expand globs, or perform automatic add/seal. The
+repository package coordinates binding changes with candidate mutation under
+the native writer guard.
 
 ### Later Git view adapter
 

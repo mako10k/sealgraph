@@ -33,6 +33,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0016-standalone-beta-integrity-and-release.md`](adr/0016-standalone-beta-integrity-and-release.md)
 - [`adr/0017-generic-link-metadata-and-query-boundary.md`](adr/0017-generic-link-metadata-and-query-boundary.md)
 - [`adr/0018-local-ref-recovery-journal.md`](adr/0018-local-ref-recovery-journal.md)
+- [`adr/0019-local-file-tracking-and-implicit-add.md`](adr/0019-local-file-tracking-and-implicit-add.md)
 
 ## Agent-auditable design
 
@@ -42,6 +43,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`decisions/2026-08-17-format3-logical-dump.think`](decisions/2026-08-17-format3-logical-dump.think)
 - [`decisions/2026-08-17-link-metadata-sealgraphql.think`](decisions/2026-08-17-link-metadata-sealgraphql.think)
 - [`decisions/2026-08-17-local-ref-recovery.think`](decisions/2026-08-17-local-ref-recovery.think)
+- [`decisions/2026-08-21-local-source-git-ux.think`](decisions/2026-08-21-local-source-git-ux.think)
 
 ## Proposals
 
@@ -66,6 +68,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/local-ref-recovery-contract-acceptance-2026-08-17.md`](process/local-ref-recovery-contract-acceptance-2026-08-17.md)
 - [`process/standalone-beta-acceptance-2026-08-17.md`](process/standalone-beta-acceptance-2026-08-17.md)
 - [`process/release-v0.1.0-beta.2-receipt.md`](process/release-v0.1.0-beta.2-receipt.md)
+- [`process/release-v0.1.0-beta.3-checklist.md`](process/release-v0.1.0-beta.3-checklist.md)
 - [`process/dogfooding-receipts/2026-08-17-format4-load.md`](process/dogfooding-receipts/2026-08-17-format4-load.md)
 - [`process/dogfooding-receipts/2026-08-17-r2-recurring.md`](process/dogfooding-receipts/2026-08-17-r2-recurring.md)
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)

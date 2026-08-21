@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/graph"
 	"github.com/mako10k/sealgraph/internal/revision"
+	"github.com/mako10k/sealgraph/internal/store/native"
+	"github.com/mako10k/sealgraph/internal/workfile"
 )
 
 type RefStatus struct {
@@ -19,6 +22,13 @@ type RefStatus struct {
 	StaleSelf       bool
 	StaleDirect     []domain.ObjectID
 	StaleTransitive [][]domain.ObjectID
+	Source          *SourceStatus
+}
+
+type SourceStatus struct {
+	Path     string
+	Baseline string
+	Relation string
 }
 
 func (status RefStatus) Labels() []string {
@@ -53,7 +63,15 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 	if err != nil {
 		return nil, err
 	}
-	names, err := statusNames(observation.names, candidates, onlyREF)
+	bindings, err := r.sources.list()
+	if err != nil {
+		return nil, err
+	}
+	sourceREFs := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		sourceREFs = append(sourceREFs, binding.REF)
+	}
+	names, err := statusNames(observation.names, candidates, sourceREFs, onlyREF)
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +89,15 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 	return result, nil
 }
 
-func statusNames(refs, candidates []string, onlyREF string) ([]string, error) {
-	all := make(map[string]bool, len(refs)+len(candidates))
+func statusNames(refs, candidates, sources []string, onlyREF string) ([]string, error) {
+	all := make(map[string]bool, len(refs)+len(candidates)+len(sources))
 	for _, ref := range refs {
 		all[ref] = true
 	}
 	for _, ref := range candidates {
+		all[ref] = true
+	}
+	for _, ref := range sources {
 		all[ref] = true
 	}
 	if onlyREF != "" {
@@ -84,7 +105,7 @@ func statusNames(refs, candidates []string, onlyREF string) ([]string, error) {
 			return nil, err
 		}
 		if !all[onlyREF] {
-			return nil, fmt.Errorf("REF %s has no head or candidate", onlyREF)
+			return nil, fmt.Errorf("REF %s has no head, candidate, or local source binding", onlyREF)
 		}
 		return []string{onlyREF}, nil
 	}
@@ -98,14 +119,17 @@ func statusNames(refs, candidates []string, onlyREF string) ([]string, error) {
 
 func (r *Repository) statusForREF(ctx context.Context, ref string, observation headObservation, revisions *revision.Index, analysis *graph.Analysis) (RefStatus, error) {
 	status := RefStatus{REF: ref}
+	var baseline *domain.ContentRef
 	if candidate, err := r.candidates.Load(ref); err == nil {
 		status.Unsealed, status.Draft = true, candidate.Draft
+		content := candidate.Content
+		baseline = &content
 	} else if !errors.Is(err, ErrCandidateNotFound) {
 		return RefStatus{}, err
 	}
 	head, found := observation.heads[ref]
 	if !found {
-		return status, nil
+		return r.addSourceStatus(status, baseline)
 	}
 	headCopy := head
 	status.Head = &headCopy
@@ -114,8 +138,47 @@ func (r *Repository) statusForREF(ctx context.Context, ref string, observation h
 		return RefStatus{}, fmt.Errorf("current REF %s head %s is absent from the active revision DAG", ref, head)
 	}
 	status.Draft = status.Draft || node.Payload.Draft
+	if baseline == nil {
+		content := node.Payload.Content
+		baseline = &content
+	}
 	facts := analysis.Facts(head)
 	status.StaleSelf, status.StaleDirect, status.StaleTransitive = facts.Self, facts.Direct, facts.Transitive
+	return r.addSourceStatus(status, baseline)
+}
+
+func (r *Repository) addSourceStatus(status RefStatus, baseline *domain.ContentRef) (RefStatus, error) {
+	binding, _, err := r.sources.load(status.REF)
+	if errors.Is(err, ErrSourceNotFound) {
+		return status, nil
+	}
+	if err != nil {
+		return RefStatus{}, err
+	}
+	source := &SourceStatus{Path: binding.Path, Baseline: "NONE", Relation: "WORKFILE_DIFFERS_FROM_NONE"}
+	if baseline != nil {
+		if status.Unsealed {
+			source.Baseline = "CANDIDATE"
+		} else {
+			source.Baseline = "HEAD"
+		}
+	}
+	data, err := workfile.ReadStable(r.workDir, binding.Path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			source.Relation = "SOURCE_MISSING"
+		} else {
+			source.Relation = "SOURCE_UNREADABLE"
+		}
+		status.Source = source
+		return status, nil
+	}
+	if baseline != nil && native.ObjectID(data).Equal(baseline.ID) {
+		source.Relation = "WORKFILE_MATCHES_" + source.Baseline
+	} else if baseline != nil {
+		source.Relation = "WORKFILE_DIFFERS_FROM_" + source.Baseline
+	}
+	status.Source = source
 	return status, nil
 }
 

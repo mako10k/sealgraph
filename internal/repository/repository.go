@@ -18,10 +18,12 @@ import (
 
 type Repository struct {
 	dir        string
+	workDir    string
 	objects    *native.ObjectStore
 	refs       store.RefStore
 	tags       store.TagStore
 	candidates candidateStore
+	sources    sourceStore
 	writer     writerGuard
 }
 
@@ -34,12 +36,15 @@ func OpenStandalone(workDir string) (*Repository, error) {
 }
 
 func newRepository(dir string) *Repository {
+	candidates := candidateStore{root: filepath.Join(dir, "index")}
 	return &Repository{
 		dir:        dir,
+		workDir:    filepath.Dir(dir),
 		objects:    native.NewObjectStore(dir),
 		refs:       native.NewRefStore(dir),
 		tags:       native.NewTagStore(dir),
-		candidates: candidateStore{root: filepath.Join(dir, "index")},
+		candidates: candidates,
+		sources:    sourceStore{candidates: candidates},
 		writer:     newWriterGuard(filepath.Join(dir, "locks")),
 	}
 }
@@ -60,35 +65,43 @@ type AddOptions struct {
 
 func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
 	return withMutation(ctx, r.writer, "add candidate", func() (domain.Candidate, error) {
-		if err := domain.ValidateREF(options.REF); err != nil {
-			return domain.Candidate{}, err
-		}
-		candidate, err := r.candidateForAdd(ctx, options.REF, options.Parent)
-		if err != nil {
-			return domain.Candidate{}, err
-		}
-		var links []domain.Link
-		if options.Dependencies != nil {
-			links, err = r.resolveDependencies(ctx, options.Dependencies)
-			if err != nil {
-				return domain.Candidate{}, err
-			}
-		}
-		contentID, err := r.objects.WriteBlob(ctx, options.Content)
-		if err != nil {
-			return domain.Candidate{}, fmt.Errorf("store content for %s: %w", options.REF, err)
-		}
-		candidate.Content = domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: contentID}
-		candidate.Root = options.Root
-		candidate.Draft = options.Draft
-		if options.Dependencies != nil {
-			candidate.Links = links
-		}
-		if err := r.candidates.Save(candidate); err != nil {
-			return domain.Candidate{}, fmt.Errorf("save candidate %s: %w", options.REF, err)
-		}
-		return candidate, nil
+		return r.addLocked(ctx, options, false, true, true)
 	})
+}
+
+func (r *Repository) addLocked(ctx context.Context, options AddOptions, preserve bool, rootSet, draftSet bool) (domain.Candidate, error) {
+	if err := domain.ValidateREF(options.REF); err != nil {
+		return domain.Candidate{}, err
+	}
+	candidate, err := r.candidateForAdd(ctx, options.REF, options.Parent)
+	if err != nil {
+		return domain.Candidate{}, err
+	}
+	var links []domain.Link
+	if options.Dependencies != nil {
+		links, err = r.resolveDependencies(ctx, options.Dependencies)
+		if err != nil {
+			return domain.Candidate{}, err
+		}
+	}
+	contentID, err := r.objects.WriteBlob(ctx, options.Content)
+	if err != nil {
+		return domain.Candidate{}, fmt.Errorf("store content for %s: %w", options.REF, err)
+	}
+	candidate.Content = domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: contentID}
+	if !preserve || rootSet {
+		candidate.Root = options.Root
+	}
+	if !preserve || draftSet {
+		candidate.Draft = options.Draft
+	}
+	if options.Dependencies != nil {
+		candidate.Links = links
+	}
+	if err := r.candidates.Save(candidate); err != nil {
+		return domain.Candidate{}, fmt.Errorf("save candidate %s: %w", options.REF, err)
+	}
+	return candidate, nil
 }
 
 func (r *Repository) candidateForAdd(ctx context.Context, ref, parentSelector string) (domain.Candidate, error) {

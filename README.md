@@ -16,7 +16,9 @@ candidate revision/CAS state, exact selectors, atomic logical-v1 load,
 branching parents, active-leaf admission, stale/frontier, history, and bounded
 impact, plus collision-free REF manifests, immutable scoped tags, atomic REF
 move, tag-preserving logical load, exact file/stdin content ingestion, and a
-deterministic explicit-path digest manifest builder.
+deterministic explicit-path digest manifest builder. It also implements
+non-canonical local source bindings, content-only file refresh, and separate
+candidate/HEAD versus workfile/baseline status observations under ADR 0019.
 The beta candidate also includes read-only full-inventory `fsck` with
 versioned JSON output and explicit historical/detached inventory reporting.
 The prior format-3 dump remains available from commit `5b24d47` for explicit
@@ -38,6 +40,12 @@ sealgraph init
 sealgraph add REQ-001 --root --content 'Authentication is required.'
 sealgraph seal REQ-001
 
+# Initial REF=path convenience plus an explicit local source binding:
+sealgraph add docs/requirements.md --root --bind-source
+# After editing the bound file, refresh content without resetting semantics:
+sealgraph add docs/requirements.md
+sealgraph source show docs/requirements.md
+
 sealgraph show REQ-001
 sealgraph tag REQ-001 reviewed/1.0
 sealgraph mv REQ-001 requirements/REQ-001
@@ -48,8 +56,10 @@ sealgraph load --format logical-v1 < repository.dump.json
 
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
 
-`v0.1.0-beta.2` is standalone-only. It has no file synchronization, watcher,
-working-tree reconciliation, Git discovery, or Git sidecar. `manifest` reads
+`v0.1.0-beta.3` is standalone-only and includes the ADR 0019 local
+source-binding slice. The runtime still has no watcher, automatic
+add/seal, filesystem synchronization, Git discovery, or Git sidecar. Local
+source binding is explicit machine-local input configuration. `manifest` reads
 only explicitly named files and emits a deterministic path/digest claim; it
 does not track or synchronize those files. The `git-sealgraph` source entry
 point is an unreleased placeholder for a separate future adoption decision.

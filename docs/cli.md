@@ -108,7 +108,33 @@ Links contain only exact full target SealIDs.
 `--content` and `--content-file PATH_OR_DASH` are mutually exclusive. File and
 stdin inputs preserve exact bytes. Filesystem input accepts one regular
 non-symlink file; directories, devices, and symlinks fail before candidate
-state changes. The source path is not persisted.
+state changes.
+
+When both options are absent, `add` reads the REF's bound local source. Only
+when REF and candidate are both absent may it use the exact REF spelling as a
+portable relative path. An existing REF/candidate without a binding fails; it
+never silently falls back to a coincidentally named file. It never cleans,
+searches, expands, walks, or inspects Git.
+
+`--bind-source` records the named file selected by `--content-file PATH` or the
+initial REF-as-path shorthand. It is invalid with `--content` and
+`--content-file -`, uses expected-absent/same-binding semantics, and never
+retargets.
+
+For a REF already bound to another path, `--content-file PATH` fails even
+without `--bind-source`; use `source rebind` or `source unbind` first. This
+prevents a later contentless add from silently returning to a different source.
+
+```sh
+sealgraph add docs/requirements.md --root
+sealgraph add docs/requirements.md --root --bind-source
+sealgraph add requirements/main --content-file docs/requirements.md --bind-source
+```
+
+The candidate publishes before a requested new binding. An interrupted command
+may therefore leave the candidate updated and binding absent, but never a new
+binding for an uncompleted candidate. File replacement or mutation during
+reading is `CHANGED_DURING_READ` and emits no plausible candidate result.
 
 ### `sealgraph manifest`
 
@@ -135,10 +161,12 @@ The fixed `claim` value is `path-digest-only`: named files are not stored as
 attachments merely because their paths and digests appear. The resulting bytes
 may be reviewed and then supplied explicitly to `add --content-file -`.
 
-Each ordinary `add` updates content and explicitly sets root/draft from that
-invocation. Existing dependencies are retained unless one or more
-`--depend-on` arguments replace the set. Changing root never edits Links
-implicitly.
+An explicit-content `add` updates content and sets root/draft from that
+invocation. A contentless `add REF` is content-only refresh: it preserves the
+candidate or HEAD root, draft, Links, attachments, parent, and publication
+expectation except for fields named by explicit mutation options. Existing
+dependencies are retained unless one or more `--depend-on` arguments replace
+the set. Changing root never edits Links implicitly.
 
 `add NEW_REF --parent SOURCE` is only for an absent destination REF and absent
 candidate. It resolves an exact revision parent, inherits no material, records
@@ -146,6 +174,29 @@ candidate. It resolves an exact revision parent, inherits no material, records
 An existing REF update records observed current HEAD as both
 `parent_revision` and `expected_ref_head`; alternate-parent override is rejected
 by the current format-4 CLI.
+
+### `sealgraph source`
+
+```sh
+sealgraph source bind REF --file PATH
+sealgraph source show REF [--format human|json]
+sealgraph source list [--format human|json]
+sealgraph source rebind REF --from OLD_PATH --file NEW_PATH
+sealgraph source unbind REF --from PATH
+```
+
+These commands manage one portable relative regular-file path in non-canonical
+local state. Bind is create-only/same-state idempotent. Rebind validates the
+new source and exact old path before atomic replacement. Unbind requires the
+exact old path. Show/list inspect binding records without opening source files;
+an empty list succeeds and uses REF byte order. JSON uses
+`sealgraph/source/v1`.
+
+Source binding does not import, watch, or seal. Mutation receipts say
+`candidate=UNCHANGED`; `add REF` is the explicit refresh. A binding at either
+endpoint blocks REF-only `mv`; inspect, unbind, move, and bind explicitly.
+There is no restore-last, binding reflog, automatic backup/import, or deletion
+staging command.
 
 ### `sealgraph derive`
 
@@ -335,12 +386,20 @@ sealgraph stale [--frontier] [--refs-only] [--scan]
 
 Status can report orthogonal facts:
 
-- `CLEAN`
+- `SEALED_STATE_CLEAN`
 - `UNSEALED`
 - `DRAFT`
 - `STALE_SELF`
 - `STALE_DIRECT`
 - `STALE_TRANSITIVE`
+Status displays separate `CANDIDATE_TO_HEAD` and `WORKFILE_TO_<BASELINE>` axes.
+The workfile baseline is candidate when present, otherwise HEAD, otherwise
+NONE. Relations name that baseline, such as `WORKFILE_MATCHES_CANDIDATE` and
+`WORKFILE_DIFFERS_FROM_HEAD`; missing and unsafe inputs are `SOURCE_MISSING`
+and `SOURCE_UNREADABLE`. Binding-only REFs participate in status. These local
+observations do not change Seal admissibility or stage deletion.
+
+Successful status JSON uses `sealgraph/status/v2`.
 
 `STALE_SELF` means current HEAD is an active non-leaf revision.
 `STALE_DIRECT` means an exact direct Cause target is not an active current leaf,
@@ -498,8 +557,9 @@ detached Seals and unreferenced valid blobs are reported separately and do not
 fail the command. Corruption, missing references, unsafe paths, or cycles fail
 nonzero; `fsck` never repairs, removes, repacks, caches, or changes modes.
 
-The standalone beta has no file synchronization/watch/import surface.
-`manifest` is an explicit path/digest claim builder only. Attachment fields are
+The standalone runtime has explicit local source binding and add-time import,
+but no filesystem watch or automatic add/seal surface. `manifest` remains an
+explicit path/digest claim builder only. Attachment fields are
 read, preserved by load, and inspected, but beta does not expose `attach` or
 `detach` mutation commands.
 
@@ -510,8 +570,9 @@ the REF-only line protocol cannot be combined with JSON. JSON contains full
 ObjectID strings and arrays of ObjectIDs for paths, not presentation strings.
 
 Human output uses `SEALED_STATE`, `STRUCTURAL_IMPACT`, and
-`REVISION_CAUSE_GRAPH` headings. `CLEAN` describes candidate/stale state only;
-it does not compare working files. A REF is a movable logical identity, impact
+`REVISION_CAUSE_GRAPH` headings. Status v2 separates candidate/HEAD state from
+working-file/baseline state and does not use bare `CLEAN` as a combined result. A REF
+is a movable logical identity, impact
 is structural rather than stale-only, root is a provenance boundary rather
 than trust, and Seal/link history is not Git commit/reflog history. Standalone
 commands do not discover or inspect Git.

@@ -448,6 +448,32 @@ attachment or proof that the named files were imported. Input order MUST NOT
 affect bytes; file bytes, semantic paths, and source identity MUST affect the
 resulting manifest blob identity.
 
+### 14.1 Local source binding
+
+As accepted by ADR 0019, a logical REF MAY have one non-canonical local source
+binding to one working-directory-relative regular file. Binding state
+MUST NOT enter a Seal, candidate, canonical REF manifest, logical dump, or
+SealID, and its absence MUST NOT affect canonical repository validity.
+
+When `add` has no explicit content source, it MUST use the REF's bound path
+when present. It MAY use the exact REF spelling as a path only when both REF
+and candidate are absent and that spelling satisfies the portable relative-path grammar. An existing REF or candidate without a binding MUST fail rather
+than select a coincidentally named path. Source selection
+MUST be deterministic and MUST NOT search, clean, expand globs, walk
+directories, inspect Git, or follow symbolic links. A file changed or replaced
+during reading MUST fail without a plausible candidate update.
+
+Binding never means automatic import or publication. A contentless refresh
+MUST preserve identity-bearing candidate/HEAD state except for fields named by
+explicit mutation options. `seal` MUST use only its
+validated candidate and MUST NOT reread a working file. Status MUST distinguish
+working-file/baseline relations from candidate, draft, and stale facts.
+
+The product MUST expose explicit create, read-one, read-all, compare-and-replace,
+and compare-and-remove operations for local bindings. Binding inspection MUST
+NOT open source files. There is no implicit retarget, restore-last, binding
+reflog, deletion staging, or automatic cross-machine import.
+
 ## 15. Local operational recovery
 
 Sealgraph MUST distinguish semantic correction from local operational

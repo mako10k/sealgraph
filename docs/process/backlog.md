@@ -228,6 +228,11 @@ Several familiar Git terms invite a materially wrong interpretation:
 - Documentation explicitly contrasts seal history/link history with Git
   commit/reflog history.
 
+ADR 0019 later extends this completed operator contract with explicit local
+source binding and status v2. Its working-file axis uses comparison-target
+labels instead of treating the earlier sealed-state `CLEAN` label as a whole
+worktree claim.
+
 ## SG-BL-006 — Versioned machine-readable inspection output
 
 - Status: complete; GitHub Issue #6 closed on 2026-08-17

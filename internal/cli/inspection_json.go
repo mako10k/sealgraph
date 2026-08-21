@@ -105,7 +105,25 @@ func statusJSON(value repository.RefStatus) map[string]any {
 		}
 		transitive = append(transitive, ids)
 	}
-	return map[string]any{"ref": value.REF, "head_seal_id": idValue(value.Head), "unsealed": value.Unsealed, "draft": value.Draft, "stale": map[string]any{"self": value.StaleSelf, "direct_target_seal_ids": direct, "transitive_paths": transitive}, "labels": value.Labels()}
+	candidateRelation := "NO_CANDIDATE"
+	if value.Unsealed {
+		candidateRelation = "UNSEALED"
+	}
+	var source any
+	if value.Source != nil {
+		source = map[string]any{"path": value.Source.Path, "baseline": value.Source.Baseline, "relation": value.Source.Relation}
+	}
+	return map[string]any{"ref": value.REF, "head_seal_id": idValue(value.Head), "candidate_to_head": candidateRelation, "draft": value.Draft, "stale": map[string]any{"self": value.StaleSelf, "direct_target_seal_ids": direct, "transitive_paths": transitive}, "sealed_state_labels": sealedStatusLabels(value.Labels()), "local_source": source}
+}
+
+func sealedStatusLabels(labels []string) []string {
+	result := append([]string(nil), labels...)
+	for i := range result {
+		if result[i] == "CLEAN" {
+			result[i] = "SEALED_STATE_CLEAN"
+		}
+	}
+	return result
 }
 func statusesJSON(schema string, statuses []repository.RefStatus, extra map[string]any) map[string]any {
 	items := make([]any, 0, len(statuses))

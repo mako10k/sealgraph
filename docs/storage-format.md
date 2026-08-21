@@ -18,7 +18,8 @@ format-4 runtime.
 │           └── .ref                 # HEAD plus immutable scoped tags
 ├── index/
 │   └── <REF>/
-│       └── .candidate               # mutable, unsealed, runtime
+│       ├── .candidate               # mutable, unsealed, runtime
+│       └── .track                   # local source binding
 ├── cache/                           # disposable derived graph index
 ├── logs/                            # optional/local/rebuildable
 └── locks/                           # runtime coordination only
@@ -29,6 +30,14 @@ manifest per logical REF. Each manifest contains its HEAD and immutable scoped
 tag bindings.
 Candidate/index, cache, logs, locks, and temporary files are not canonical
 provenance and must not be tracked by an outer Git repository.
+
+The `.track` entry accepted by ADR 0019 is versioned local source-binding state.
+It records one validated working-directory-relative path for its REF. It is
+not included in canonical fsck, logical dump/load, REF movement, candidate or
+Seal bytes, and its absence does not affect repository validity. Tracking
+readers and writers MUST reject symlinks and non-regular entries. Bind is
+expected-absent/same-state idempotent; rebind and unbind require exact observed
+old paths. One binding replacement is atomic under the repository writer guard.
 
 An outer checkout may contain canonical paths only. Explicit `sealgraph init`
 may recreate missing empty runtime directories after validating the canonical

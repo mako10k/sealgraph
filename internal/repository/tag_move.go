@@ -80,6 +80,9 @@ func (r *Repository) MoveREF(ctx context.Context, oldRef, newRef string) (MoveRe
 		if err := validateMoveCandidates(r.candidates, oldRef, newRef); err != nil {
 			return MoveResult{}, err
 		}
+		if err := validateMoveSources(r.sources, oldRef, newRef); err != nil {
+			return MoveResult{}, err
+		}
 		head, err := r.refs.Resolve(ctx, oldRef)
 		if err != nil {
 			return MoveResult{}, fmt.Errorf("resolve move source %s: %w", oldRef, err)
@@ -96,6 +99,17 @@ func (r *Repository) MoveREF(ctx context.Context, oldRef, newRef string) (MoveRe
 		}
 		return MoveResult{OldREF: oldRef, NewREF: newRef, Head: head, Tags: len(tags)}, nil
 	})
+}
+
+func validateMoveSources(sources sourceStore, oldRef, newRef string) error {
+	for _, ref := range []string{oldRef, newRef} {
+		if binding, _, err := sources.load(ref); err == nil {
+			return fmt.Errorf("local source binding %s -> %q blocks REF-only move; inspect it with 'sealgraph source show %s', then unbind explicitly before moving the REF", ref, binding.Path, ref)
+		} else if !errors.Is(err, ErrSourceNotFound) {
+			return fmt.Errorf("inspect local source %s before REF move: %w", ref, err)
+		}
+	}
+	return nil
 }
 
 func validateMoveNames(oldRef, newRef string) error {

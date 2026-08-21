@@ -1,0 +1,321 @@
+framework LocalSourceGitUX:
+  requires problem and decision
+  requires premise and evidence
+  warns pending
+
+domain SealGraph:
+  description |
+    ADR 0019 の実ファイル連動を、Git熟練利用者の誤った類推を避けながら
+    format 4を変えず実用化する
+
+problem P1:
+  "日常的なファイル再取込みでidentity-bearing属性も更新するべきか"
+
+step S1:
+  premise PR1:
+    |
+      Git利用者はaddをworking file contentのstagingと理解し、root、draft、Causeを
+      暗黙に変更する操作とは理解しない
+
+step S2:
+  evidence EV1:
+    |
+      現契約のaddはroot/draftをinvocation値で再設定する一方、ADR 0019は
+      edit -> add REF -> inspect -> seal REFを通常cycleとしている
+
+step S3:
+  decision D1 based_on P1, PR1, EV1:
+    |
+      content指定なしのadd REFをcontent-only refreshとし、既存candidateがあればその
+      root、draft、Links、parent/publication stateを保持し、なければHEADからroot、draft、Linksを継承する。
+      identity-bearing属性の変更は従来どおり明示optionまたは専用candidate mutationだけで行う
+
+problem P2:
+  "tracking recordがないときREFをpathとして暗黙利用してよい範囲はどこか"
+
+step S4:
+  premise PR2:
+    |
+      trackingはmachine-localでcanonical copyに含まれず、同じadd REFが別machineで
+      tracked pathから偶然存在するREF同名pathへ切り替わるとprovenance inputが変わる
+
+step S5:
+  evidence EV2:
+    |
+      Git reviewではmapping消失時のsilent fallbackがhigh riskとされ、既存REFは
+      過去にどのlocal sourceを使ったかをcanonical stateから復元できない
+
+step S6:
+  decision D2 based_on P2, PR2, EV2:
+    |
+      REF-as-path短縮形はdestination REFとcandidateがともに存在しない初回addだけに限定する。
+      既存REFまたはcandidateでlocal source bindingがなければerrorとし、明示的な
+      --content-fileまたはsource bindを要求する。成功receiptはREF、source mode、exact pathを必ず表示する
+
+problem P3:
+  "local path associationをtrack/untrackと呼ぶべきか"
+
+step S7:
+  premise PR3:
+    |
+      Gitのtrackedはindexとcommitに参加するrepository membershipだが、このassociationは
+      candidateを変更せずcopyされないlocal input bindingである
+
+step S8:
+  evidence EV3:
+    |
+      track直後に内容がcandidateへ入った、untrack後は同名pathが暗黙利用されない、という
+      Git由来の期待が現在の案と衝突する
+
+step S9:
+  decision D3 based_on P3, PR3, EV3:
+    |
+      public CLIをsource bind REF --file PATHとsource unbind REFへ変更し、表示語も
+      LOCAL_SOURCEまたはSOURCE_BINDINGとする。bindはcandidateを変更せず、成功receiptに
+      candidate=UNCHANGEDと次のadd REFを表示する。異なるpathへの変更はunbindを先に要求する
+
+problem P4:
+  "add時の一回取込みと継続bindingをどう区別するか"
+
+step S10:
+  premise PR4:
+    |
+      Git add pathは以後trackedになるが、sealgraphでは一回取込みとlocal bindingは別のintentであり、
+      canonical provenanceとmachine-local convenienceを暗黙に結合すべきでない
+
+step S11:
+  evidence EV4:
+    |
+      ADR 0019はplain add PATHとadd PATH --trackを区別するが、成功後の差が表示されなければ
+      利用者は次回のsource resolutionを予測できない
+
+step S12:
+  decision D4 based_on P4, PR4, EV4:
+    |
+      一回取込みをdefaultのまま維持し、継続bindingはadd --bind-sourceで明示する。
+      成功receiptはSOURCE_BINDING=NONEまたはBOUNDを必ず表示し、NONEでは次回の既存REF addに
+      --content-fileまたはsource bindが必要なことを示す
+
+problem P5:
+  "candidate状態とworking file状態をflatなCLEAN labelで表すべきか"
+
+step S13:
+  premise PR5:
+    |
+      CLEANとTRACKED_MODIFIEDが同時成立し、さらにworking fileの比較先がcandidate有無で変わると、
+      Gitのwhole-worktree cleanという理解と衝突する
+
+step S14:
+  evidence EV5:
+    |
+      candidateはHEADとの比較、working fileはcandidate優先でHEADとの比較という二つの独立軸を持つ
+
+step S15:
+  decision D5 based_on P5, PR5, EV5:
+    |
+      statusをCANDIDATE_TO_HEADとWORKFILE_TO_CANDIDATE_OR_HEADの二軸で表示し、
+      WORKFILE_MATCHES_CANDIDATE、WORKFILE_DIFFERS_FROM_HEADのように比較対象をlabelへ含める。
+      bare CLEANとTRACKED_CLEANは新しいhuman/JSON v2 contractで使用しない
+
+problem P6:
+  "candidateとsource bindingの二file更新をall-or-nothingとするべきか"
+
+step S16:
+  premise PR6:
+    |
+      current layoutには二fileを同時commitするgeneration pointerがなく、単一writer guardは
+      cooperative concurrencyを直列化してもpower lossのatomicityを提供しない
+
+step S17:
+  evidence EV6:
+    |
+      candidateと.trackの個別atomic replace間で停止すると中間状態が残り、Git indexの
+      single lockfile publicationと同じ保証はない
+
+step S18:
+  decision D6 based_on P6, PR6, EV6:
+    |
+      initial sliceはcandidateを先にpublishし、その成功後に新規source bindingをpublishする。
+      crashまたはbinding write failureではcandidate更新済み、binding未作成を唯一許容する中間状態とし、
+      bindingだけが新sourceを指す状態を作らない。通常failureはこの状態を明示しreadbackを要求する。
+      full transactionまたはrecovery receiptは実事故evidenceが生じるまでdeferする
+
+problem P7:
+  "file readとmulti-REF statusのrace contractをどこまで保証するか"
+
+step S19:
+  premise PR7:
+    |
+      filesystem全体の同時snapshotはstandalone APIから得られないが、一fileのunsafe path traversalと
+      read中replacementを正常結果として扱ってはならない
+
+step S20:
+  evidence EV7:
+    |
+      existing exact file inputはregular non-symlinkを要求し、reviewはsafe-open/no-followと
+      before/after identity再検証およびchanged_during_readを要求している
+
+step S21:
+  decision D7 based_on P7, PR7, EV7:
+    |
+      path componentをfollowせずregular fileをopenし、read前後のfile identity、size、mtimeと
+      exact bytes digestを再検証する。変化はCHANGED_DURING_READとしてcandidate/status結果を出さない。
+      multi-REF statusは各fileを再検証したcoherent command observationであり、worktree全体の同時snapshotではない
+
+problem P8:
+  "mvとmissing fileをGit同等操作として見せるべきか"
+
+step S22:
+  premise PR8:
+    |
+      sealgraph mvはlogical REF manifestだけを移動し、missing working fileをaddしても
+      content deletionまたはREF deletionにはならない
+
+step S23:
+  evidence EV8:
+    |
+      git mvとgit add -uの類推はfile movement/deletion stagingを期待させるが、sealgraph coreには
+      checkout、path deletion content、automatic provenance correctionがない
+
+step S24:
+  decision D8 based_on P8, PR8, EV8:
+    |
+      mvは現行互換のため維持するがhelpとdiagnosticでREF_ONLYかつPATH_NOT_MOVEDを明示する。
+      missing sourceはSOURCE_MISSINGとして、restore fileまたはsource unbindを提示し、どちらも
+      HEAD/candidate contentを削除しないことを明示する。git add -u相当は導入しない
+
+problem P9:
+  "local source bindingをstatus以外から直接閲覧・列挙できるか"
+
+step S25:
+  premise PR9:
+    |
+      bindとunbindだけでは現在のexact path、binding不在、全binding inventoryを操作前に確認できず、
+      statusはworking file observationとcandidate/HEAD comparisonを目的としている
+
+step S26:
+  evidence EV9:
+    |
+      現在のADR 0019とCLI案にはtrackまたはsource binding専用のshow/list commandがなく、
+      mv、unbind、addの入力sourceをread-onlyに確定する手段が欠けている
+
+step S27:
+  decision D9 based_on P9, PR9, EV9:
+    |
+      source show REFとsource listを追加する。show/listはbinding recordだけを安全に読み、source fileをopenせず、
+      candidate、HEAD、objectを変更しない。showはREF、exact escaped relative path、binding schemaを表示し、
+      listは全bindingをREF byte orderで列挙する。live file状態はstatusの責務として分離する
+
+problem P10:
+  "source bindingのcreate、retarget、removeを一つのbind上書きで扱うべきか"
+
+step S28:
+  premise PR10:
+    |
+      bindの暗黙上書きは誤ったsource変更を起こし、unbind後bindは新path validation失敗時に旧bindingを失うため、
+      createとreplaceのintentおよびfailure atomicityを同時に満たさない
+
+step S29:
+  evidence EV10:
+    |
+      existing REF publicationはexpected-old CASを使い、operatorが観測したstateとmutation targetの一致を要求する。
+      local bindingも一つのsmall fileなのでexpected-old atomic replaceを適用できる
+
+step S30:
+  decision D10 based_on P10, PR10, EV10:
+    |
+      source bind REF --file PATHはexpected-absent createとsame-binding idempotencyだけを許可する。
+      retargetはsource rebind REF --from OLD_PATH --file NEW_PATHとして、observed old path一致とnew source validation後に
+      one atomic replaceする。source unbind REF --from PATHもobserved path一致を要求し、missingまたはmismatchをerrorとする
+
+problem P11:
+  "source command群のread/write出力と対象集合は一貫しているか"
+
+step S31:
+  premise PR11:
+    |
+      local bindingはREFまたはcandidateがなくても次のaddを準備でき、tracked-only相当のstateがstatus対象になる一方、
+      scriptsにはbinding inventoryとmutation receiptのstable contractが必要である
+
+step S32:
+  evidence EV11:
+    |
+      statusだけにinventoryを兼務させるとmissing/unreadable file observationとbinding existenceが混ざり、
+      human path escapingとmachine output schemaも不明確になる
+
+step S33:
+  decision D11 based_on P11, PR11, EV11:
+    |
+      source bind/rebind/unbind/show/listは同じpath validation、safe escaped human representation、
+      sealgraph/source/v1 JSON schemaを共有する。showのmissing bindingはerror、listのempty inventoryはzero-result successとする。
+      mutation successはoperation、REF、before/after path、candidate=UNCHANGEDをreceiptに含める。
+      binding-only REFはvalid local stateとしてshow/list/statusに現れ、canonical fsckとstaleには現れない
+
+problem P12:
+  "source binding lifecycleとadd --bind-source、mv、repository copyの境界は閉じているか"
+
+step S34:
+  premise PR12:
+    |
+      convenience shortcutがsource namespaceと異なるvalidation、retarget、receipt semanticsを持つと、
+      同じbinding stateを作る複数経路で保証が変わる
+
+step S35:
+  evidence EV12:
+    |
+      add --bind-sourceはcandidateとbindingの二段publication、source bindはbindingだけのpublicationであり、
+      mvはbinding endpointを拒否し、canonical copyはbindingを持たない
+
+step S36:
+  decision D12 based_on P12, PR12, EV12:
+    |
+      add --bind-sourceはsource bindと同じexpected-absentまたはsame-binding ruleを再利用し、retargetを許可しない。
+      mv errorはsource show OLD_REFとsource show NEW_REFによる確認、必要ならexplicit rebind設計ではなく
+      unbind -> canonical mv -> bindの手順を示す。canonical copy後はsource listがemptyであることを正常とし、
+      既存REFのaddはD2どおりsilent REF-as-path fallbackせずbinding再作成を要求する
+
+problem P13:
+  "source bindingにrestoreまたは履歴を初期sliceから持たせるべきか"
+
+step S37:
+  premise PR13:
+    |
+      bindingはnoncanonical local convenienceであり再作成できるが、restore lastやimplicit history selectionは
+      どのREF、どのpath、どのmachine stateを戻すかを推測し、新しいjournal lifecycleを必要とする
+
+step S38:
+  evidence EV13:
+    |
+      createはexpected-absent、rebindはexpected-old atomic replace、unbindはexact old path確認を要求するため、
+      partial retargetとaccidental wrong-target deletionを事前に防げる。candidateとbindingの二段addでは
+      binding-only new stateを禁止し、crash時はcandidate updated and binding absentという再bind可能なstateに限定する
+
+step S39:
+  decision D13 based_on P13, PR13, EV13:
+    |
+      initial sliceにsource restore、restore last、binding reflog、自動backup/importを追加しない。
+      unbind receiptはremoved REFとexact escaped old pathを出し、operatorはsource bindで明示的に再作成できる。
+      rebind failureはold bindingを保持し、crash後はsource show/listとstatusで状態を確定してblind retryしない。
+      cross-machine復元はcanonical repository recoveryと混同せず、必要性が実証された場合にversioned
+      source export/importまたはexplicit operation-ID journalとして別ADRで判断する
+
+problem P14:
+  "bound REFへ別pathを--content-fileで一回だけ取り込んでよいか"
+
+step S40:
+  premise PR14:
+    |
+      candidateだけを別pathから更新してbindingを旧pathに残すと、次のcontentless addが旧sourceへ戻り、
+      success receiptを見落とした利用者が内容を意図せず反転させ得る
+
+step S41:
+  evidence EV14:
+    |
+      source rebindはexpected-old付きatomic replacementを提供し、one-shot overrideを許さなくても
+      explicit unbindまたはrebindでsource intentを表現できる
+
+step S42:
+  decision D14 based_on P14, PR14, EV14:
+    |
+      existing bindingと異なる--content-file PATHは--bind-sourceの有無にかかわらずrejectする。
+      operatorはsource rebindまたはsource unbindを先に実行し、candidate sourceと次回refresh sourceを一致させる

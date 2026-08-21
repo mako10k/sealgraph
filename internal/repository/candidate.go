@@ -197,8 +197,11 @@ func (s candidateStore) collect(path string, entry fs.DirEntry, walkErr error, r
 	if entry.IsDir() {
 		return nil
 	}
+	if entry.Name() == sourceFile && entry.Type().IsRegular() {
+		return nil
+	}
 	if entry.Name() != candidateFile || !entry.Type().IsRegular() {
-		return fmt.Errorf("unexpected candidate entry %s; expected only %s files", path, candidateFile)
+		return fmt.Errorf("unexpected runtime index entry %s; expected only %s or %s files", path, candidateFile, sourceFile)
 	}
 	relative, err := filepath.Rel(s.root, filepath.Dir(path))
 	if err != nil {

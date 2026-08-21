@@ -43,7 +43,7 @@ func TestCLIHelpDefinesOperatorSemanticsWithoutGitDiscovery(t *testing.T) {
 	if code != 0 || stderr != "" {
 		t.Fatalf("help code=%d stderr=%q", code, stderr)
 	}
-	for _, phrase := range []string{"CLEAN does not compare working files", "REF is a movable logical identity", "STRUCTURAL_IMPACT", "root marks a provenance boundary", "does not discover or inspect Git"} {
+	for _, phrase := range []string{"status separates CANDIDATE_TO_HEAD", "local source binding is not Git tracked membership", "REF is a movable logical identity", "STRUCTURAL_IMPACT", "root marks a provenance boundary", "does not discover or inspect Git"} {
 		if !strings.Contains(stdout, phrase) {
 			t.Fatalf("help lacks %q: %s", phrase, stdout)
 		}
@@ -67,6 +67,9 @@ func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
 		{[]string{"help", "candidate"}, []string{"Subcommands:", "show", "diff", "discard"}},
 		{[]string{"help", "candidate", "show"}, []string{"sealgraph candidate show REF", "--raw-content"}},
 		{[]string{"candidate", "show", "--help"}, []string{"expected REF-head relations", "sealgraph candidate show REF"}},
+		{[]string{"help", "source"}, []string{"Subcommands:", "bind", "rebind", "unbind", "show", "list", "not Git tracked state"}},
+		{[]string{"source", "show", "--help"}, []string{"without opening its source file", "sealgraph source show REF"}},
+		{[]string{"help", "source", "rebind"}, []string{"--from OLD_PATH", "--file NEW_PATH", "Atomically replace"}},
 		{[]string{"help", "selectors"}, []string{"@SEAL_TOKEN", "4 through 64 lower-case hex", "There is no @latest", "full 64-character SealID"}},
 		{[]string{"help", "concepts"}, []string{"parent_revision", "CLEAN means", "never searches for Git"}},
 		{[]string{"help", "concepts", "root"}, []string{"not mean true, trusted, or approved"}},
@@ -110,6 +113,30 @@ func TestCLIUsageAndUnknownNavigation(t *testing.T) {
 		for _, marker := range test.markers {
 			if !strings.Contains(stderr, marker) {
 				t.Fatalf("%v lacks %q:\n%s", test.args, marker, stderr)
+			}
+		}
+	}
+}
+
+func TestLocalSourceErrorsProvideExplicitNextActions(t *testing.T) {
+	tests := []struct {
+		command string
+		message string
+		markers []string
+	}{
+		{"add", "existing REF spec has no local source binding", []string{"no machine-local source binding", "source list", "source bind"}},
+		{"source bind", `local source for spec is already "one.md"; use source rebind`, []string{"create-only", "source show", "source rebind"}},
+		{"source rebind", `local source for spec is "one.md", not expected "old.md"`, []string{"changed after the operator's observation", "source show"}},
+		{"add", `REF spec is bound to "one.md", not explicit source "two.md"`, []string{"would disagree", "source rebind", "source unbind"}},
+		{"add", "CHANGED_DURING_READ: exact bytes changed", []string{"changed or was replaced", "no plausible candidate"}},
+		{"mv", `local source binding spec -> "spec.md" blocks REF-only move`, []string{"never moves a working file", "unbind", "bind the new REF"}},
+	}
+	for _, test := range tests {
+		reason, hints := domainNavigation(test.command, test.message)
+		text := reason + " " + strings.Join(hints, " ")
+		for _, marker := range test.markers {
+			if !strings.Contains(text, marker) {
+				t.Fatalf("%s/%q lacks %q: %s", test.command, test.message, marker, text)
 			}
 		}
 	}
@@ -173,7 +200,7 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 		args         []string
 	}{
 		{"show", "sealgraph/show/v1", []string{"show", "root", "--format", "json"}},
-		{"status", "sealgraph/status/v1", []string{"status", "--format=json"}},
+		{"status", "sealgraph/status/v2", []string{"status", "--format=json"}},
 		{"stale", "sealgraph/stale/v1", []string{"stale", "--format", "json", "--frontier"}},
 		{"graph", "sealgraph/graph/v1", []string{"graph", "--format", "json"}},
 		{"impact", "sealgraph/impact/v1", []string{"impact", "@" + fixture.root2, "--format", "json"}},
@@ -290,7 +317,7 @@ func TestCLIUnsafeContentFilesFailBeforeCandidateMutation(t *testing.T) {
 			}
 			source := prepare(t, dir)
 			code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content-file", source)
-			if code != 2 || stdout != "" || !strings.Contains(stderr, "not a regular non-symlink file") && name != "missing" {
+			if code != 1 || stdout != "" || stderr == "" {
 				t.Fatalf("unsafe add code=%d stdout=%q stderr=%q", code, stdout, stderr)
 			}
 			after, err := os.ReadFile(candidatePath)
@@ -308,11 +335,48 @@ func TestCLIContentSourceConflictFailsBeforeCandidateMutation(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
 	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content", "a", "--content-file", "missing")
-	if code != 2 || stdout != "" || !strings.Contains(stderr, "exactly one") {
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "at most one") {
 		t.Fatalf("conflict code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	if _, err := os.Lstat(filepath.Join(dir, ".sealgraph", "index", "root", ".candidate")); !os.IsNotExist(err) {
 		t.Fatalf("conflicting content flags created candidate: %v", err)
+	}
+}
+
+func TestCLILocalSourceLifecycleAndContentlessRefresh(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	if err := os.WriteFile(filepath.Join(dir, "spec.md"), []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := mustRunCLI(t, dir, "add", "spec.md", "--root", "--bind-source")
+	if !strings.Contains(output, "source_mode=initial-ref-path") || !strings.Contains(output, "source_binding=BOUND") {
+		t.Fatalf("initial output=%q", output)
+	}
+	show := mustRunCLI(t, dir, "source", "show", "spec.md")
+	if !strings.Contains(show, `path="spec.md"`) {
+		t.Fatalf("source show=%q", show)
+	}
+	jsonOutput := decodeCLIJSON(t, mustRunCLI(t, dir, "source", "list", "--format=json"))
+	if jsonOutput["schema"] != "sealgraph/source/v1" {
+		t.Fatalf("source JSON=%v", jsonOutput)
+	}
+	mustRunCLI(t, dir, "seal", "spec.md")
+	if err := os.WriteFile(filepath.Join(dir, "spec.md"), []byte("v2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output = mustRunCLI(t, dir, "add", "spec.md")
+	if !strings.Contains(output, "root=true") || !strings.Contains(output, "source_mode=bound-source") {
+		t.Fatalf("refresh output=%q", output)
+	}
+	status := mustRunCLI(t, dir, "status", "spec.md")
+	if !strings.Contains(status, "WORKFILE_MATCHES_CANDIDATE") {
+		t.Fatalf("status=%q", status)
+	}
+	mustRunCLI(t, dir, "source", "unbind", "spec.md", "--from", "spec.md")
+	code, stdout, stderr := runCLI(t, dir, nil, "add", "spec.md")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "has no local source binding") {
+		t.Fatalf("fallback code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 

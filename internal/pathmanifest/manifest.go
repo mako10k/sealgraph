@@ -4,15 +4,12 @@ package pathmanifest
 import (
 	"crypto/sha256"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/mako10k/sealgraph/internal/canonical"
+	"github.com/mako10k/sealgraph/internal/workfile"
 )
 
 const (
@@ -58,7 +55,7 @@ func normalizePaths(paths []string) ([]string, error) {
 	}
 	normalized := append([]string(nil), paths...)
 	for _, path := range normalized {
-		if err := validatePath(path); err != nil {
+		if err := workfile.ValidatePath(path); err != nil {
 			return nil, err
 		}
 	}
@@ -71,99 +68,13 @@ func normalizePaths(paths []string) ([]string, error) {
 	return normalized, nil
 }
 
-func validatePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("file path is empty")
-	}
-	if !utf8.ValidString(path) {
-		return fmt.Errorf("file path is not valid UTF-8")
-	}
-	if filepath.IsAbs(path) || strings.HasPrefix(path, "/") {
-		return fmt.Errorf("file path %q is absolute; use an explicit working-directory-relative path", path)
-	}
-	if strings.Contains(path, "\\") {
-		return fmt.Errorf("file path %q contains a backslash; use slash-separated semantic paths", path)
-	}
-	for _, r := range path {
-		if r < 0x20 || r == 0x7f {
-			return fmt.Errorf("file path contains an ASCII control or DEL byte")
-		}
-	}
-	for _, component := range strings.Split(path, "/") {
-		if component == "" || component == "." || component == ".." {
-			return fmt.Errorf("file path %q contains an empty, dot, or dot-dot component", path)
-		}
-	}
-	return nil
-}
-
 func readEntry(workDir, path string) (Entry, error) {
-	fullPath, initial, err := inspectPath(workDir, path)
+	data, err := workfile.ReadStable(workDir, path)
 	if err != nil {
 		return Entry{}, err
 	}
-	file, err := os.Open(fullPath)
-	if err != nil {
-		return Entry{}, fmt.Errorf("open file %q: %w", path, err)
-	}
-	data, readErr := readStableFile(file, initial)
-	closeErr := file.Close()
-	if readErr != nil {
-		return Entry{}, fmt.Errorf("read file %q: %w", path, readErr)
-	}
-	if closeErr != nil {
-		return Entry{}, fmt.Errorf("close file %q: %w", path, closeErr)
-	}
 	digest := sha256.Sum256(data)
 	return Entry{Path: path, Bytes: int64(len(data)), SHA256: fmt.Sprintf("%x", digest)}, nil
-}
-
-func inspectPath(workDir, path string) (string, os.FileInfo, error) {
-	current := workDir
-	components := strings.Split(path, "/")
-	for i, component := range components {
-		current = filepath.Join(current, component)
-		info, err := os.Lstat(current)
-		if err != nil {
-			return "", nil, fmt.Errorf("inspect file %q: %w", path, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", nil, fmt.Errorf("file path %q contains a symbolic link", path)
-		}
-		if i < len(components)-1 {
-			if !info.IsDir() {
-				return "", nil, fmt.Errorf("file path %q has a non-directory ancestor", path)
-			}
-			continue
-		}
-		if !info.Mode().IsRegular() {
-			return "", nil, fmt.Errorf("file path %q is not a regular non-symlink file", path)
-		}
-		return current, info, nil
-	}
-	return "", nil, fmt.Errorf("file path %q has no terminal component", path)
-}
-
-func readStableFile(file *os.File, initial os.FileInfo) ([]byte, error) {
-	opened, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !opened.Mode().IsRegular() || !os.SameFile(initial, opened) {
-		return nil, fmt.Errorf("file changed between inspection and open")
-	}
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-	final, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !os.SameFile(opened, final) || opened.Size() != final.Size() || !opened.ModTime().Equal(final.ModTime()) || opened.Mode() != final.Mode() {
-		return nil, fmt.Errorf("file changed while it was read; retry after the input is stable")
-	}
-	return data, nil
 }
 
 func encode(source string, entries []Entry) ([]byte, error) {
