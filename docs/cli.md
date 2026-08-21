@@ -447,8 +447,10 @@ bytewise order, no header/ID/label/quoting/`CLEAN`, and zero bytes for an empty
 set. Empty and non-empty success exit 0.
 
 `--scan` bypasses cache reads, performs canonical current-head-rooted scan, and
-refreshes disposable cache when possible without changing stdout. Cache write
-failure warns; canonical corruption fails. Cache is never repair truth.
+refreshes disposable cache when possible without changing stdout. A missing
+cache or REF-head snapshot mismatch is a normal cache miss and does not warn.
+Invalid/unsafe cache state or cache write failure may warn; canonical
+corruption fails. Cache is never repair truth.
 
 Every multi-REF mode captures all current REF heads, derives and buffers, then
 revalidates the complete set. Change or unreadability fails nonzero with empty

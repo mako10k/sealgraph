@@ -287,9 +287,11 @@ tag reachability, or Cause reachability does not publish a revision.
 
 The revision/Cause cache is derived and disposable. Its key binds repository
 and schema version plus a digest of the complete sorted REF/head observation.
-Missing or invalid cache triggers canonical scan and atomic refresh. Cache
-failure never repairs or overrides canonical state, and read-only Git views do
-not persist cache.
+Missing, snapshot-mismatched, or invalid cache triggers canonical scan and
+atomic refresh. Missing and snapshot-mismatched cache are normal misses and do
+not warn. Invalid/unsafe cache or refresh failure may warn, but cache failure
+never repairs or overrides canonical state, and read-only Git views do not
+persist cache.
 
 ## 7. Git sidecar boundary
 

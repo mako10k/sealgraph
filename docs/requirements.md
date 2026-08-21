@@ -173,7 +173,10 @@ approval, mandatory work, seal admissibility, reservation, or a batch plan.
 A disposable derived cache MAY accelerate stale queries when bound to the
 repository/schema version and complete sorted REF/head snapshot. Missing,
 invalid, or mismatched cache state triggers canonical full scan and atomic
-refresh; canonical corruption fails closed. `--scan` MUST bypass cache reads.
+refresh; canonical corruption fails closed. A missing cache or routine
+REF/head snapshot mismatch is a normal cache miss and MUST NOT warn. Invalid,
+unsafe, or unreadable cache state and cache refresh failure MAY warn without
+invalidating an otherwise validated result. `--scan` MUST bypass cache reads.
 Cache state is not canonical and is not committed to an outer Git repository.
 
 ## 4. Seal admissibility

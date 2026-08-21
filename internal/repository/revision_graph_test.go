@@ -209,6 +209,20 @@ func TestStaleCacheRebuildsAfterInvalidCache(t *testing.T) {
 	}
 }
 
+func TestStaleCacheRebuildsWithoutWarningAfterREFHeadChange(t *testing.T) {
+	_, repo := newFormat4Repository(t)
+	sealRoot(t, repo, "root", []byte("v1"))
+
+	if _, warning, err := repo.Stale(context.Background(), false, false); err != nil || warning != "" {
+		t.Fatalf("initial stale warning=%q err=%v", warning, err)
+	}
+	sealRoot(t, repo, "root", []byte("v2"))
+
+	if _, warning, err := repo.Stale(context.Background(), false, false); err != nil || warning != "" {
+		t.Fatalf("stale after REF HEAD change warning=%q err=%v", warning, err)
+	}
+}
+
 func TestStaleTreatsUnsafeCachePathAsWarningWithoutFollowingIt(t *testing.T) {
 	dir, repo := newFormat4Repository(t)
 	sealRoot(t, repo, "root", []byte("root"))

@@ -328,8 +328,10 @@ stored in Seal, Link, REF, candidate, tag, or canonical config state.
 `.sealgraph/cache/` may contain a derived revision/Cause index bound to
 repository/schema version, complete sorted REF/head snapshot digest, and its
 own checksum. Cache miss, corruption, or digest mismatch triggers canonical
-scan and atomic refresh. Cache write failure may warn without invalidating an
-already validated result. Cache never repairs canonical state.
+scan and atomic refresh. File absence and digest mismatch are normal cache
+misses and do not warn. Corrupt, incompatible, unsafe, or unreadable cache
+state and cache write failure may warn without invalidating an already
+validated result. Cache never repairs canonical state.
 
 The current disposable file is `.sealgraph/cache/revision-v1.json`, schema
 `sealgraph/revision-cache/v1`. It records the sorted active Seal IDs and exact

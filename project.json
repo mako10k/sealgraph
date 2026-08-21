@@ -1,9 +1,9 @@
 {
   "project": "sealgraph",
 	"status": "standalone-beta-prerelease",
-	"version": "0.1.0-beta.4",
+	"version": "0.1.0-beta.5",
 	"license": "MIT",
-	"release_scope": "linux-amd64-standalone-source-bindings-native-vocabulary-local-ref-recovery-no-git-sidecar",
+	"release_scope": "linux-amd64-standalone-cache-diagnostic-source-bindings-native-vocabulary-local-ref-recovery-no-git-sidecar",
   "language": "go",
   "go": "1.26",
 	"entrypoints": ["cmd/sealgraph"],

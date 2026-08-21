@@ -17,6 +17,8 @@ import (
 
 const revisionCacheSchema = "sealgraph/revision-cache/v1"
 
+var errRevisionCacheObservationMismatch = errors.New("revision cache REF-head observation does not match")
+
 type revisionCacheRecord struct {
 	Seal   domain.ObjectID  `json:"seal"`
 	Parent *domain.ObjectID `json:"parent_revision"`
@@ -46,7 +48,7 @@ func (r *Repository) revisionIndex(ctx context.Context, observation headObservat
 			if restoreErr == nil {
 				return index, "", nil
 			}
-		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, errRevisionCacheObservationMismatch) {
 			cacheWarning = fmt.Sprintf("ignored invalid revision cache: %v", err)
 		}
 	}
@@ -87,8 +89,11 @@ func (r *Repository) readRevisionCache(observation headObservation) ([]revision.
 	if err := requireCacheEOF(decoder); err != nil {
 		return nil, err
 	}
-	if document.Schema != revisionCacheSchema || document.RepositoryFormat != 4 || document.Observation != observation.digest() {
-		return nil, errors.New("cache schema, repository format, or REF-head observation does not match")
+	if document.Schema != revisionCacheSchema || document.RepositoryFormat != 4 {
+		return nil, errors.New("cache schema or repository format does not match")
+	}
+	if document.Observation != observation.digest() {
+		return nil, errRevisionCacheObservationMismatch
 	}
 	if err := parseObservationDigest(document.Checksum); err != nil {
 		return nil, fmt.Errorf("invalid cache checksum: %w", err)
