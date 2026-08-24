@@ -52,13 +52,13 @@ var commandHelpRegistry = map[string]commandHelp{
 		Subcommands: []string{"bind", "rebind", "unbind", "show", "list", "compare"}, Details: []string{"A local source binding is not Git tracked state and never changes a candidate by itself."}, Related: []string{"add", "status"},
 	},
 	"source bind": {
-		Path: "source bind", Summary: "Create one absent local source binding.", Usage: []string{"sealgraph source bind REF --file PATH [--format human|json]"}, Options: []helpOption{{"--file PATH", "required portable relative regular-file path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"Same binding is idempotent. A different existing path requires source rebind."}, Related: []string{"source show", "source rebind", "add"},
+		Path: "source bind", Summary: "Create one absent local source binding.", Usage: []string{"sealgraph source bind REF --file PATH [--format human|json]"}, Options: []helpOption{{"--file PATH", "required portable relative regular-file path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Same binding is idempotent. A different existing path requires source rebind."}, Related: []string{"source show", "source rebind", "add"},
 	},
 	"source rebind": {
-		Path: "source rebind", Summary: "Atomically replace one observed local source binding.", Usage: []string{"sealgraph source rebind REF --from OLD_PATH --file NEW_PATH [--format human|json]"}, Options: []helpOption{{"--from OLD_PATH", "required exact observed current path"}, {"--file NEW_PATH", "required validated new source path"}, {"--format human|json", "optional, once; default human"}}, Related: []string{"source show", "source bind"},
+		Path: "source rebind", Summary: "Atomically replace one observed local source binding.", Usage: []string{"sealgraph source rebind REF --from OLD_PATH --file NEW_PATH [--format human|json]"}, Options: []helpOption{{"--from OLD_PATH", "required exact observed current path"}, {"--file NEW_PATH", "required validated new source path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Related: []string{"source show", "source bind"},
 	},
 	"source unbind": {
-		Path: "source unbind", Summary: "Remove one exact observed local source binding.", Usage: []string{"sealgraph source unbind REF --from PATH [--format human|json]"}, Options: []helpOption{{"--from PATH", "required exact observed current path"}, {"--format human|json", "optional, once; default human"}}, Details: []string{"No candidate, REF, object, or Seal is removed."}, Related: []string{"source show", "source bind"},
+		Path: "source unbind", Summary: "Remove one exact observed local source binding.", Usage: []string{"sealgraph source unbind REF --from PATH [--format human|json]"}, Options: []helpOption{{"--from PATH", "required exact observed current path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"No candidate, REF, object, or Seal is removed."}, Related: []string{"source show", "source bind"},
 	},
 	"source show":    inspectionHelp("source show", "Show one local source binding without opening its source file.", "sealgraph source show REF [--format human|json]", nil),
 	"source list":    inspectionHelp("source list", "List local source bindings without opening source files.", "sealgraph source list [--format human|json]", nil),
@@ -94,10 +94,10 @@ var commandHelpRegistry = map[string]commandHelp{
 		Path: "candidate", Summary: "Inspect, compare, or explicitly discard mutable candidate state.", Usage: []string{"sealgraph candidate <show|compare|discard> ..."}, Subcommands: []string{"show", "compare", "discard"}, Details: []string{"Candidate operations never rebase, relink, repair, or seal automatically."}, Related: []string{"candidate show", "candidate compare", "candidate discard", "seal"},
 	},
 	"candidate show": {
-		Path: "candidate show", Summary: "Inspect one candidate and its parent_revision and expected REF-head relations.", Usage: []string{"sealgraph candidate show REF [--raw-content]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only"}}, Details: []string{"Inspection validates material and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate compare", "candidate discard", "seal"},
+		Path: "candidate show", Summary: "Inspect one candidate and its parent_revision and expected REF-head relations.", Usage: []string{"sealgraph candidate show REF [--raw-content] [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only; conflicts with explicit --format json"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Inspection validates material and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate compare", "candidate discard", "seal"},
 	},
 	"candidate compare": {
-		Path: "candidate compare", Summary: "Compare one candidate with its recorded parent_revision.", Usage: []string{"sealgraph candidate compare REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"Publication expectation is reported separately from immutable material differences."}, Examples: []string{"sealgraph candidate compare design/api"}, Related: []string{"candidate show", "compare", "seal"},
+		Path: "candidate compare", Summary: "Compare one candidate with its recorded parent_revision.", Usage: []string{"sealgraph candidate compare REF [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF."}, Options: []helpOption{{"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Publication expectation is reported separately from immutable material differences."}, Examples: []string{"sealgraph candidate compare design/api"}, Related: []string{"candidate show", "compare", "seal"},
 	},
 	"candidate discard": {
 		Path: "candidate discard", Summary: "Explicitly remove exactly one candidate and no canonical state.", Usage: []string{"sealgraph candidate discard REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"This removes no Seal, object, REF, tag, or descendant candidate. There is no recursive or force form."}, Examples: []string{"sealgraph candidate discard design/api"}, Related: []string{"candidate show", "add"},
@@ -117,19 +117,19 @@ var commandHelpRegistry = map[string]commandHelp{
 	"ref drop": {
 		Path: "ref drop", Summary: "Remove exactly one current REF manifest with an explicit recovery receipt.", Usage: []string{"sealgraph ref drop REF"}, Arguments: []string{"REF (required): exact current logical REF; no selector, prefix, or batch form."}, Details: []string{"Candidate or source-binding state blocks the operation. The complete tag namespace leaves the active namespace with the REF. Immutable objects remain valid."}, Examples: []string{"sealgraph ref drop obsolete/spec"}, Related: []string{"recover", "candidate discard", "source unbind", "show"},
 	},
-	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with --format json"}}),
+	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with explicit --format json"}}),
 	"log":     inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
 	"linklog": inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
 	"compare": inspectionHelp("compare", "Compare immutable Seal material and provenance.", "sealgraph compare REF [--format human|json]\nsealgraph compare SELECTOR SELECTOR [--format human|json]", nil),
 	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
-		Options: []helpOption{{"--frontier", "optional; keep only stale heads not blocked by another stale current head in strict Cause closure"}, {"--refs-only", "optional; stable REF-only line protocol; conflicts with --format json"}, {"--scan", "optional; bypass disposable cache reads"}, {"--format human|json", "optional, once; default human"}},
+		Options: []helpOption{{"--frontier", "optional; keep only stale heads not blocked by another stale current head in strict Cause closure"}, {"--refs-only", "optional; stable REF-only line protocol; conflicts with explicit --format json"}, {"--scan", "optional; bypass disposable cache reads"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
 		Details: []string{"Stale is derived current review state. It is not structural impact, candidate state, approval, or an automatic repair plan. --scan does not repair canonical state."}, Examples: []string{"sealgraph stale --frontier", "sealgraph stale --frontier --refs-only --scan"}, Related: []string{"status", "show", "candidate compare", "concepts stale", "impact"},
 	},
 	"impact": {
 		Path: "impact", Summary: "Report current downstream Cause reachability from a selected Seal or its revision ancestors.", Usage: []string{"sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]"}, Arguments: []string{"SELECTOR (required): REF, @SEAL_TOKEN, or REF@TOKEN."},
-		Options: []helpOption{{"--all-paths", "optional; emit bounded distinct simple paths instead of one shortest path"}, {"--max-paths N", "optional, once; positive per-downstream limit, requires --all-paths; default 100"}, {"--format human|json", "optional, once; default human"}},
+		Options: []helpOption{{"--all-paths", "optional; emit bounded distinct simple paths instead of one shortest path"}, {"--max-paths N", "optional, once; positive per-downstream limit, requires --all-paths; default 100"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
 		Details: []string{"Path truncation never removes impact membership, skips graph validation, or weakens snapshot revalidation. STRUCTURAL_IMPACT is not a stale-only result."}, Examples: []string{"sealgraph impact requirements/api", "sealgraph impact --all-paths --max-paths 20 requirements/api"}, Related: []string{"selectors", "stale", "graph", "concepts structural-impact"},
 	},
 	"graph": inspectionHelp("graph", "Inspect the active revision DAG and exact Cause edges.", "sealgraph graph [--format human|json]", nil),
@@ -141,8 +141,8 @@ var commandHelpRegistry = map[string]commandHelp{
 
 func inspectionHelp(path, summary, usage string, extra []helpOption) commandHelp {
 	options := append([]helpOption{}, extra...)
-	options = append(options, helpOption{"--format human|json", "optional, once; default human"})
-	return commandHelp{Path: path, Summary: summary, Usage: strings.Split(usage, "\n"), Options: options, Details: []string{"Read-only inspection does not bootstrap, mutate, repair, relink, reseal, or inspect Git."}, Related: []string{"selectors", "concepts"}}
+	options = append(options, helpOption{"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"})
+	return commandHelp{Path: path, Summary: summary, Usage: strings.Split(usage, "\n"), Options: options, Details: []string{"Read-only inspection does not bootstrap, mutate, repair, relink, reseal, or inspect Git. Human output uses aligned columns and abbreviated IDs; JSON keeps full IDs."}, Related: []string{"selectors", "concepts"}}
 }
 
 func printRootHelp(w io.Writer) {
@@ -159,7 +159,7 @@ func printRootHelp(w io.Writer) {
 		fmt.Fprintf(w, "  %-10s %s\n", path, entry.Summary)
 	}
 	fmt.Fprint(w, "\nTopics:\n  selectors  exact selector grammar and resolution\n  concepts   provenance concepts and common distinctions\n  usecases   copyable explicit review workflows\n\nHelp routes:\n  sealgraph --help\n  sealgraph help <command>\n  sealgraph <command> --help\n  sealgraph help candidate show\n\nEach seal operation advances exactly one REF. Navigation explains explicit next actions; it never repairs, relinks, reseals, or selects a REF automatically. Standalone operation uses only explicit inputs and .sealgraph; it does not discover or inspect Git.\n")
-	fmt.Fprint(w, "\nSemantic legend:\n  status separates CANDIDATE_TO_HEAD from WORKFILE_TO_BASELINE.\n  local source binding is not Git tracked membership.\n  REF is a movable logical identity, not a branch or checkout target.\n  STRUCTURAL_IMPACT is Cause reachability; stale is current review state.\n  root marks a provenance boundary, not truth or trust.\n  log/linklog are Seal revision/Cause histories, not Git histories.\n")
+	fmt.Fprint(w, "\nOutput:\n  terminal: aligned human display with abbreviated IDs\n  pipe/file: versioned JSON where supported\n  override: --format human|json\n\nSemantic legend:\n  status separates CANDIDATE_TO_HEAD from WORKFILE_TO_BASELINE.\n  local source binding is not Git tracked membership.\n  REF is a movable logical identity, not a branch or checkout target.\n  STRUCTURAL_IMPACT is Cause reachability; stale is current review state.\n  root marks a provenance boundary, not truth or trust.\n  log/linklog are Seal revision/Cause histories, not Git histories.\n")
 }
 
 func printCommandHelp(w io.Writer, entry commandHelp) {

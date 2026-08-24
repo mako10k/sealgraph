@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/graph"
 	"github.com/mako10k/sealgraph/internal/history"
 	"github.com/mako10k/sealgraph/internal/pathmanifest"
 	"github.com/mako10k/sealgraph/internal/repository"
@@ -122,6 +121,15 @@ func runREF(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "ref drop", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "REF DROPPED",
+			humanField{"REF", result.REF},
+			humanField{"Previous head (prefix)", shortID(result.Head)},
+			humanField{"Tags removed from namespace", strconv.Itoa(result.Tags)},
+			humanField{"Recovery operation", result.OperationID},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "REF_DROPPED ref=%s head=%s tags=%d operation=%s\n", result.REF, result.Head, result.Tags, result.OperationID)
 	return 0
 }
@@ -165,7 +173,7 @@ func sourceREFAndFlags(args []string, command string, configure func(*flag.FlagS
 }
 
 func runSourceBind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, formatErr := extractInspectionFormat(args)
+	args, output, formatErr := extractInspectionFormat(args, stdout)
 	if formatErr != nil {
 		return usageError(stderr, "%v", formatErr)
 	}
@@ -187,15 +195,23 @@ func runSourceBind(ctx context.Context, workDir string, args []string, stdout, s
 	if err != nil {
 		return commandError(stderr, "source bind", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source bind", sourceMutationJSON("bind", binding.REF, "", binding.Path))
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "LOCAL SOURCE BOUND",
+			humanField{"REF", binding.REF},
+			humanField{"Source file", quoteHumanString(binding.Path)},
+			humanField{"Candidate", "unchanged"},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "SOURCE_BOUND ref=%s before=null after=%s candidate=UNCHANGED\n", binding.REF, quoteHumanString(binding.Path))
 	return 0
 }
 
 func runSourceRebind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, formatErr := extractInspectionFormat(args)
+	args, output, formatErr := extractInspectionFormat(args, stdout)
 	if formatErr != nil {
 		return usageError(stderr, "%v", formatErr)
 	}
@@ -218,15 +234,24 @@ func runSourceRebind(ctx context.Context, workDir string, args []string, stdout,
 	if err != nil {
 		return commandError(stderr, "source rebind", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source rebind", sourceMutationJSON("rebind", binding.REF, oldPath.value, binding.Path))
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "LOCAL SOURCE REBOUND",
+			humanField{"REF", binding.REF},
+			humanField{"Previous file", quoteHumanString(oldPath.value)},
+			humanField{"Source file", quoteHumanString(binding.Path)},
+			humanField{"Candidate", "unchanged"},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "SOURCE_REBOUND ref=%s before=%s after=%s candidate=UNCHANGED\n", binding.REF, quoteHumanString(oldPath.value), quoteHumanString(binding.Path))
 	return 0
 }
 
 func runSourceUnbind(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, formatErr := extractInspectionFormat(args)
+	args, output, formatErr := extractInspectionFormat(args, stdout)
 	if formatErr != nil {
 		return usageError(stderr, "%v", formatErr)
 	}
@@ -248,15 +273,23 @@ func runSourceUnbind(ctx context.Context, workDir string, args []string, stdout,
 	if err != nil {
 		return commandError(stderr, "source unbind", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source unbind", sourceMutationJSON("unbind", binding.REF, binding.Path, ""))
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "LOCAL SOURCE UNBOUND",
+			humanField{"REF", binding.REF},
+			humanField{"Previous file", quoteHumanString(binding.Path)},
+			humanField{"Candidate", "unchanged"},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "SOURCE_UNBOUND ref=%s before=%s after=null candidate=UNCHANGED\n", binding.REF, quoteHumanString(binding.Path))
 	return 0
 }
 
 func runSourceShow(workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -271,7 +304,7 @@ func runSourceShow(workDir string, args []string, stdout, stderr io.Writer) int 
 	if err != nil {
 		return commandError(stderr, "source show", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source show", sourceJSON("show", []repository.SourceBinding{binding}))
 	}
 	printSources(stdout, []repository.SourceBinding{binding})
@@ -279,7 +312,7 @@ func runSourceShow(workDir string, args []string, stdout, stderr io.Writer) int 
 }
 
 func runSourceList(workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -294,7 +327,7 @@ func runSourceList(workDir string, args []string, stdout, stderr io.Writer) int 
 	if err != nil {
 		return commandError(stderr, "source list", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source list", sourceJSON("list", bindings))
 	}
 	printSources(stdout, bindings)
@@ -302,7 +335,7 @@ func runSourceList(workDir string, args []string, stdout, stderr io.Writer) int 
 }
 
 func runSourceCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -320,22 +353,15 @@ func runSourceCompare(ctx context.Context, workDir string, args []string, stdout
 	if err != nil {
 		return commandError(stderr, "source compare", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "source compare", sourceCompareJSON(result))
 	}
-	baseline := "-"
-	if result.BaselineContent != nil {
-		baseline = formatContentRef(*result.BaselineContent)
-	}
-	fmt.Fprintf(stdout, "SOURCE_COMPARE ref=%s path=%s baseline=%s relation=%s\n", result.REF, quoteHumanString(result.Path), result.Baseline, result.Relation)
-	fmt.Fprintf(stdout, "BASELINE_CONTENT %s\nWORKFILE_CONTENT native:blob:%s bytes=%d\n", baseline, result.WorkfileID, result.WorkfileBytes)
+	printSourceCompareHuman(stdout, result)
 	return 0
 }
 
 func printSources(stdout io.Writer, bindings []repository.SourceBinding) {
-	for _, binding := range bindings {
-		fmt.Fprintf(stdout, "LOCAL_SOURCE ref=%s path=%s\n", binding.REF, quoteHumanString(binding.Path))
-	}
+	printSourcesHuman(stdout, bindings)
 }
 
 func sourceJSON(operation string, bindings []repository.SourceBinding) map[string]any {
@@ -425,6 +451,10 @@ func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
 	result, err := repository.InitStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "init", err)
+	}
+	if isHumanTerminal(stdout) {
+		printInitHuman(stdout, result)
+		return 0
 	}
 	switch result.Outcome {
 	case repository.InitInitialized:
@@ -560,6 +590,20 @@ func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options
 	if result.SourceBinding == "NONE" {
 		nextSource = "requires-explicit-file-or-source-bind"
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE UPDATED",
+			humanField{"REF", candidate.REF},
+			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
+			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Root boundary", yesNo(candidate.Root)},
+			humanField{"Draft", yesNo(candidate.Draft)},
+			humanField{"Source mode", result.SourceMode},
+			humanField{"Source file", quoteHumanString(result.SourcePath)},
+			humanField{"Source binding", strings.ToLower(result.SourceBinding)},
+			humanField{"Next refresh", strings.ReplaceAll(nextSource, "-", " ")},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=%s source_path=%s source_binding=%s next_source=%s\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft, result.SourceMode, quoteHumanString(result.SourcePath), result.SourceBinding, nextSource)
 	return 0
 }
@@ -576,6 +620,18 @@ func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workD
 	candidate, err := repo.Add(ctx, repository.AddOptions{REF: options.ref, Content: contentBytes, Dependencies: dependencies, Parent: options.parent.value, Root: options.root.value, Draft: options.draft.value})
 	if err != nil {
 		return commandError(stderr, "add", err)
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE UPDATED",
+			humanField{"REF", candidate.REF},
+			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
+			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Root boundary", yesNo(candidate.Root)},
+			humanField{"Draft", yesNo(candidate.Draft)},
+			humanField{"Source mode", "explicit bytes"},
+			humanField{"Source binding", "none"},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=explicit-bytes source_binding=NONE\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
 	return 0
@@ -609,6 +665,17 @@ func runDerive(ctx context.Context, workDir string, args []string, stdout, stder
 	candidate, err := repo.Derive(ctx, ref, source.value)
 	if err != nil {
 		return commandError(stderr, "derive", err)
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE DERIVED",
+			humanField{"REF", candidate.REF},
+			humanField{"Parent revision (prefix)", shortOptionalID(candidate.ParentRevision)},
+			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
+			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Root boundary", yesNo(candidate.Root)},
+			humanField{"Draft", yesNo(candidate.Draft)},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "CANDIDATE %s parent=%s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, formatOptionalObjectID(candidate.ParentRevision), candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
 	return 0
@@ -675,6 +742,13 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "link", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE CAUSES UPDATED",
+			humanField{"REF", candidate.REF},
+			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "CANDIDATE %s dependencies=%d\n", candidate.REF, len(candidate.Links))
 	return 0
 }
@@ -708,6 +782,13 @@ func runUnlink(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "unlink", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE CAUSE REMOVED",
+			humanField{"REF", candidate.REF},
+			humanField{"Causes remaining", strconv.Itoa(len(candidate.Links))},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "CANDIDATE %s dependencies=%d\n", candidate.REF, len(candidate.Links))
 	return 0
 }
@@ -737,6 +818,15 @@ func runTag(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "tag", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "TAG CREATED",
+			humanField{"REF", result.REF},
+			humanField{"Tag name", quoteHumanString(result.Name)},
+			humanField{"Seal ID (prefix)", shortID(result.Seal)},
+			humanField{"Recovery operation", result.OperationID},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "TAGGED %s %s %s", result.REF, strconv.Quote(result.Name), result.Seal)
 	printOperationID(stdout, result.OperationID)
 	return 0
@@ -753,6 +843,14 @@ func runTagList(ctx context.Context, workDir, ref string, stdout, stderr io.Writ
 	tags, err := repo.Tags(ctx, ref)
 	if err != nil {
 		return commandError(stderr, "tag", err)
+	}
+	if isHumanTerminal(stdout) {
+		humanTags := make([]humanTag, 0, len(tags))
+		for _, tag := range tags {
+			humanTags = append(humanTags, humanTag{name: tag.Name, seal: tag.Seal})
+		}
+		printTagsHuman(stdout, ref, humanTags)
+		return 0
 	}
 	for _, tag := range tags {
 		fmt.Fprintf(stdout, "TAG %s %s %s\n", ref, strconv.Quote(tag.Name), tag.Seal)
@@ -780,6 +878,16 @@ func runMove(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "mv", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "REF MOVED",
+			humanField{"From", result.OldREF},
+			humanField{"To", result.NewREF},
+			humanField{"Head Seal ID (prefix)", shortID(result.Head)},
+			humanField{"Tags moved", strconv.Itoa(result.Tags)},
+			humanField{"Recovery operation", result.OperationID},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "MOVED %s %s %s tags=%d", result.OldREF, result.NewREF, result.Head, result.Tags)
 	printOperationID(stdout, result.OperationID)
 	return 0
@@ -804,6 +912,14 @@ func runSeal(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "seal", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "SEALED",
+			humanField{"REF", ref},
+			humanField{"Seal ID (prefix)", shortID(result.ID)},
+			humanField{"Recovery operation", result.OperationID},
+		)
+		return 0
+	}
 	fmt.Fprintf(stdout, "SEALED %s %s operation=%s\n", ref, result.ID, result.OperationID)
 	return 0
 }
@@ -816,7 +932,7 @@ func printOperationID(stdout io.Writer, id string) {
 }
 
 func runRecover(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -839,10 +955,10 @@ func runRecover(ctx context.Context, workDir string, args []string, stdout, stde
 		if err != nil {
 			return commandError(stderr, "recover show", err)
 		}
-		if outputJSON {
+		if output.JSON {
 			return writeInspectionJSON(stdout, stderr, "recover show", recoveryInspectionsJSON(inspections))
 		}
-		printRecoveryInspections(stdout, inspections)
+		printRecoveryInspectionsHuman(stdout, inspections)
 		return 0
 	}
 	if len(args) != 1 {
@@ -852,28 +968,22 @@ func runRecover(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "recover", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "recover", map[string]any{"schema": "sealgraph/recover/v1", "operation_id": result.ID, "kind": result.Kind, "result": "RECOVERED"})
+	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "RECOVERED",
+			humanField{"Operation ID", result.ID},
+			humanField{"Kind", result.Kind},
+		)
+		return 0
 	}
 	fmt.Fprintf(stdout, "RECOVERED operation=%s kind=%s\n", result.ID, result.Kind)
 	return 0
 }
 
-func printRecoveryInspections(stdout io.Writer, inspections []repository.RecoveryInspection) {
-	for _, inspection := range inspections {
-		fmt.Fprintf(stdout, "RECOVERY operation=%s kind=%s journal=%s status=%s", inspection.ID, inspection.Kind, inspection.Journal, inspection.Status)
-		if inspection.Corrupt != "" {
-			fmt.Fprintf(stdout, " error=%s", quoteHumanString(inspection.Corrupt))
-		}
-		fmt.Fprintln(stdout)
-		for _, transition := range inspection.Transitions {
-			fmt.Fprintf(stdout, "  REF %s current=%s\n", transition.REF, transition.Current)
-		}
-	}
-}
-
 func runShow(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -893,7 +1003,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if _, err := repository.ParseSelector(selector); err != nil {
 		return usageDiagnostic(stderr, "show", fmt.Sprintf("invalid selector: %v", err), "use REF, @SEAL_TOKEN, or REF@TOKEN; inspect the exact grammar with `sealgraph help selectors`")
 	}
-	if outputJSON && *rawContent {
+	if output.Explicit && output.JSON && *rawContent {
 		return usageError(stderr, "show --format json and --raw-content are mutually exclusive")
 	}
 	repo, err := repository.OpenStandalone(workDir)
@@ -907,29 +1017,10 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if *rawContent {
 		return writeRawContent(stdout, stderr, "show", result.Content)
 	}
-	if outputJSON {
+	if output.JSON && !*rawContent {
 		return writeInspectionJSON(stdout, stderr, "show", showJSON(result))
 	}
-	fmt.Fprintf(stdout, "SEAL %s\n", result.ID)
-	if len(result.REFNames) == 0 {
-		fmt.Fprintln(stdout, "CURRENT_REFS -")
-	} else {
-		fmt.Fprintf(stdout, "CURRENT_REFS %s\n", strings.Join(result.REFNames, ","))
-	}
-	if result.Payload.ParentRevision == nil {
-		fmt.Fprintln(stdout, "PARENT_REVISION -")
-	} else {
-		fmt.Fprintf(stdout, "PARENT_REVISION %s\n", result.Payload.ParentRevision)
-	}
-	printContentSummary(stdout, result.Payload.Content, result.Content)
-	fmt.Fprintf(stdout, "ROOT %t\nDRAFT %t\nATTACHMENTS %d\n", result.Payload.Root, result.Payload.Draft, len(result.Payload.Attachments))
-	for _, attachment := range result.Payload.Attachments {
-		fmt.Fprintf(stdout, "  attachment name=%s media_type=%s blob=%s\n", quoteHumanString(attachment.Name), quoteHumanString(attachment.MediaType), formatContentRef(attachment.Blob))
-	}
-	fmt.Fprintf(stdout, "DEPENDENCIES %d\n", len(result.Payload.Links))
-	for _, link := range result.Payload.Links {
-		fmt.Fprintf(stdout, "  depend-on @%s message=%s\n", link.TargetSeal, quoteHumanString(link.Message))
-	}
+	printShowHuman(stdout, result)
 	return 0
 }
 
@@ -952,6 +1043,10 @@ func runCandidate(ctx context.Context, workDir string, args []string, stdout, st
 }
 
 func runCandidateShow(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, output, formatErr := extractInspectionFormat(args, stdout)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
 	if len(args) == 0 {
 		return usageError(stderr, "candidate show requires exactly one logical REF")
 	}
@@ -968,6 +1063,9 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 	if flags.NArg() != 0 {
 		return usageError(stderr, "candidate show accepts exactly one REF; unexpected argument %q", flags.Arg(0))
 	}
+	if output.Explicit && output.JSON && *rawContent {
+		return usageError(stderr, "candidate show --format json and --raw-content are mutually exclusive")
+	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "candidate show", err)
@@ -979,11 +1077,18 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 	if *rawContent {
 		return writeRawContent(stdout, stderr, "candidate show", inspection.Content)
 	}
+	if output.JSON {
+		return writeInspectionJSON(stdout, stderr, "candidate show", candidateShowJSON(inspection))
+	}
 	printCandidateInspection(stdout, inspection)
 	return 0
 }
 
 func runCandidateCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, output, formatErr := extractInspectionFormat(args, stdout)
+	if formatErr != nil {
+		return usageError(stderr, "%v", formatErr)
+	}
 	if len(args) != 1 {
 		return usageError(stderr, "candidate compare requires exactly one logical REF")
 	}
@@ -998,6 +1103,9 @@ func runCandidateCompare(ctx context.Context, workDir string, args []string, std
 	result, err := repo.DiffCandidate(ctx, ref)
 	if err != nil {
 		return commandError(stderr, "candidate compare", err)
+	}
+	if output.JSON {
+		return writeInspectionJSON(stdout, stderr, "candidate compare", candidateCompareJSON(result))
 	}
 	printCandidateDiff(stdout, result)
 	return 0
@@ -1018,48 +1126,24 @@ func runCandidateDiscard(ctx context.Context, workDir string, args []string, std
 	if err := repo.DiscardCandidate(ctx, ref); err != nil {
 		return commandError(stderr, "candidate discard", err)
 	}
+	if isHumanTerminal(stdout) {
+		printHumanReceipt(stdout, "CANDIDATE DISCARDED", humanField{"REF", ref})
+		return 0
+	}
 	fmt.Fprintf(stdout, "DISCARDED CANDIDATE %s\n", ref)
 	return 0
 }
 
 func printCandidateInspection(stdout io.Writer, inspection repository.CandidateInspection) {
-	candidate := inspection.Candidate
-	fmt.Fprintf(stdout, "REF %s\nCANDIDATE\nPARENT_REVISION %s\nEXPECTED_REF_HEAD %s\nCURRENT_HEAD %s\nEXPECTED_HEAD_STATE %s\n", candidate.REF, formatOptionalObjectID(candidate.ParentRevision), formatOptionalObjectID(candidate.ExpectedREFHead), formatOptionalObjectID(inspection.CurrentHead), inspection.ExpectedHeadState)
-	printContentSummary(stdout, candidate.Content, inspection.Content)
-	fmt.Fprintf(stdout, "ROOT %t\nDRAFT %t\nATTACHMENTS %d\n", candidate.Root, candidate.Draft, len(candidate.Attachments))
-	for _, attachment := range candidate.Attachments {
-		fmt.Fprintf(stdout, "  attachment name=%s media_type=%s blob=%s\n", quoteHumanString(attachment.Name), quoteHumanString(attachment.MediaType), formatContentRef(attachment.Blob))
-	}
-	fmt.Fprintf(stdout, "DEPENDENCIES %d\n", len(candidate.Links))
-	for _, link := range candidate.Links {
-		fmt.Fprintf(stdout, "  depend-on @%s message=%s\n", link.TargetSeal, quoteHumanString(link.Message))
-	}
+	printCandidateInspectionHuman(stdout, inspection)
 }
 
 func printCandidateDiff(stdout io.Writer, result repository.CandidateDiffResult) {
-	inspection, diff := result.Inspection, result.Diff
-	candidate := inspection.Candidate
-	fmt.Fprintf(stdout, "REF %s\nFROM %s\nTO CANDIDATE\nPARENT_REVISION %s\nEXPECTED_REF_HEAD %s\nCURRENT_HEAD %s\nEXPECTED_HEAD_STATE %s\n", candidate.REF, formatOptionalObjectID(candidate.ParentRevision), formatOptionalObjectID(candidate.ParentRevision), formatOptionalObjectID(candidate.ExpectedREFHead), formatOptionalObjectID(inspection.CurrentHead), inspection.ExpectedHeadState)
-	if diff.Initial {
-		fmt.Fprintf(stdout, "CONTENT ADD new=%s\n", formatContentRef(diff.Content.After))
-		fmt.Fprintf(stdout, "ATTACHMENTS SET count=%d\n", len(candidate.Attachments))
-		for _, change := range diff.Attachments {
-			printAttachmentChange(stdout, change)
-		}
-		fmt.Fprintf(stdout, "LINKS SET count=%d\n", len(candidate.Links))
-		for _, change := range diff.Links {
-			printLinkChange(stdout, "  LINK_", change)
-		}
-		fmt.Fprintf(stdout, "ROOT SET value=%t\nDRAFT SET value=%t\n", candidate.Root, candidate.Draft)
-		return
-	}
-	printMaterialStateDiff(stdout, diff.Content, diff.Attachments, diff.Links)
-	printBoolChange(stdout, "ROOT", diff.Root)
-	printBoolChange(stdout, "DRAFT", diff.Draft)
+	printCandidateDiffHuman(stdout, result)
 }
 
 func runLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1077,15 +1161,15 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return commandError(stderr, "log", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "log", logJSON(args[0], entries))
 	}
-	printLog(stdout, args[0], entries)
+	printLogHuman(stdout, args[0], entries)
 	return 0
 }
 
 func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1118,15 +1202,15 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "linklog", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "linklog", linkLogJSON(args[0], target, entries))
 	}
-	printLinkLog(stdout, args[0], target, entries)
+	printLinkLogHuman(stdout, args[0], target, entries)
 	return 0
 }
 
 func runCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1155,112 +1239,11 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "compare", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "compare", compareJSON(result))
 	}
-	printSealDiff(stdout, result)
+	printSealDiffHuman(stdout, result)
 	return 0
-}
-
-func printLog(stdout io.Writer, ref string, entries []history.Entry) {
-	fmt.Fprintf(stdout, "REF %s\n", ref)
-	for _, entry := range entries {
-		fmt.Fprintf(stdout, "SEAL %s\n", entry.ID)
-		fmt.Fprintf(stdout, "  PARENT_REVISION %s\n", formatOptionalObjectID(entry.Payload.ParentRevision))
-		fmt.Fprintf(stdout, "  ROOT %t\n", entry.Payload.Root)
-		fmt.Fprintf(stdout, "  DRAFT %t\n", entry.Payload.Draft)
-		fmt.Fprintf(stdout, "  CONTENT %s\n", formatContentRef(entry.Payload.Content))
-		fmt.Fprintf(stdout, "  DEPENDENCIES %d\n", len(entry.Payload.Links))
-		for _, link := range entry.Payload.Links {
-			fmt.Fprintf(stdout, "    depend-on @%s message=%s\n", link.TargetSeal, quoteHumanString(link.Message))
-		}
-	}
-}
-
-func printLinkLog(stdout io.Writer, ref, upstream string, entries []history.LinkLogEntry) {
-	fmt.Fprintf(stdout, "REF %s\n", ref)
-	if upstream != "" {
-		fmt.Fprintf(stdout, "UPSTREAM %s\n", upstream)
-	}
-	for _, entry := range entries {
-		fmt.Fprintf(stdout, "SEAL %s\n", entry.Entry.ID)
-		fmt.Fprintf(stdout, "  PARENT_REVISION %s\n", formatOptionalObjectID(entry.Entry.Payload.ParentRevision))
-		if len(entry.Changes) == 0 {
-			fmt.Fprintln(stdout, "  NO_LINK_CHANGES")
-			continue
-		}
-		for _, change := range entry.Changes {
-			printLinkChange(stdout, "  LINK_", change)
-		}
-	}
-}
-
-func printSealDiff(stdout io.Writer, diff history.SealDiff) {
-	fmt.Fprintf(stdout, "FROM %s\nTO %s\n", diff.From, diff.To)
-	printMaterialStateDiff(stdout, diff.Content, diff.Attachments, diff.Links)
-	printBoolChange(stdout, "ROOT", diff.Root)
-	printBoolChange(stdout, "DRAFT", diff.Draft)
-	if diff.Parent.Changed {
-		fmt.Fprintf(stdout, "PARENT CHANGED old=%s new=%s\n", formatOptionalObjectID(diff.Parent.Before), formatOptionalObjectID(diff.Parent.After))
-	} else {
-		fmt.Fprintf(stdout, "PARENT UNCHANGED value=%s\n", formatOptionalObjectID(diff.Parent.Before))
-	}
-}
-
-func printMaterialStateDiff(stdout io.Writer, content history.ValueChange[domain.ContentRef], attachments []history.AttachmentChangeRecord, links []history.LinkChange) {
-	if content.Changed {
-		fmt.Fprintf(stdout, "CONTENT CHANGED old=%s new=%s\n", formatContentRef(content.Before), formatContentRef(content.After))
-	} else {
-		fmt.Fprintf(stdout, "CONTENT UNCHANGED value=%s\n", formatContentRef(content.Before))
-	}
-	if len(attachments) == 0 {
-		fmt.Fprintln(stdout, "ATTACHMENTS UNCHANGED")
-	} else {
-		fmt.Fprintf(stdout, "ATTACHMENTS CHANGED count=%d\n", len(attachments))
-		for _, change := range attachments {
-			printAttachmentChange(stdout, change)
-		}
-	}
-	if len(links) == 0 {
-		fmt.Fprintln(stdout, "LINKS UNCHANGED")
-	} else {
-		fmt.Fprintf(stdout, "LINKS CHANGED count=%d\n", len(links))
-		for _, change := range links {
-			printLinkChange(stdout, "  LINK_", change)
-		}
-	}
-}
-
-func printLinkChange(stdout io.Writer, prefix string, change history.LinkChange) {
-	switch change.Kind {
-	case history.LinkAdd:
-		fmt.Fprintf(stdout, "%sADD target=%s message=%s\n", prefix, change.TargetSeal, quoteHumanString(change.AfterMessage))
-	case history.LinkRemove:
-		fmt.Fprintf(stdout, "%sREMOVE target=%s message=%s\n", prefix, change.TargetSeal, quoteHumanString(change.BeforeMessage))
-	case history.LinkRepoint:
-		fmt.Fprintf(stdout, "%sREPOINT old=%s new=%s old_message=%s new_message=%s\n", prefix, formatOptionalObjectID(change.BeforeSeal), formatOptionalObjectID(change.AfterSeal), quoteHumanString(change.BeforeMessage), quoteHumanString(change.AfterMessage))
-	case history.LinkMessage:
-		fmt.Fprintf(stdout, "%sMESSAGE_CHANGE target=%s old=%s new=%s\n", prefix, change.TargetSeal, quoteHumanString(change.BeforeMessage), quoteHumanString(change.AfterMessage))
-	}
-}
-
-func printAttachmentChange(stdout io.Writer, change history.AttachmentChangeRecord) {
-	switch change.Kind {
-	case history.AttachmentAdd:
-		fmt.Fprintf(stdout, "  ATTACHMENT_ADD name=%s media_type=%s blob=%s\n", quoteHumanString(change.Name), quoteHumanString(change.After.MediaType), formatContentRef(change.After.Blob))
-	case history.AttachmentRemove:
-		fmt.Fprintf(stdout, "  ATTACHMENT_REMOVE name=%s media_type=%s blob=%s\n", quoteHumanString(change.Name), quoteHumanString(change.Before.MediaType), formatContentRef(change.Before.Blob))
-	case history.AttachmentChange:
-		fmt.Fprintf(stdout, "  ATTACHMENT_CHANGE name=%s old_media_type=%s new_media_type=%s old_blob=%s new_blob=%s\n", quoteHumanString(change.Name), quoteHumanString(change.Before.MediaType), quoteHumanString(change.After.MediaType), formatContentRef(change.Before.Blob), formatContentRef(change.After.Blob))
-	}
-}
-
-func printBoolChange(stdout io.Writer, name string, change history.ValueChange[bool]) {
-	if change.Changed {
-		fmt.Fprintf(stdout, "%s CHANGED old=%t new=%t\n", name, change.Before, change.After)
-	} else {
-		fmt.Fprintf(stdout, "%s UNCHANGED value=%t\n", name, change.Before)
-	}
 }
 
 func formatOptionalObjectID(id *domain.ObjectID) string {
@@ -1270,21 +1253,7 @@ func formatOptionalObjectID(id *domain.ObjectID) string {
 	return id.String()
 }
 
-func formatContentRef(ref domain.ContentRef) string {
-	return ref.Store + "/" + ref.Type + "@" + ref.ID.String()
-}
-
 const contentPreviewLimit = 256
-
-func printContentSummary(stdout io.Writer, ref domain.ContentRef, content []byte) {
-	preview := content
-	truncated := len(content) > contentPreviewLimit
-	if truncated {
-		preview = content[:contentPreviewLimit]
-	}
-	fmt.Fprintf(stdout, "CONTENT %s bytes=%d\n", formatContentRef(ref), len(content))
-	fmt.Fprintf(stdout, "CONTENT_PREVIEW %s truncated=%t\n", quoteHumanBytes(preview), truncated)
-}
 
 func quoteHumanString(value string) string { return quoteHumanBytes([]byte(value)) }
 
@@ -1327,7 +1296,7 @@ func writeRawContent(stdout io.Writer, stderr io.Writer, command string, content
 }
 
 func runStatus(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1346,15 +1315,10 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "status", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v2", statuses, nil))
 	}
-	fmt.Fprintln(stdout, "SEALED_STATE")
-	if len(statuses) == 0 {
-		fmt.Fprintln(stdout, "NO_REFS_CANDIDATES_OR_LOCAL_SOURCES")
-		return 0
-	}
-	printStatuses(stdout, statuses)
+	printStatusesHuman(stdout, "SEALED_STATE", statuses)
 	return 0
 }
 
@@ -1363,7 +1327,7 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 		printStaleHelp(stdout)
 		return 0
 	}
-	args, outputJSON, formatErr := extractInspectionFormat(args)
+	args, output, formatErr := extractInspectionFormat(args, stdout)
 	if formatErr != nil {
 		return usageError(stderr, "%v", formatErr)
 	}
@@ -1381,7 +1345,7 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 	if flags.NArg() != 0 {
 		return usageError(stderr, "stale accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
-	if outputJSON && refsOnly.value {
+	if output.Explicit && output.JSON && refsOnly.value {
 		return usageError(stderr, "stale --format json and --refs-only are mutually exclusive")
 	}
 	repo, err := repository.OpenStandalone(workDir)
@@ -1401,15 +1365,15 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 		}
 		return 0
 	}
-	if outputJSON {
+	if output.JSON && !refsOnly.value {
 		return writeInspectionJSON(stdout, stderr, "stale", statusesJSON("sealgraph/stale/v1", statuses, map[string]any{"frontier": frontier.value, "scan": scan.value}))
 	}
-	printStatuses(stdout, statuses)
+	printStatusesHuman(stdout, "STALE_REVIEW_STATE", statuses)
 	return 0
 }
 
 func runImpact(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, formatErr := extractInspectionFormat(args)
+	args, output, formatErr := extractInspectionFormat(args, stdout)
 	if formatErr != nil {
 		return usageError(stderr, "%v", formatErr)
 	}
@@ -1445,16 +1409,15 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "impact", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "impact", impactJSON(source, impacts, allPaths.value, limit))
 	}
-	fmt.Fprintln(stdout, "STRUCTURAL_IMPACT")
-	printImpacts(stdout, source, impacts, limit)
+	printImpactsHuman(stdout, source, impacts, limit)
 	return 0
 }
 
 func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1469,16 +1432,15 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 	if err != nil {
 		return commandError(stderr, "graph", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "graph", graphJSON(nodes))
 	}
-	fmt.Fprintln(stdout, "REVISION_CAUSE_GRAPH")
-	printGraph(stdout, nodes)
+	printGraphHuman(stdout, nodes)
 	return 0
 }
 
 func runFsck(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	args, outputJSON, err := extractInspectionFormat(args)
+	args, output, err := extractInspectionFormat(args, stdout)
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
@@ -1493,16 +1455,10 @@ func runFsck(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if err != nil {
 		return commandError(stderr, "fsck", err)
 	}
-	if outputJSON {
+	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "fsck", fsckJSON(report))
 	}
-	fmt.Fprintf(stdout, "FSCK_OK objects=%d seals=%d material_objects=%d refs=%d tags=%d active_seals=%d historical_or_detached=%d unreferenced_objects=%d\n", report.Objects, report.Seals, report.MaterialObjects, report.REFs, report.Tags, report.ActiveSeals, len(report.HistoricalOrDetachedSeals), len(report.UnreferencedObjects))
-	for _, id := range report.HistoricalOrDetachedSeals {
-		fmt.Fprintf(stdout, "HISTORICAL_OR_DETACHED_SEAL %s\n", id)
-	}
-	for _, id := range report.UnreferencedObjects {
-		fmt.Fprintf(stdout, "UNREFERENCED_OBJECT %s\n", id)
-	}
+	printFsckHuman(stdout, report)
 	return 0
 }
 
@@ -1518,53 +1474,6 @@ func parseImpactLimit(allPaths bool, value singleString) (int, error) {
 		return 0, fmt.Errorf("--max-paths requires a positive integer, got %q", value.value)
 	}
 	return parsed, nil
-}
-
-func printImpacts(stdout io.Writer, source domain.ObjectID, impacts []graph.Impact, limit int) {
-	fmt.Fprintf(stdout, "SOURCE %s\n", source)
-	for _, impact := range impacts {
-		fmt.Fprintf(stdout, "IMPACT %s refs=%s paths=%d\n", impact.Head, strings.Join(impact.REFs, ","), len(impact.Paths))
-		for _, path := range impact.Paths {
-			parts := make([]string, len(path))
-			for i, id := range path {
-				parts[i] = id.String()
-			}
-			fmt.Fprintf(stdout, "  PATH %s\n", strings.Join(parts, " -> "))
-		}
-		if impact.Truncated {
-			fmt.Fprintf(stdout, "  PATHS_TRUNCATED max=%d\n", limit)
-		}
-	}
-}
-
-func printGraph(stdout io.Writer, nodes []repository.GraphNode) {
-	for _, node := range nodes {
-		refs := "-"
-		if len(node.REFs) != 0 {
-			refs = strings.Join(node.REFs, ",")
-		}
-		fmt.Fprintf(stdout, "SEAL %s state=%s refs=%s parent=%s\n", node.ID, node.State, refs, formatOptionalObjectID(node.Parent))
-		for _, link := range node.Links {
-			fmt.Fprintf(stdout, "  CAUSE %s state=%s\n", link.Target, link.State)
-		}
-	}
-}
-
-func printStatuses(stdout io.Writer, statuses []repository.RefStatus) {
-	for _, status := range statuses {
-		candidateRelation := "NO_CANDIDATE"
-		if status.Unsealed {
-			candidateRelation = "UNSEALED"
-		}
-		fmt.Fprintf(stdout, "%s CANDIDATE_TO_HEAD=%s SEALED_STATE=%s", status.REF, candidateRelation, strings.Join(sealedStatusLabels(status.Labels()), ","))
-		if status.Head != nil {
-			fmt.Fprintf(stdout, " %s", status.Head)
-		}
-		fmt.Fprintln(stdout)
-		if status.Source != nil {
-			fmt.Fprintf(stdout, "  WORKFILE_TO_%s=%s path=%s\n", status.Source.Baseline, status.Source.Relation, quoteHumanString(status.Source.Path))
-		}
-	}
 }
 
 func parseDependencies(values []string, message string) ([]repository.Dependency, error) {
@@ -1871,7 +1780,9 @@ func printStaleHelp(w io.Writer) {
 
 The result is a coherent current-head observation. --scan bypasses the
 disposable revision cache; no form repairs, relinks, or seals provenance.
---refs-only is a separate stable line protocol and cannot be combined with JSON.
+--refs-only is a separate stable line protocol and cannot be combined with an
+explicit --format json. Without --format, terminals use human output and
+non-terminal destinations use versioned JSON.
 `)
 }
 

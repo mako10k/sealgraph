@@ -7,6 +7,10 @@ status v2 separates sealed/candidate facts from an explicit local
 workfile/baseline relation. The remaining inspection terminology stays in
 force.
 
+ADR 0022 supersedes this ADR's omitted-`--format` default: human output is the
+default on a terminal and versioned JSON is the default for known non-terminal
+stdout. Explicit `--format human|json` remains authoritative.
+
 ## Context
 
 Human inspection text was being scraped by dogfood receipts, familiar Git words

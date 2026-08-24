@@ -251,12 +251,163 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 	}
 }
 
+type sizedTerminalBuffer struct {
+	bytes.Buffer
+	width int
+}
+
+func (buffer *sizedTerminalBuffer) TerminalSize() (int, int) { return buffer.width, 24 }
+
+func TestCLIHumanGraphUsesShortAlignedWidthAwareHierarchy(t *testing.T) {
+	fixture := newCLIRevisionFixture(t)
+	var stdout sizedTerminalBuffer
+	stdout.width = 72
+	var stderr bytes.Buffer
+	code := runStandaloneAtWithInput(fixture.dir, []string{"graph"}, bytes.NewReader(nil), &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("graph code=%d stderr=%q", code, stderr.String())
+	}
+	text := stdout.String()
+	if !strings.Contains(text, "RELATION") || !strings.Contains(text, "SEAL ID (PREFIX)") || !strings.Contains(text, "  Cause") {
+		t.Fatalf("human graph lacks aligned hierarchy:\n%s", text)
+	}
+	if strings.Contains(text, fixture.root1) || strings.Contains(text, fixture.root2) {
+		t.Fatalf("human graph exposed a full Seal ID:\n%s", text)
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if width := displayWidth(line); width > stdout.width {
+			t.Fatalf("line width=%d exceeds terminal width=%d: %q", width, stdout.width, line)
+		}
+	}
+	lines := strings.Split(text, "\n")
+	headerIndex, sealIndex := -1, -1
+	for _, line := range lines {
+		if strings.HasPrefix(line, "RELATION") {
+			headerIndex = strings.Index(line, "SEAL ID")
+		}
+		if strings.HasPrefix(line, "Seal") {
+			sealIndex = strings.Index(line, fixture.root2[:12])
+			if sealIndex >= 0 {
+				break
+			}
+		}
+	}
+	if headerIndex < 0 || sealIndex != headerIndex {
+		t.Fatalf("Seal ID column is not aligned: header=%d row=%d\n%s", headerIndex, sealIndex, text)
+	}
+
+	var narrow sizedTerminalBuffer
+	narrow.width = 40
+	stderr.Reset()
+	code = runStandaloneAtWithInput(fixture.dir, []string{"graph"}, bytes.NewReader(nil), &narrow, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("narrow graph code=%d stderr=%q", code, stderr.String())
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(narrow.String(), "\n"), "\n") {
+		if width := displayWidth(line); width > narrow.width {
+			t.Fatalf("narrow line width=%d exceeds terminal width=%d: %q", width, narrow.width, line)
+		}
+	}
+}
+
+func TestDisplayWidthCountsWideRunes(t *testing.T) {
+	if width := displayWidth("日本A"); width != 5 {
+		t.Fatalf("East Asian display width=%d, want 5", width)
+	}
+}
+
+func TestCLITerminalMutationReceiptsAbbreviateHashes(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	contentID := domain.ComputeNativeBlobID([]byte("root")).String()
+	var stdout sizedTerminalBuffer
+	stdout.width = 80
+	var stderr bytes.Buffer
+	code := runStandaloneAtWithInput(dir, []string{"add", "root", "--root", "--content", "root"}, bytes.NewReader(nil), &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("terminal add code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "CANDIDATE UPDATED") || !strings.Contains(stdout.String(), contentID[:12]) || strings.Contains(stdout.String(), contentID) {
+		t.Fatalf("terminal add did not abbreviate content ID:\n%s", stdout.String())
+	}
+	stdout.Reset()
+	code = runStandaloneAtWithInput(dir, []string{"seal", "root"}, bytes.NewReader(nil), &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("terminal seal code=%d stderr=%q", code, stderr.String())
+	}
+	show := decodeCLIJSON(t, mustRunCLI(t, dir, "show", "root", "--format", "json"))
+	sealID := show["seal_id"].(string)
+	if !strings.Contains(stdout.String(), "SEALED") || !strings.Contains(stdout.String(), sealID[:12]) || strings.Contains(stdout.String(), sealID) {
+		t.Fatalf("terminal seal did not abbreviate Seal ID:\n%s", stdout.String())
+	}
+}
+
+func TestCLINonTerminalDefaultsToJSONAndExplicitHumanOverrides(t *testing.T) {
+	fixture := newCLIRevisionFixture(t)
+	path := filepath.Join(t.TempDir(), "output")
+	code, data, stderr := runCLIToRegularFile(t, fixture.dir, path, "status")
+	if code != 0 || stderr != "" {
+		t.Fatalf("redirected status code=%d stderr=%q", code, stderr)
+	}
+	value := decodeCLIJSON(t, string(data))
+	if value["schema"] != "sealgraph/status/v2" {
+		t.Fatalf("redirected status=%s", data)
+	}
+
+	code, data, stderr = runCLIToRegularFile(t, fixture.dir, path, "status", "--format", "human")
+	if code != 0 || stderr != "" {
+		t.Fatalf("explicit human status code=%d stderr=%q", code, stderr)
+	}
+	if !strings.HasPrefix(string(data), "SEALED_STATE\n") {
+		t.Fatalf("explicit human status=%s", data)
+	}
+
+	mustRunCLI(t, fixture.dir, "add", "root", "--root", "--content", "root-v3")
+	code, data, stderr = runCLIToRegularFile(t, fixture.dir, path, "candidate", "show", "root")
+	if code != 0 || stderr != "" {
+		t.Fatalf("redirected candidate show code=%d stderr=%q", code, stderr)
+	}
+	value = decodeCLIJSON(t, string(data))
+	if value["schema"] != "sealgraph/candidate-show/v1" {
+		t.Fatalf("redirected candidate show=%s", data)
+	}
+	comparison := decodeCLIJSON(t, mustRunCLI(t, fixture.dir, "candidate", "compare", "root", "--format", "json"))
+	if comparison["schema"] != "sealgraph/candidate-compare/v1" {
+		t.Fatalf("candidate comparison JSON=%v", comparison)
+	}
+	code, data, stderr = runCLIToRegularFile(t, fixture.dir, path, "candidate", "show", "root", "--raw-content")
+	if code != 0 || stderr != "" {
+		t.Fatalf("redirected raw candidate show code=%d stderr=%q", code, stderr)
+	}
+	if string(data) != "root-v3" {
+		t.Fatalf("redirected raw candidate bytes=%q", data)
+	}
+}
+
+func runCLIToRegularFile(t *testing.T, dir, path string, args ...string) (int, []byte, string) {
+	t.Helper()
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	code := runStandaloneAtWithInput(dir, args, bytes.NewReader(nil), file, &stderr)
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code, data, stderr.String()
+}
+
 func TestCLIFsckHumanAndJSON(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
 	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
 	mustSealCLI(t, dir, "root")
-	if output := mustRunCLI(t, dir, "fsck"); !strings.HasPrefix(output, "FSCK_OK objects=2 seals=1 material_objects=1 refs=1") {
+	if output := mustRunCLI(t, dir, "fsck"); !strings.HasPrefix(output, "REPOSITORY CHECK: OK\n") || !strings.Contains(output, "Objects") || !strings.Contains(output, "Active Seals") {
 		t.Fatalf("fsck output=%q", output)
 	}
 	value := decodeCLIJSON(t, mustRunCLI(t, dir, "fsck", "--format", "json"))
@@ -374,7 +525,7 @@ func TestCLILocalSourceLifecycleAndContentlessRefresh(t *testing.T) {
 		t.Fatalf("initial output=%q", output)
 	}
 	show := mustRunCLI(t, dir, "source", "show", "spec.md")
-	if !strings.Contains(show, `path="spec.md"`) {
+	if !strings.Contains(show, `"spec.md"`) || !strings.Contains(show, "SOURCE FILE") {
 		t.Fatalf("source show=%q", show)
 	}
 	jsonOutput := decodeCLIJSON(t, mustRunCLI(t, dir, "source", "list", "--format=json"))
@@ -390,11 +541,11 @@ func TestCLILocalSourceLifecycleAndContentlessRefresh(t *testing.T) {
 		t.Fatalf("refresh output=%q", output)
 	}
 	status := mustRunCLI(t, dir, "status", "spec.md")
-	if !strings.Contains(status, "WORKFILE_MATCHES_CANDIDATE") {
+	if !strings.Contains(status, "matches candidate") {
 		t.Fatalf("status=%q", status)
 	}
 	comparison := mustRunCLI(t, dir, "source", "compare", "spec.md")
-	if !strings.Contains(comparison, "baseline=CANDIDATE") || !strings.Contains(comparison, "WORKFILE_MATCHES_CANDIDATE") {
+	if !strings.Contains(comparison, "Compared with") || !strings.Contains(comparison, "candidate") || !strings.Contains(comparison, "matches candidate") {
 		t.Fatalf("source compare=%q", comparison)
 	}
 	comparisonJSON := decodeCLIJSON(t, mustRunCLI(t, dir, "source", "compare", "spec.md", "--format=json"))
@@ -449,7 +600,7 @@ func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
 	}
 	id := strings.TrimPrefix(fields[3], "operation=")
 	show := mustRunCLI(t, dir, "recover", "show", id)
-	if !strings.Contains(show, "status=RECOVERABLE") || !strings.Contains(show, "current=AFTER") {
+	if !strings.Contains(show, "RECOVERABLE") || !strings.Contains(show, "AFTER") {
 		t.Fatalf("recover show=%q", show)
 	}
 	jsonOutput := decodeCLIJSON(t, mustRunCLI(t, dir, "recover", "show", id, "--format=json"))
@@ -469,7 +620,7 @@ func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
 		t.Fatalf("recover result=%v", recovered)
 	}
 	show = mustRunCLI(t, dir, "recover", "show", id)
-	if !strings.Contains(show, "status=ALREADY_RECOVERED") || !strings.Contains(show, "current=BEFORE") {
+	if !strings.Contains(show, "ALREADY_RECOVERED") || !strings.Contains(show, "BEFORE") {
 		t.Fatalf("recovered show=%q", show)
 	}
 	code, stdout, stderr = runCLI(t, dir, nil, "recover", id)
@@ -498,11 +649,11 @@ func TestCLIRefDropEmitsRecoverableReceipt(t *testing.T) {
 		t.Fatalf("drop output=%q", output)
 	}
 	id := strings.TrimPrefix(fields[4], "operation=")
-	if show := mustRunCLI(t, dir, "recover", "show", id); !strings.Contains(show, "kind=ref-drop") || !strings.Contains(show, "status=RECOVERABLE") {
+	if show := mustRunCLI(t, dir, "recover", "show", id); !strings.Contains(show, "ref-drop") || !strings.Contains(show, "RECOVERABLE") {
 		t.Fatalf("drop recovery=%q", show)
 	}
 	mustRunCLI(t, dir, "recover", id)
-	if show := mustRunCLI(t, dir, "show", "root"); !strings.Contains(show, "CURRENT_REFS root") {
+	if show := mustRunCLI(t, dir, "show", "root"); !strings.Contains(show, "Current REF(s)") || !strings.Contains(show, "root") {
 		t.Fatalf("restored REF show=%q", show)
 	}
 }
@@ -553,7 +704,7 @@ func TestCLIFormat4RootAndSelectorShow(t *testing.T) {
 		t.Fatalf("add code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	code, stdout, stderr := runCLI(t, dir, nil, "candidate", "show", "root")
-	if code != 0 || !strings.Contains(stdout, "PARENT_REVISION -") || !strings.Contains(stdout, "EXPECTED_REF_HEAD -") || !strings.Contains(stdout, "EXPECTED_HEAD_STATE EXPECTED_ABSENT") {
+	if code != 0 || !strings.Contains(stdout, "Parent revision") || !strings.Contains(stdout, "Expected REF head") || !strings.Contains(stdout, "expected absent") {
 		t.Fatalf("candidate show code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	code, stdout, stderr = runCLI(t, dir, nil, "seal", "root")
@@ -562,7 +713,7 @@ func TestCLIFormat4RootAndSelectorShow(t *testing.T) {
 	}
 	id := strings.Fields(stdout)[2]
 	code, stdout, stderr = runCLI(t, dir, nil, "show", "@"+id[:12])
-	if code != 0 || !strings.Contains(stdout, "CURRENT_REFS root") || !strings.Contains(stdout, "PARENT_REVISION -") || strings.Contains(stdout, "target_ref") {
+	if code != 0 || !strings.Contains(stdout, "Current REF(s)") || !strings.Contains(stdout, "root") || !strings.Contains(stdout, "Parent revision") || strings.Contains(stdout, "target_ref") {
 		t.Fatalf("show code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 }
@@ -600,7 +751,7 @@ func TestCLILoadPublishesOnlyAfterCanonicalInput(t *testing.T) {
 	if code != 0 || !strings.Contains(stdout, `"schema":"sealgraph/logical-load-receipt/v1"`) || stderr != "" {
 		t.Fatalf("load code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "show", "ROOT"); code != 0 || !strings.Contains(stdout, `CONTENT_PREVIEW "migrated"`) {
+	if code, stdout, stderr := runCLI(t, dir, nil, "show", "ROOT"); code != 0 || !strings.Contains(stdout, `Preview (escaped)`) || !strings.Contains(stdout, `"migrated"`) {
 		t.Fatalf("show loaded code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	other := t.TempDir()
@@ -640,8 +791,17 @@ func TestCLIFormat3DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
 	if code, stdout, stderr := runCLI(t, dir, nil, "show", "root@reviewed/1.0"); code != 1 || stdout != "" || !strings.Contains(stderr, "REF not found") {
 		t.Fatalf("old tag scope code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "show", "archive/root@reviewed/1.0"); code != 0 || !strings.Contains(stdout, rootID) || stderr != "" {
+	verifyMovedTagScope(t, dir, rootID)
+}
+
+func verifyMovedTagScope(t *testing.T, dir, rootID string) {
+	t.Helper()
+	code, stdout, stderr := runCLI(t, dir, nil, "show", "archive/root@reviewed/1.0")
+	if code != 0 || stderr != "" {
 		t.Fatalf("moved tag scope code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, rootID[:12]) || strings.Contains(stdout, rootID) {
+		t.Fatalf("moved tag scope did not abbreviate ID: %s", stdout)
 	}
 }
 
@@ -713,7 +873,7 @@ func verifyCLIStaleAndImpact(t *testing.T, fixture cliRevisionFixture) {
 		t.Fatalf("stale stdout=%q", stdout)
 	}
 	stdout := mustRunCLI(t, fixture.dir, "impact", "--all-paths", "--max-paths", "1", "@"+fixture.root2)
-	if !strings.Contains(stdout, "SOURCE "+fixture.root2) || !strings.Contains(stdout, "refs=leaf") {
+	if !strings.Contains(stdout, "Source Seal ID (prefix)") || !strings.Contains(stdout, fixture.root2[:12]) || !strings.Contains(stdout, "leaf") {
 		t.Fatalf("impact stdout=%q", stdout)
 	}
 	if code, stdout, _ := runCLI(t, fixture.dir, nil, "impact", "--max-paths", "1", "@"+fixture.root2); code != 2 || stdout != "" {
@@ -729,11 +889,11 @@ func verifyCLIDeriveAndHistory(t *testing.T, fixture cliRevisionFixture) {
 	}
 	mustSealCLI(t, fixture.dir, "preserved")
 	stdout = mustRunCLI(t, fixture.dir, "compare", "root")
-	if !strings.Contains(stdout, "FROM "+fixture.root1) || !strings.Contains(stdout, "TO "+fixture.root2) {
+	if !strings.Contains(stdout, "From Seal ID (prefix)") || !strings.Contains(stdout, fixture.root1[:12]) || !strings.Contains(stdout, "To Seal ID (prefix)") || !strings.Contains(stdout, fixture.root2[:12]) {
 		t.Fatalf("diff stdout=%q", stdout)
 	}
 	stdout = mustRunCLI(t, fixture.dir, "log", "root")
-	if strings.Count(stdout, "SEAL ") != 2 {
+	if strings.Count(stdout, "Revision ") != 2 {
 		t.Fatalf("log stdout=%q", stdout)
 	}
 }

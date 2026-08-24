@@ -316,6 +316,13 @@ directly. It MUST use bounded, unambiguous escaping. Exact content extraction
 MAY be provided only by an explicit bytes-only mode whose stdout contains no
 mixed metadata or added newline.
 
+Inspection output MUST default to width-aware human presentation when stdout
+is a terminal and to a versioned structured machine document when stdout is a
+known non-terminal destination. An explicit supported format option overrides
+destination detection. Human object identities MAY be abbreviated for display;
+machine documents and exact identity receipts retain complete identities.
+Bytes-only and stable narrow line protocols remain explicit separate formats.
+
 ## 8. Intentionally absent VCS semantics
 
 Core sealgraph MUST NOT implement Git-like:

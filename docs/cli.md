@@ -45,10 +45,13 @@ human navigation. Hints never select a REF, relink, reseal, repair, or invent a
 review and execute a command explicitly.
 
 This slice does not introduce stable diagnostic codes or a JSON error schema.
-`--format human|json` continues to select successful inspection output only;
-errors remain on stderr and successful command-specific JSON schemas are
-unchanged. A future machine diagnostic contract requires an independently
-versioned schema and compatibility decision.
+`--format human|json` continues to select successful command output only; it
+does not select a diagnostic format.
+When it is omitted, a terminal receives human output and a known non-terminal
+stdout receives the existing command-specific versioned JSON. Errors remain on
+stderr and successful command-specific JSON schemas are unchanged. A future
+machine diagnostic contract requires an independently versioned schema and
+compatibility decision.
 
 ## 1. Common selector grammar
 
@@ -264,8 +267,8 @@ content or Link identity.
 ### `sealgraph candidate`
 
 ```sh
-sealgraph candidate show REF [--raw-content]
-sealgraph candidate compare REF
+sealgraph candidate show REF [--raw-content] [--format human|json]
+sealgraph candidate compare REF [--format human|json]
 sealgraph candidate discard REF
 ```
 
@@ -276,6 +279,12 @@ and publication expectation. It displays `PARENT_REVISION`,
 `candidate compare` compares content, attachments, exact Links/messages,
 root/draft, and `parent_revision` with the immutable parent when present.
 Current HEAD versus `expected_ref_head` is separate publication state.
+
+Candidate machine output uses `sealgraph/candidate-show/v1` and
+`sealgraph/candidate-compare/v1`. Redirected candidate inspection therefore
+defaults to JSON. Explicit `--raw-content` remains exact bytes only and takes
+precedence over destination detection; it conflicts only with an explicitly
+requested JSON format.
 
 `candidate discard` removes only the exact validated candidate file under the
 writer guard. It is itself the explicit confirmation and has no prompt,
@@ -299,10 +308,13 @@ non-draft exact Causes. Parent admissibility is separate; parent never replaces
 the Cause requirement. There is no generic validation bypass.
 
 All native mutations hold one repository-wide writer guard. Before successful
-REF publication, `seal` durably prepares one local recovery record. Success is
-`SEALED REF FULL_SEAL_ID operation=OPERATION_ID`. Candidate cleanup removes
-only the exact version sealed; a newer candidate is retained and reported.
-Dangling immutable objects after failed CAS are reported, not deleted.
+REF publication, `seal` durably prepares one local recovery record. The
+non-terminal success receipt is
+`SEALED REF FULL_SEAL_ID operation=OPERATION_ID`. Terminal output uses aligned
+labels and a 12-character Seal prefix while retaining the full recovery
+operation ID. Candidate cleanup removes only the exact version sealed; a newer
+candidate is retained and reported. Dangling immutable objects after failed
+CAS are reported, not deleted.
 
 ### `sealgraph tag`
 
@@ -312,7 +324,8 @@ sealgraph tag REF TAGNAME
 sealgraph tag REF@SEAL_OR_TAG TAGNAME
 ```
 
-The one-argument form lists the REF's tags in bytewise TAGNAME order as:
+The one-argument form lists the REF's tags in bytewise TAGNAME order. Its
+non-terminal narrow output is:
 
 ```text
 TAG REF "TAGNAME" FULL_SEAL_ID
@@ -326,7 +339,7 @@ HEAD. A hexadecimal scoped token must select the current HEAD or one of its
 `parent_revision` ancestors; an existing tag may select its exact historical
 target. An unscoped `@SEAL_TOKEN` is rejected because it provides no REF UI
 scope. Repeating the same binding is idempotent. Retarget, delete, force, and
-automatic tag creation do not exist. Success is:
+automatic tag creation do not exist. Non-terminal creation success is:
 
 ```text
 TAGGED REF "TAGNAME" FULL_SEAL_ID operation=OPERATION_ID
@@ -343,7 +356,7 @@ to an absent destination with one atomic no-replace rename. Both names must be
 valid and different. Exact candidate state at either name blocks the command;
 the operator seals or discards it explicitly. `mv` never recursively moves a
 prefix REF, rewrites a candidate, creates an old-name alias, modifies a Seal or
-Link, or infers hierarchy from slash spelling. Success is:
+Link, or infers hierarchy from slash spelling. Non-terminal success is:
 
 ```text
 MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N operation=OPERATION_ID
@@ -355,7 +368,7 @@ Removes exactly one complete current REF manifest, including its tag namespace,
 from the active namespace. A candidate or local source binding at the exact REF
 blocks the operation. It never deletes a workfile, candidate, binding, Seal,
 content object, Link, or downstream Seal and has no recursive, prefix, batch,
-or force form. Success includes the recoverable receipt:
+or force form. Non-terminal success includes the recoverable receipt:
 
 ```text
 REF_DROPPED ref=REF head=FULL_HEAD_ID tags=N operation=OPERATION_ID
@@ -399,7 +412,7 @@ worktree-wide `add`, checkout, reset, restore, and clean attempts.
 reports add, remove, ancestry-based repoint, and Link-message change. Ambiguous
 N:M matching stays explicit add/remove.
 
-Default human output never writes arbitrary content/metadata bytes directly.
+Human output never writes arbitrary content/metadata bytes directly.
 Content preview is at most 256 input bytes with bytewise ASCII escaping.
 Printable ASCII is literal except quote/backslash; LF/CR/TAB use
 `\n`/`\r`/`\t`, and other bytes use lower-case `\xhh`.
@@ -598,12 +611,28 @@ explicit path/digest claim builder only. Attachment fields are
 read, preserved by load, and inspected, but beta does not expose `attach` or
 `detach` mutation commands.
 
-`show`, `status`, `stale`, `graph`, `impact`, `log`, `linklog`, and `compare`
-accept `--format human|json` in any argument position. Human is the default;
-JSON uses a command-specific `sealgraph/<command>/v1` schema; source comparison
-uses `sealgraph/source-compare/v1`. Raw content and
-the REF-only line protocol cannot be combined with JSON. JSON contains full
-ObjectID strings and arrays of ObjectIDs for paths, not presentation strings.
+`show`, `candidate show`, `candidate compare`, `status`, `stale`, `graph`,
+`impact`, `log`, `linklog`, and `compare` accept `--format human|json` in any
+argument position. Source and recovery commands documented with `--format`
+follow the same selection rule. With no format option, stdout to a terminal is
+human and stdout to a known non-terminal destination is JSON. JSON uses a
+command-specific versioned schema; source comparison uses
+`sealgraph/source-compare/v1`. Raw content and the REF-only line protocol
+override automatic selection and cannot be combined with an explicitly
+requested JSON format. JSON contains full ObjectID strings and arrays of
+ObjectIDs for paths, not presentation strings.
+
+Human inspection aligns scalar labels and collection columns, shows Seal and
+object identities as 12-character prefixes, indents Cause children and impact
+path hops, and clips long escaped values to the detected terminal width. Full
+identities remain available in JSON. Human wording and field order are
+presentation, not a machine protocol; `--format human` explicitly preserves
+human output when redirecting it.
+
+Successful mutation commands without JSON also use aligned labels and
+12-character hash prefixes on a terminal. When their stdout is non-terminal,
+the documented narrow receipts remain unchanged and contain full identities.
+Recovery operation IDs are not hashes and remain complete in both views.
 
 Human output uses `SEALED_STATE`, `STRUCTURAL_IMPACT`, and
 `REVISION_CAUSE_GRAPH` headings. Status v2 separates candidate/HEAD state from

@@ -56,6 +56,14 @@ sealgraph recover show
 sealgraph load --format logical-v1 < repository.dump.json
 ```
 
+Inspection output is an aligned, terminal-width-aware human view with
+abbreviated IDs when stdout is a terminal. Redirecting or piping a supported
+inspection command selects its versioned JSON automatically; use
+`--format human` or `--format json` to override that choice. Exact raw content
+and `stale --refs-only` remain explicit dedicated formats. Mutation receipts
+also use abbreviated hashes on a terminal while preserving their existing
+full-identity line form when redirected.
+
 `sealgraph init` is standalone even when run inside a Git working tree. It does not detect or inspect `.git`.
 
 The development tree is standalone-only and includes the ADR 0019 local

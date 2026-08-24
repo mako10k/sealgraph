@@ -197,6 +197,8 @@ Parsing and presentation only:
 - stable narrow line protocols;
 - explicit error and next-action text.
 - registry-backed completion candidates and Git-shaped misuse navigation.
+- terminal-width-aware aligned human rendering and destination-based selection
+  of existing versioned machine output.
 
 ### `internal/pathmanifest`
 

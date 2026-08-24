@@ -12,9 +12,14 @@ import (
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
-func extractInspectionFormat(args []string) ([]string, bool, error) {
+type inspectionOutput struct {
+	JSON     bool
+	Explicit bool
+}
+
+func extractInspectionFormat(args []string, stdout io.Writer) ([]string, inspectionOutput, error) {
 	result := make([]string, 0, len(args))
-	format := "human"
+	format := ""
 	seen := false
 	for i := 0; i < len(args); i++ {
 		value := args[i]
@@ -23,23 +28,27 @@ func extractInspectionFormat(args []string) ([]string, bool, error) {
 			continue
 		}
 		if seen {
-			return nil, false, fmt.Errorf("--format may be specified only once")
+			return nil, inspectionOutput{}, fmt.Errorf("--format may be specified only once")
 		}
 		seen = true
 		if value == "--format" {
 			i++
 			if i == len(args) {
-				return nil, false, fmt.Errorf("--format requires human or json")
+				return nil, inspectionOutput{}, fmt.Errorf("--format requires human or json")
 			}
 			format = args[i]
 		} else {
 			format = strings.TrimPrefix(value, "--format=")
 		}
 		if format != "human" && format != "json" {
-			return nil, false, fmt.Errorf("unsupported inspection format %q; expected human or json", format)
+			return nil, inspectionOutput{}, fmt.Errorf("unsupported inspection format %q; expected human or json", format)
 		}
 	}
-	return result, format == "json", nil
+	if seen {
+		return result, inspectionOutput{JSON: format == "json", Explicit: true}, nil
+	}
+	terminal, _, known := outputTerminalInfo(stdout)
+	return result, inspectionOutput{JSON: known && !terminal}, nil
 }
 
 func writeInspectionJSON(stdout, stderr io.Writer, command string, value any) int {
@@ -87,6 +96,66 @@ func showJSON(result repository.ShowResult) map[string]any {
 	value["seal_id"] = result.ID.String()
 	value["current_refs"] = stringsOrEmpty(result.REFNames)
 	value["content_bytes"] = len(result.Content)
+	return value
+}
+
+func candidateShowJSON(inspection repository.CandidateInspection) map[string]any {
+	candidate := inspection.Candidate
+	value := map[string]any{
+		"schema":              "sealgraph/candidate-show/v1",
+		"ref":                 candidate.REF,
+		"parent_revision":     idValue(candidate.ParentRevision),
+		"expected_ref_head":   idValue(candidate.ExpectedREFHead),
+		"current_ref_head":    idValue(inspection.CurrentHead),
+		"expected_head_state": inspection.ExpectedHeadState,
+		"content":             contentJSON(candidate.Content),
+		"content_bytes":       len(inspection.Content),
+		"root":                candidate.Root,
+		"draft":               candidate.Draft,
+	}
+	attachments := make([]any, 0, len(candidate.Attachments))
+	for _, attachment := range candidate.Attachments {
+		attachments = append(attachments, attachmentJSON(attachment))
+	}
+	links := make([]any, 0, len(candidate.Links))
+	for _, link := range candidate.Links {
+		links = append(links, linkJSON(link))
+	}
+	value["attachments"] = attachments
+	value["links"] = links
+	return value
+}
+
+func candidateCompareJSON(result repository.CandidateDiffResult) map[string]any {
+	diff := result.Diff
+	attachments := make([]any, 0, len(diff.Attachments))
+	for _, change := range diff.Attachments {
+		attachments = append(attachments, attachmentChangeJSON(change))
+	}
+	links := make([]any, 0, len(diff.Links))
+	for _, change := range diff.Links {
+		links = append(links, linkChangeJSON(change))
+	}
+	var beforeContent any
+	if !diff.Initial {
+		beforeContent = contentJSON(diff.Content.Before)
+	}
+	return map[string]any{
+		"schema":      "sealgraph/candidate-compare/v1",
+		"candidate":   candidateShowJSON(result.Inspection),
+		"initial":     diff.Initial,
+		"content":     map[string]any{"changed": diff.Initial || diff.Content.Changed, "before": beforeContent, "after": contentJSON(diff.Content.After)},
+		"attachments": attachments,
+		"links":       links,
+		"root":        map[string]any{"changed": diff.Initial || diff.Root.Changed, "before": optionalInitialValue(diff.Initial, diff.Root.Before), "after": diff.Root.After},
+		"draft":       map[string]any{"changed": diff.Initial || diff.Draft.Changed, "before": optionalInitialValue(diff.Initial, diff.Draft.Before), "after": diff.Draft.After},
+	}
+}
+
+func optionalInitialValue(initial bool, value any) any {
+	if initial {
+		return nil
+	}
 	return value
 }
 
