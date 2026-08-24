@@ -9,5 +9,5 @@
 	"checksums_file_sha256": "89bc89ca453c7ea8454f25b43483a6a1e22fc4088faf6d50e00cdf71d1667766",
 	"validation_method": "Run gofmt, vet, unit/integration and race tests, clone/complexity/deadcode analysis, full-inventory fsck, deterministic artifact reproduction, and extracted-artifact smoke tests.",
 	"result": "exact-source-and-artifact-validation-pass",
-	"note": "Source SHA b116644 was validated locally and passed GitHub Actions run 32711251818. Immutable beta.6 tag creation, prerelease publication, independent asset readback, and release installation remain pending."
+	"note": "Source SHA b116644 was validated locally and passed GitHub Actions run 32711251818; publication commit 13d94fa passed run 32711506731. The immutable beta.6 tag, prerelease assets, downloaded hashes, artifact smoke, and local installation were independently read back."
 }

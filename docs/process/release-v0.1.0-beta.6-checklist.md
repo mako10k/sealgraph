@@ -1,8 +1,7 @@
 # v0.1.0-beta.6 release checklist
 
-Status: release candidate preparation in progress. Publication is explicitly
-authorized by the operator request of 2026-08-24 and remains bounded by the
-frozen record below.
+Status: released and independently read back on 2026-08-24. Final evidence is
+recorded in [`release-v0.1.0-beta.6-receipt.md`](release-v0.1.0-beta.6-receipt.md).
 
 ## Frozen scope
 
@@ -38,7 +37,9 @@ frozen record below.
 - [x] Push the exact source SHA and require successful remote CI for it.
 
 Validated source: `b1166444172e0f257cdd09bd14216ca67b505c15`.
-GitHub Actions run: `32711251818` (success).
+Exact-source GitHub Actions run: `32711251818` (success).
+Tag and publication SHA: `13d94fa92c89cd2d29890307e11051a2e813120b`.
+Publication GitHub Actions run: `32711506731` (success).
 
 ## Publication record
 
@@ -56,10 +57,10 @@ maximum tag writes: 1
 maximum GitHub Release writes: 1
 ```
 
-- [ ] Create immutable `v0.1.0-beta.6` exactly once and push through the
+- [x] Create immutable `v0.1.0-beta.6` exactly once and push through the
       authenticated release boundary.
-- [ ] Create one GitHub prerelease with only the approved artifacts and notes.
-- [ ] Independently read back remote tag, prerelease metadata, asset identities,
+- [x] Create one GitHub prerelease with only the approved artifacts and notes.
+- [x] Independently read back remote tag, prerelease metadata, asset identities,
       downloaded hashes, and extracted-artifact smoke.
-- [ ] Install the downloaded binary and verify its version and identity.
-- [ ] Record a final beta.6 release receipt without moving the tag.
+- [x] Install the downloaded binary and verify its version and identity.
+- [x] Record a final beta.6 release receipt without moving the tag.
