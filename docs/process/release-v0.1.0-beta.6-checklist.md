@@ -24,21 +24,21 @@ frozen record below.
 
 ## Exact-source gate
 
-- [ ] Freeze one clean source commit SHA containing runtime, tests,
+- [x] Freeze one clean source commit SHA containing runtime, tests,
       documentation, CI version, release notes, and this checklist.
-- [ ] Run gofmt clean-tree check, `go vet ./...`, `go test ./...`, and
+- [x] Run gofmt clean-tree check, `go vet ./...`, `go test ./...`, and
       `go test -race ./...` on that SHA.
-- [ ] Run `npm ci`, completion, clone, complexity, and dead-code checks.
-- [ ] Audit the accepted ADRs and checked-in decisions used by this release.
-- [ ] Run `perttool document check PLAN.pert` and
+- [x] Run `npm ci`, completion, clone, complexity, and dead-code checks.
+- [x] Audit the accepted ADRs and checked-in decisions used by this release.
+- [x] Run `perttool document check PLAN.pert` and
       `perttool dag analyze PLAN.pert`.
-- [ ] Build twice into separate absent directories and prove byte-identical
+- [x] Build twice into separate absent directories and prove byte-identical
       archives and checksum files.
-- [ ] Run extracted-artifact smoke and confirm archive inventory.
-- [ ] Push the exact source SHA and require successful remote CI for it.
+- [x] Run extracted-artifact smoke and confirm archive inventory.
+- [x] Push the exact source SHA and require successful remote CI for it.
 
-Validated source: pending.
-GitHub Actions run: pending.
+Validated source: `b1166444172e0f257cdd09bd14216ca67b505c15`.
+GitHub Actions run: `32711251818` (success).
 
 ## Publication record
 
@@ -46,12 +46,12 @@ Fill and freeze before any tag or Release write:
 
 ```text
 release version: 0.1.0-beta.6
-validated source SHA: pending
+validated source SHA: b1166444172e0f257cdd09bd14216ca67b505c15
 artifact: sealgraph_0.1.0-beta.6_linux_amd64.tar.gz
-artifact SHA-256: pending
+artifact SHA-256: 1cf4c8e71e16b3783c7a45275eee25c21dede94211f299ccc2485b9ae404189d
 checksums artifact: sealgraph_0.1.0-beta.6_checksums.txt
-checksums file SHA-256: pending
-release-note SHA-256: pending
+checksums file SHA-256: 89bc89ca453c7ea8454f25b43483a6a1e22fc4088faf6d50e00cdf71d1667766
+release-note SHA-256: fa21c89e8b022c35fab53e50e39bced9335b3b3e6cf5a80bcd9340ce28f10115
 maximum tag writes: 1
 maximum GitHub Release writes: 1
 ```
