@@ -37,6 +37,10 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0020-sealgraph-native-operation-vocabulary.md`](adr/0020-sealgraph-native-operation-vocabulary.md)
 - [`adr/0021-do-not-expand-attachments.md`](adr/0021-do-not-expand-attachments.md)
 - [`adr/0022-terminal-first-human-output.md`](adr/0022-terminal-first-human-output.md)
+- [`adr/0023-cause-scoped-revision-links.md`](adr/0023-cause-scoped-revision-links.md)
+- [`adr/0024-source-adapters-and-portable-occurrence-provenance.md`](adr/0024-source-adapters-and-portable-occurrence-provenance.md)
+- [`adr/0025-universal-blob-seal-material-and-provenance.md`](adr/0025-universal-blob-seal-material-and-provenance.md)
+- [`adr/0026-format4-to-universal-blob-migration.md`](adr/0026-format4-to-universal-blob-migration.md)
 
 ## Agent-auditable design
 
