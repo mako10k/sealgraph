@@ -224,6 +224,18 @@ Git, watch directories, expand globs, or perform automatic add/seal. The
 repository package coordinates binding changes with candidate mutation under
 the native writer guard.
 
+ADR 0024 generalizes source selection as a non-canonical adapter boundary.
+`WorktreePath` remains the standalone/default binding. A future
+`GitTreeEntry` binding is available only to the explicit Git entry point and
+records exact object format, commit, path, blob, and file-mode identity. Both
+adapters materialize exact bytes through `add`; neither is visible to `seal`,
+which remains Candidate-only.
+
+Portable source-occurrence provenance is separately sealed application content
+and may be named by an exact Cause Link. Local binding fields, Git commit
+ancestry, file-history heuristics, and working-file timestamps do not enter
+Seal identity or create Revision facts automatically.
+
 The Bash completion wrapper delegates parsing and candidate selection to a
 hidden read-only CLI protocol. Repository-aware completion reads only REF,
 candidate, and binding metadata; it does not bootstrap, open bound workfiles,
@@ -235,6 +247,8 @@ The Git adapter has no Sealgraph domain semantics. It supplies:
 
 - complete exact byte/path views of the worktree, prospective staged result
   tree, and immutable commit tree;
+- exact regular-blob bytes for an explicitly configured non-canonical
+  `GitTreeEntry` source binding;
 - merge stage 1/2/3 conflict entries associated with corresponding validated
   BASE/OURS/THEIRS complete trees;
 - typed physical Git identity internal to the adapter;
@@ -317,9 +331,9 @@ worktree, linked-worktree, index, tree, pack, and alternate matrix. No SDK type
 crosses into native domain APIs; there is no hand-written pack reader or silent
 Git CLI fallback.
 
-Importing arbitrary Git blobs/trees/commits/tags as generated material is
-deferred. Exact blob materialization can be added later without changing Seal
-format; zero-copy external references or type-specific projections require a
+Outside the exact `GitTreeEntry` source-binding path accepted by ADR 0024,
+importing arbitrary Git blobs/trees/commits/tags as generated material remains
+deferred. Zero-copy external references or type-specific projections require a
 separate persisted contract.
 
 ## 8. Extension discipline

@@ -497,6 +497,20 @@ and compare-and-remove operations for local bindings. Binding inspection MUST
 NOT open source files. There is no implicit retarget, restore-last, binding
 reflog, deletion staging, or automatic cross-machine import.
 
+As accepted by ADR 0024, standalone path binding is the default source adapter.
+A future Git tree-entry binding exists only through explicit `git sealgraph`
+operation and remains non-canonical local input configuration. It resolves a
+movable Git spelling to one full commit OID, exact path, blob OID, file mode,
+and object format before publication of the binding. It MUST NOT add Git
+discovery to standalone commands or put Git identity into Candidate, Seal,
+SealID, or canonical REF state.
+
+Every adapter supplies exact bytes to an explicit `add`; `seal` reads only the
+validated Candidate. Durable Git or non-Git source-occurrence evidence is
+ordinary separately sealed content related by an exact Cause Link. Git commit
+parents, file-history/rename inference, timestamps, and watcher events MUST NOT
+automatically create a Seal, Cause Link, or Revision Link.
+
 As accepted by ADR 0020, source comparison MAY open exactly the selected bound
 file and MUST compare it with candidate content when present, otherwise current
 HEAD content. It MUST identify the baseline, use the same stable non-symlink

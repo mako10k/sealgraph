@@ -50,9 +50,17 @@ Hook integration is explicit, opt-in, and validation-only. It never
 self-installs, overwrites another hook, stages, seals, advances a REF, relinks,
 repairs, commits, or pushes. Exact hook setup/dispatch CLI is separately gated.
 
-Git source blob/tree/commit/tag material import is deferred. Later exact blob
-materialization can use the native ObjectWriter without changing format 4;
-zero-copy external references or type-specific projections require a separate
+ADR 0024 accepts Git as an optional exact-byte source adapter without making it
+a canonical Seal identity mode. A future `GitTreeEntry` binding under
+`git sealgraph` records full object format, commit OID, exact path, blob OID,
+and regular-file mode after resolving any movable input. It remains local and
+non-canonical. Explicit `add` materializes the exact tree blob through the
+native Candidate boundary; `seal` never rereads Git.
+
+Durable Git occurrence evidence uses separately sealed application content and
+an exact Cause Link. Git commit parents, path history, rename heuristics, and
+file timestamps do not create Seal Revision facts automatically. Zero-copy
+external Git references and type-specific projections still require a separate
 persisted contract and ADR.
 
 ## 2. llmthink

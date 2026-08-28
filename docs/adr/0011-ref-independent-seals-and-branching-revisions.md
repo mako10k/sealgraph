@@ -5,6 +5,11 @@ Status: accepted on 2026-08-14.
 ADR 0013 resolves the tag-creation, rename-safe storage, and `mv` decisions
 that this ADR deliberately left open.
 
+ADR 0024 later accepts one limited Git source-material path: an explicit,
+non-canonical `GitTreeEntry` binding may materialize one exact regular blob into
+a Candidate through `git sealgraph`. Arbitrary Git material import and
+zero-copy external references remain deferred.
+
 This ADR accepts the format-4 design contract. Its separately sequenced native,
 dump/load, revision-graph, and tag-manifest implementation slices are now
 complete; that completion still does not authorize silent in-place migration,
