@@ -41,6 +41,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0024-source-adapters-and-portable-occurrence-provenance.md`](adr/0024-source-adapters-and-portable-occurrence-provenance.md)
 - [`adr/0025-universal-blob-seal-material-and-provenance.md`](adr/0025-universal-blob-seal-material-and-provenance.md)
 - [`adr/0026-format4-to-universal-blob-migration.md`](adr/0026-format4-to-universal-blob-migration.md)
+- [`adr/0027-format5-cli-authoring-and-inspection-schemas.md`](adr/0027-format5-cli-authoring-and-inspection-schemas.md)
 
 ## Agent-auditable design
 
@@ -73,6 +74,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/content-ingest-acceptance-2026-08-17.md`](process/content-ingest-acceptance-2026-08-17.md)
 - [`process/operator-contract-acceptance-2026-08-17.md`](process/operator-contract-acceptance-2026-08-17.md)
 - [`process/local-ref-recovery-contract-acceptance-2026-08-17.md`](process/local-ref-recovery-contract-acceptance-2026-08-17.md)
+- [`process/cause-scoped-revision-decision-review-2026-08-28.md`](process/cause-scoped-revision-decision-review-2026-08-28.md)
 - [`process/standalone-beta-acceptance-2026-08-17.md`](process/standalone-beta-acceptance-2026-08-17.md)
 - [`process/release-v0.1.0-beta.2-receipt.md`](process/release-v0.1.0-beta.2-receipt.md)
 - [`process/release-v0.1.0-beta.3-checklist.md`](process/release-v0.1.0-beta.3-checklist.md)

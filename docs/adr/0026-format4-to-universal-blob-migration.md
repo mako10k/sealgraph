@@ -4,7 +4,7 @@
 - Date: 2026-08-28
 - Decision Owner: Operator
 - Related Claims: C-MG-001 through C-MG-010
-- Related Evidence: E-MG-001 through E-MG-007
+- Related Evidence: E-MG-001 through E-MG-009
 - Pending Decision: owner acceptance of the exact candidate after fresh review
 - Supersedes on acceptance: format-4 runtime compatibility as a requirement for
   the format-5 runtime; any legacy-parent fallback proposed by an earlier ADR
@@ -29,9 +29,10 @@ and records the loss.
 
 ### No runtime compatibility layer
 
-The format-5 runtime does not read or write format-4 Seals or Candidates and
-does not open format-4 repository state. It has no dual reader, mixed graph,
-lazy upgrade, legacy-parent fallback, or in-place rewrite.
+Ordinary format-5 repository operations do not read or write format-4 Seals or
+Candidates and never open format-4 repository state. Format-5 typed decoders do
+not accept a format-4 schema. The runtime has no dual repository reader, mixed
+graph, lazy upgrade, legacy-parent fallback, or in-place rewrite.
 
 Opening a format-4 `.sealgraph` with the format-5 runtime fails before mutation
 with a stable `FORMAT4_REQUIRES_MIGRATION` error and names the explicit export
@@ -49,8 +50,13 @@ The format-5 runtime exposes the importer:
 sealgraph load --format universal-blob-v1 < repository.dump.json
 ```
 
-The importer parses only the migration document. It never opens the source
-format-4 repository.
+The importer parses only the migration document. Inside that isolated command,
+a migration-only format-4 payload verifier decodes each exported
+`payload_base64`, validates it against the exact format-4 canonical Seal rules,
+re-encodes it byte-for-byte, and verifies its old SealID. That verifier has no
+repository/store interface and is not callable by normal format-5 operations.
+The importer never opens the source format-4 repository or treats an embedded
+old payload as a live format-5 Seal.
 
 This establishes C-MG-001: compatibility is an explicit one-way migration,
 not a permanent runtime semantic branch.
@@ -72,6 +78,46 @@ Before producing output it validates:
   dependencies, and stable complete repository observation; and
 - complete absence of candidate state, including corrupt or unrecognized
   candidate entries.
+
+The exporter implements that stable observation as an explicit double-capture
+transaction. The first capture `S_0` consists of:
+
+```text
+config_bytes
+  exact source config bytes
+
+ref_manifest_map
+  every logical REF -> exact regular manifest bytes
+  including its HEAD and complete tag array
+
+loose_object_map
+  every relative loose-object path ->
+    directory: (DIRECTORY)
+    regular:   (REGULAR, byte_length, sha256(exact physical stored bytes))
+
+candidate_namespace_map
+  every reserved Candidate path or unrecognized/unsafe Candidate-namespace
+  entry ->
+    directory: (DIRECTORY)
+    regular:   (REGULAR, byte_length, sha256(exact regular-file bytes))
+    unsafe:    (SYMLINK or SPECIAL), without opening the entry
+```
+
+Directory and regular-file entry kinds are distinguished; symbolic links,
+special files, malformed object paths, and unrecognized canonical layout are
+validation errors, never followed. Candidate admission requires
+`candidate_namespace_map` to be empty. Source-binding `.track` entries are not
+Candidate entries and remain in the explicit excluded-state category.
+
+From `S_0`, the exporter validates every physical object envelope, derives the
+complete rooted graph and semantic projection, inventories excluded objects,
+and buffers the entire migration document and warning set. Immediately before
+emitting either warnings or stdout it captures `S_1` using the same path, entry
+kind, length, and byte-digest rules. It requires exact equality of all four
+members, including additions and removals. A mismatch fails with retryable
+`MIGRATION_SOURCE_CHANGED`, emits no document or semantic warning, and does not
+repair or lock in either observation. Equal maps establish the one source state
+used by the buffered result.
 
 Any candidate blocks export because mutable intent cannot be projected safely.
 The operator must explicitly seal or discard it using the format-4 runtime.
@@ -120,8 +166,10 @@ merged_cause_link: observer, old_targets, new_target
 
 JSON types are fixed:
 
-- `schema` and `object_format` are strings;
+- `schema` is exactly `sealgraph/universal-blob-migration/v1`;
 - `source_repository.format` is the integer `4`;
+- `source_repository.object_format` is exactly the string `sha256`; every
+  other value is rejected before object or Seal projection;
 - every ID/digest is one 64-character lower-hex string;
 - `bytes_base64` and `payload_base64` use the standard padded base64 alphabet
   with no whitespace or line breaks;
@@ -139,18 +187,20 @@ valid loose BlobID not otherwise exported.
 which local files happen to exist:
 
 ```json
-["source_bindings","cache","logs","locks","temporary_files"]
+["source_bindings","cache","event_logs","recovery_journal","locks","temporary_files"]
 ```
 
 It declares excluded categories, not paths, counts, contents, or evidence that
-any category is present. Candidate state is not an exclusion: any candidate
-rejects export.
+any category is present. `event_logs` excludes non-recovery operational logs;
+`recovery_journal` explicitly excludes ADR 0018 records even though both live
+below the source `logs/` directory. Candidate state is not an exclusion: any
+candidate rejects export.
 
 Array order is normative:
 
 ```text
 objects:        id
-seals:          dependency-first topological order, then old SealID
+seals:          exact ready-set algorithm below
 refs:           name
 tags:           (ref, name)
 materialized:   (observer, child, parent)
@@ -160,15 +210,32 @@ merged links:   (observer, new_target, old_targets)
 excluded IDs:   BlobID
 ```
 
-All tuple comparisons are bytewise ascending UTF-8. The semantic projection is
-computed by the final format-4 exporter using the projection below and is
-recomputed byte-for-byte by the importer. Equal complete migration
-observations—including canonical state and the excluded loose-object
-inventory—produce equal bytes.
+All tuple comparisons are bytewise ascending UTF-8. Seal ordering uses Kahn's
+algorithm over the exported format-4 dependency graph whose edges point from a
+Seal to each global parent and Cause target:
+
+1. `ready` contains every Seal with no not-yet-emitted dependency;
+2. remove and emit the lexicographically smallest full old SealID in `ready`;
+3. remove that dependency from its direct dependents and insert each newly
+   ready dependent; and
+4. repeat until every Seal is emitted; a non-empty remainder is a cycle and
+   rejects the document.
+
+Thus dependencies always precede dependents and the ready-set full SealID is
+the only tie break. No topological layer, map iteration, filesystem order, or
+host sort stability affects the result.
+
+The semantic projection is computed by the final format-4 exporter using the
+projection below and is recomputed byte-for-byte by the importer. Equal
+complete migration observations—including canonical state and the excluded
+loose-object inventory—produce equal bytes.
 
 The document contains no source path, timestamp, actor, hostname, tool version,
 random value, local binding, cache entry, lock, recovery journal, event log,
-temporary filename, or outer Git state.
+temporary filename, or outer Git state. Every REF-scoped tag name is validated
+against the accepted format-4 TAGNAME grammar; in particular
+`[0-9a-f]{4,64}` remains reserved and is rejected rather than exported as an
+unaddressable format-5 tag.
 
 This establishes C-MG-003: the conversion input is a portable, deterministic,
 versioned artifact whose omissions and semantic changes are explicit.
@@ -182,6 +249,13 @@ For every exported format-4 Seal `S`, the importer deterministically creates:
 2. one Provenance Blob containing `S.root`, `S.draft`, and converted Cause
    Links; and
 3. one Seal Blob naming those exact Material and Provenance IDs.
+
+The accepted format-4 structural invariant is part of export validation: a
+root Seal has no Cause Links and every non-root Seal, including draft, has at
+least one Cause Link. A source payload violating it is corrupt and export
+fails. Projection therefore cannot create a format-5 non-root Provenance with
+an empty Cause Link array. Attachment names are likewise required to be
+non-empty, valid UTF-8, and unique before they are copied.
 
 Existing content and attachment Blob bytes are stored unchanged, so their
 BlobIDs remain unchanged. Format-4 Seal payload Blobs are not treated as
@@ -313,21 +387,52 @@ published path is:
 ```
 
 The receipt is non-canonical local audit state and is excluded from the
-repository digest, but it is carried by the same directory publication. Load
-then fsyncs staging according to the accepted durability contract, validates
-the complete format-5 typed closure with `fsck`, and publishes with one atomic
-no-replace directory operation. It never merges with or replaces an existing
-repository. A platform without atomic no-replace directory publication rejects
-load before publish.
+repository digest, but it is carried by the same directory publication. The
+load durability sequence is exact:
+
+1. create only regular files and directories inside sibling staging, without
+   following symbolic links;
+2. write each final file completely, set its final mode, fsync it, and close it;
+3. validate the staged config, complete physical object inventory, every typed
+   reference, REF/tag manifest, semantic projection, and repository digest with
+   the format-5 `fsck` boundary, then separately revalidate the non-canonical
+   receipt bytes against those results;
+4. fsync every staging directory bottom-up after all child entries exist,
+   including the staging root;
+5. atomically rename staging to the absent `.sealgraph` target with one
+   same-filesystem no-replace operation; and
+6. fsync the target's parent directory before claiming durable publication or
+   beginning post-publication readback.
+
+Final modes are `0755` for directories, `0644` for config, `0444` for immutable
+loose objects, and `0600` for REF manifests and the migration receipt. The
+implementation sets these modes explicitly rather than relying on umask. No
+Candidate, binding, cache entry, lock entry, or pre-existing recovery/event
+record is staged. Empty runtime directories use mode `0755`.
+
+Steps 2 and 4 make every nested file and directory entry durable before the
+namespace commit; step 6 makes the destination name durable after it. Load
+never merges with or replaces an existing repository. A platform that cannot
+prove regular-file fsync, directory fsync, same-filesystem atomic no-replace
+rename, and destination-parent fsync rejects load before publication. A
+pre-publication staging directory may remain for explicit inspection.
 
 Failure states are explicit:
 
 ```text
 PRE_PUBLICATION_FAILURE
-  target is absent; retry is allowed after correcting the reported cause
+  this load did not perform the target rename; it did not change a target, but
+  a pre-existing or concurrently created target may now exist; retry only after
+  correcting the cause and confirming the exact target is absent
+
+LOAD_PUBLISHED_DURABILITY_UNCERTAIN
+  the no-replace rename succeeded, but target-parent synchronization failed or
+  completion across that boundary is unknown; target may be visible; do not
+  retry, delete, or report durable publication automatically
 
 LOAD_PUBLISHED_READBACK_FAILED
-  target exists, but complete post-publication verification did not match;
+  target-parent synchronization succeeded and target exists, but complete
+  post-publication verification did not match;
   do not retry load or delete/repair automatically
 
 LOAD_PUBLISHED_RECEIPT_UNDELIVERED
@@ -335,15 +440,20 @@ LOAD_PUBLISHED_RECEIPT_UNDELIVERED
   do not retry load; recover the receipt with load-receipt
 ```
 
-An interruption before atomic publication leaves no target. An interruption
-at or after publication may leave the complete target and durable receipt; the
-operator inspects the destination and uses the read-only receipt command rather
-than retrying load. A surviving pre-publication staging directory is reported
-for explicit inspection and is never adopted or deleted automatically.
+An interruption before atomic publication creates no target from this load.
+An interruption at or after rename may leave the complete target and receipt
+but cannot claim parent-directory durability without step 6. The operator inspects the
+destination and platform durability state rather than retrying load. If the
+target survives and validates, `load-receipt` may recover its exact receipt
+bytes, but that read-only command does not retroactively turn a durability-
+uncertain publication into a successful `load`. A surviving pre-publication
+staging directory is reported for explicit inspection and is never adopted or
+deleted automatically.
 
-This establishes C-MG-007: canonical repository publication is atomic and
-never rewrites the source, while post-publication readback/output failure is
-recoverable without falsely claiming that the target is absent.
+This establishes C-MG-007: canonical repository namespace publication is
+atomic, nested and parent-directory durability have an explicit ordered
+contract, and every post-rename failure is reported without falsely claiming
+that the target is absent or safe to republish.
 
 ### Canonical load receipt
 
@@ -446,11 +556,12 @@ covers the published config, object store, and logical manifest contents.
 
 ### Receipt delivery and recovery command
 
-After atomic publication, `load` independently reopens the target, validates
-the complete repository observation, and requires its digest to equal the
-durable receipt. Only then does it copy the already stored receipt bytes to
-stdout. Successful exit zero means publication, readback, and complete receipt
-delivery all succeeded.
+After atomic rename and successful target-parent synchronization, `load`
+independently reopens the target, validates the complete repository
+observation, and requires its digest to equal the staged durable receipt. Only
+then does it copy the already stored receipt bytes to stdout. Successful exit
+zero means namespace publication, nested and parent durability, readback, and
+complete receipt delivery all succeeded.
 
 Receipt stdout failure does not roll back or relabel the already published
 repository. It returns `LOAD_PUBLISHED_RECEIPT_UNDELIVERED` on stderr and a
@@ -481,10 +592,20 @@ Migration does not delete, rename, edit, or mark the format-4 source. Rollback
 means selecting the separately retained source repository with a format-4
 runtime; it is not an in-place downgrade of the format-5 repository.
 
+The exporter opens source config, manifests, objects, and Candidate-namespace
+entries read-only and has no source mutation capability. Its `S_0`/`S_1`
+equality check also proves that the complete admitted source observation did
+not change during export. The importer receives only migration-document bytes
+and one absent destination; its migration-only format-4 verifier has no source
+repository/store interface. Import writes only a sibling staging tree, the
+absent destination, and the destination parent synchronization required by the
+publication transaction. Neither command accepts a source cleanup, rename,
+mark, or delete option.
+
 The migration document and recovered receipt bytes are the portable audit
 bridge. The durable repository copy is local recovery evidence, not canonical
 state. Excluded objects remain in the source only. Bindings, caches, locks,
-pre-existing recovery state, event logs, and candidates are not portable
+pre-existing recovery journals, event logs, and candidates are not portable
 canonical provenance and are never recreated by load.
 
 This establishes C-MG-009: auditability relies on retained explicit artifacts,
@@ -494,6 +615,9 @@ not on mixed-version runtime behavior.
 
 Format 5 cannot replace format 4 until fixed fixtures prove at least:
 
+- exact migration bytes and SHA-256 for branching Kahn ready-set ordering and
+  strings containing control characters, slash, quote, backslash, non-ASCII
+  BMP, and supplementary scalars;
 - root, draft, linear, branching, and multi-observer graphs;
 - attachment-bearing and empty-attachment material;
 - REF/tag fan-out and many-old-to-one-new mapping;
@@ -504,13 +628,13 @@ Format 5 cannot replace format 4 until fixed fixtures prove at least:
   target-exists failures; and
 - exact receipt bytes on two independent loads of identical bytes;
 - pre-publication failure, post-publication readback failure, post-publication
-  stdout failure, interruption at the publication boundary, and idempotent
-  `load-receipt` recovery; and
+  parent-sync/durability uncertainty, stdout failure, interruption before and
+  after rename, and idempotent `load-receipt` recovery; and
 - full object-inventory plus REF/tag repository-digest readback.
 
 The release must identify the exact last format-4 exporter and first format-5
 importer artifacts. Green runtime tests do not waive explicit owner acceptance
-of ADRs 0023, 0025, and 0026.
+of ADRs 0023, 0025, 0026, and 0027.
 
 This establishes C-MG-010: removing compatibility is gated by a proven and
 reproducible migration path.
@@ -532,6 +656,8 @@ On acceptance:
 - ADR 0021's historical attachment preservation requirement is satisfied by
   Material Blob projection.
 - ADR 0023 defines new graph meaning and ADR 0025 defines target bytes.
+- ADR 0027 defines the format-5 authoring and inspection interface. Migration
+  receipts remain the exact schemas in this ADR rather than inspection output.
 
 ## Alternatives
 
@@ -572,6 +698,12 @@ Rejected because stdout cannot be atomic with directory publication. A durable
 non-canonical receipt travels with the atomic target and a read-only command
 recovers it after delivery failure.
 
+### Treat atomic rename as durable publication
+
+Rejected because namespace atomicity does not persist the nested staging tree
+or the renamed destination entry across a crash. File sync, bottom-up directory
+sync, rename, and destination-parent sync are distinct ordered obligations.
+
 ## Consequences
 
 Good:
@@ -597,6 +729,8 @@ Bad / Risk:
   embedded and buffered.
 - A post-publication readback failure can leave a target requiring explicit
   inspection; atomic publication cannot be rolled back by stdout or readback.
+- A rename followed by parent-directory sync failure leaves publication
+  durability explicitly uncertain and cannot be retried automatically.
 
 Neutral:
 
@@ -609,11 +743,11 @@ Neutral:
 
 | Action | Accepted ADR gate | Claim | Evidence required before completion |
 | --- | --- | --- | --- |
-| A-MG-001 implement final format-4 exporter | ADR 0026 | C-MG-002, C-MG-003, C-MG-005, C-MG-006 | fixed artifact bytes/digest, constant exclusions, classification warnings, and no-output failure fixtures |
+| A-MG-001 implement final format-4 exporter | ADR 0026 | C-MG-002, C-MG-003, C-MG-005, C-MG-006, C-MG-009 | exact double-capture maps, read-only source capability, candidate/source-structure rejection, fixed artifact bytes/digest, Kahn order, exact object format, tag reservation, constant exclusions including recovery journal, classification warnings, source pre/post equality, and no-output failure fixtures |
 | A-MG-002 implement deterministic projector | ADRs 0023, 0025, 0026 | C-MG-004 through C-MG-006 | complete old/new ID, materialized, unobserved, collapsed, merged-message, and remaining-cycle fixtures |
-| A-MG-003 implement isolated format-5 load | ADRs 0025 and 0026 | C-MG-001, C-MG-007 | target-exists, fault-injection, no-replace, publication-boundary, staging, and platform capability tests |
-| A-MG-004 implement receipt/readback/recovery | ADR 0026 | C-MG-007 through C-MG-009 | fixed receipt bytes/digest, full-object readback, stdout-failure state, and idempotent load-receipt tests |
-| A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026 | C-MG-010 | exact exporter/importer artifact IDs and independent fixture reproduction |
+| A-MG-003 implement isolated format-5 load | ADRs 0025 and 0026 | C-MG-001, C-MG-003 through C-MG-007, C-MG-009 | migration-only format-4 decode/re-encode and old-ID verification with no source repository interface; malformed/noncanonical document rejection; projection and warning recomputation; destination-only path-scope, final-mode, file-sync, bottom-up-directory-sync, no-replace, parent-sync, durability-uncertain, target-exists, and staging fault tests |
+| A-MG-004 implement receipt/readback/recovery | ADR 0026 | C-MG-007 through C-MG-009 | fixed receipt bytes/digest, full-object readback, durability-uncertain/readback/stdout failure separation, and idempotent load-receipt tests |
+| A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026, and 0027 | C-MG-010 | exact exporter/importer artifact IDs, public-schema fixtures, normative-document synchronization, and independent fixture reproduction |
 
 No implementation or repository conversion is authorized by this Proposed
 record. Migration of tracked dogfood requires a separately reviewed exact dump,
@@ -625,8 +759,16 @@ The first independent three-scope review of the prior exact candidate failed on
 collapse-induced invalid graphs, incomplete receipt bytes, and an impossible
 stdout/publication atomicity claim. The operator selected warning-backed removal
 of collapsed revision meaning, an exact receipt normal form, and a revised
-recoverable command contract. No independent review of these revised exact
-bytes is yet recorded.
+recoverable command contract. The committed re-review additionally found the
+source observation transaction, recovery exclusion, canonical topological and
+string normal form, exact object-format domain, migration-only old-payload
+reader boundary, full-tree durability, format-4 source invariants, tag
+reservation, and importer action trace incomplete. This candidate addresses
+each mechanism; no independent review of the new exact bytes is yet recorded.
+The subsequent exact review found that C-MG-009 assigned source-retention
+responsibility only to receipt implementation. This candidate assigns the
+read-only source and destination-only importer obligations to their actual
+export/load actions while retaining receipt recovery under A-MG-004.
 
 A three-scope review must check the artifact byte contract, closure and cycle
 rules, semantic classification completeness, atomic publication feasibility,
@@ -643,26 +785,39 @@ and every precedence claim before owner acceptance.
 - E-MG-004: ADR 0023 removes global parent meaning and ADR 0025 changes every
   structured Seal identity.
 - E-MG-005: the operator selected migration instead of compatibility after
-  distinguishing Sealgraph's operational model from RefGraph theory work.
+  distinguishing Sealgraph's operational model from RefGraph theory work;
+  recorded as D-MG-001 and D-UB-002 in
+  [`../process/cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#operator-directions-recorded).
 - E-MG-006: the operator explicitly confirmed that an old parent unobserved by
-  Cause Links may lose meaning and requested migration warning.
+  Cause Links may lose meaning and requested migration warning; recorded as
+  D-CR-002.
 - E-MG-007: after independent review, the operator directed that
   collapse-lost revision meaning be removed with a warning, receipt bytes be
-  fully canonicalized, and the publication/receipt command contract be revised.
+  fully canonicalized, and the publication/receipt command contract be revised;
+  recorded as D-MG-002 through D-MG-004.
+- E-MG-008: the committed three-scope re-review at commit `df113d7` identified
+  the remaining observation, canonicalization, compatibility-boundary,
+  exclusion, durability, tag, source-invariant, and traceability findings; the
+  exact finding inventory and reviewed digests are recorded in
+  [`../process/cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md).
+- E-MG-009: the subsequent three-scope review of candidate digest
+  `6d6331267464e53438a6b445001acbd222254bf9491ffd8533de3809a7b10dda`
+  found C-MG-009 action ownership incomplete; the exact target and finding are
+  recorded in the same decision/review record.
 
 Exact traceability is:
 
 | Claim | Evidence | Implementation action |
 | --- | --- | --- |
 | C-MG-001 | E-MG-002, E-MG-004, E-MG-005 | A-MG-003 |
-| C-MG-002 | E-MG-001, E-MG-002 | A-MG-001 |
-| C-MG-003 | E-MG-001, E-MG-007 | A-MG-001 |
-| C-MG-004 | E-MG-002, E-MG-003, E-MG-004, E-MG-007 | A-MG-002 |
-| C-MG-005 | E-MG-004, E-MG-006, E-MG-007 | A-MG-001, A-MG-002 |
-| C-MG-006 | E-MG-001, E-MG-006, E-MG-007 | A-MG-001, A-MG-002 |
-| C-MG-007 | E-MG-001, E-MG-005, E-MG-007 | A-MG-003, A-MG-004 |
+| C-MG-002 | E-MG-001, E-MG-002, E-MG-008 | A-MG-001 |
+| C-MG-003 | E-MG-001, E-MG-007, E-MG-008 | A-MG-001, A-MG-003 |
+| C-MG-004 | E-MG-002, E-MG-003, E-MG-004, E-MG-007, E-MG-008 | A-MG-002, A-MG-003 |
+| C-MG-005 | E-MG-004, E-MG-006, E-MG-007 | A-MG-001, A-MG-002, A-MG-003 |
+| C-MG-006 | E-MG-001, E-MG-006, E-MG-007, E-MG-008 | A-MG-001, A-MG-002, A-MG-003 |
+| C-MG-007 | E-MG-001, E-MG-005, E-MG-007, E-MG-008 | A-MG-003, A-MG-004 |
 | C-MG-008 | E-MG-001, E-MG-006, E-MG-007 | A-MG-004 |
-| C-MG-009 | E-MG-001, E-MG-005 | A-MG-004 |
+| C-MG-009 | E-MG-001, E-MG-005, E-MG-009 | A-MG-001, A-MG-003, A-MG-004 |
 | C-MG-010 | E-MG-001, E-MG-004, E-MG-005, E-MG-007 | A-MG-005 |
 
 ## Follow-ups
@@ -670,7 +825,8 @@ Exact traceability is:
 - Run one three-scope review for each exact ADR candidate and an integrated
   cross-ADR consistency pass.
 - After acceptance, copy the fixed canonical migration and receipt bytes into
-  `docs/storage-format.md` and exact terminal/JSON behavior into `docs/cli.md`.
+  `docs/storage-format.md`; ADR 0027's accepted terminal/JSON behavior is copied
+  into `docs/cli.md` in the same normative synchronization gate.
 - Inventory external systems that persist SealIDs and define explicit
   receipt-based rewrites before any real repository conversion.
 - Prepare a dogfood migration proposal with exact source digest and full

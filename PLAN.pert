@@ -108,8 +108,11 @@ milestone CAUSE_REVISION_DESIGN:
 milestone CAUSE_REVISION_FORMAT:
   title "Universal Blob format and incompatible migration boundary work"
 
+milestone CAUSE_REVISION_RUNTIME:
+  title "Cause-scoped graph and format-5 public runtime work"
+
 milestone CAUSE_REVISION_READY:
-  title "Cause-scoped revision runtime acceptance passes"
+  title "Cause-scoped revision normative and runtime acceptance passes"
 
 task FORMAT_SPEC START -> FORMAT:
   title "Lock canonical payload, REF grammar, and object IDs"
@@ -242,25 +245,32 @@ task RECOVERY_ACCEPTANCE RECOVERY_RUNTIME -> RECOVERY_READY:
   source "ADR 0018 acceptance gate"
 
 task CAUSE_REVISION_CONTRACT RECOVERY_READY -> CAUSE_REVISION_DESIGN:
-  title "Accept Cause-scoped revision, Universal Blob, and migration contracts"
-  description "Review and accept ADRs 0023, 0025, and 0026 covering Cause-scoped observation, minimal typed Blob instances, explicit loss of unobserved format-4 parent meaning, deterministic warning and receipt, and no runtime compatibility layer while retaining ADR 0024 source-adapter separation."
+  title "Accept Cause-scoped revision, Universal Blob, migration, and public interface contracts"
+  description "Review and accept ADRs 0023, 0025, 0026, and 0027 covering manifest-coherent Cause-scoped observation, all-observer and explicitly filtered impact, unique-node branching log, edge-wise linklog, minimal typed Blob instances, exact format-5 Candidate bytes, one-target authoring, exact inspection schema successors, explicit loss of unobserved format-4 parent meaning, deterministic warning and receipt, exact export observation and durability, and no ordinary runtime compatibility layer while retaining ADR 0024 source-adapter separation."
   duration 3p
   status active
-  source "Operator direction and ADRs 0023 through 0026"
+  source "Operator direction and ADRs 0023 through 0027"
 
 task CAUSE_REVISION_FORMAT_SLICE CAUSE_REVISION_DESIGN -> CAUSE_REVISION_FORMAT:
   title "Implement Universal Blob canonical format and isolated migration"
-  description "Add the accepted Seal, Material, Provenance, and Candidate schemas; typed Blob validation; target-normalized Cause assertions; final format-4 dump; format-5 load; collapse and unobserved-parent warnings; fully canonical durable receipts; load-receipt recovery; and canonical fixtures without a dual reader."
+  description "Add the accepted Seal, Material, Provenance, and exact Candidate schemas; scalar-exact canonical JSON and typed Blob validation; target-normalized Cause assertions; double-captured format-4 dump with Kahn ordering and explicit exclusions; migration-only old-payload verification; format-5 load with file/directory/parent durability; collapse and unobserved-parent warnings; fully canonical durable receipts; load-receipt recovery; and fixed fixtures without a dual repository reader."
   duration 6p
   status planned
-  source "ADRs 0023, 0025, and 0026 after acceptance"
+  source "ADRs 0023, 0025, 0026, and 0027 after acceptance"
 
-task CAUSE_REVISION_RUNTIME_SLICE CAUSE_REVISION_FORMAT -> CAUSE_REVISION_READY:
+task CAUSE_REVISION_RUNTIME_SLICE CAUSE_REVISION_FORMAT -> CAUSE_REVISION_RUNTIME:
   title "Implement Cause-derived graph and Universal Blob runtime semantics"
-  description "Replace intrinsic-parent algorithms coherently; implement observed-closure selectors, explicit two-selector compare, publication-baseline candidate compare, CLI and cache changes; and pass format-5 graph, typed-Blob, migration-readback, and no-automatic-repair acceptance."
+  description "Replace intrinsic-parent algorithms coherently; implement exact-manifest observations and conditional Seal inventories, observed-closure selectors, explicit two-selector compare, publication-baseline candidate compare, unique-node bounded log/v2, impact/v2 with repeatable asserted-by filtering, edge-wise linklog/v2, all affected inspection successors including status/v3, one-target whole-record authoring, assertion-aware indexes, CLI and cache changes; and pass format-5 graph, typed-Blob, migration-readback, and no-automatic-repair acceptance."
   duration 8p
   status planned
-  source "ADRs 0023, 0025, and 0026 after acceptance"
+  source "ADRs 0023, 0025, 0026, and 0027 after acceptance"
+
+task CAUSE_REVISION_NORMATIVE_SYNC CAUSE_REVISION_RUNTIME -> CAUSE_REVISION_READY:
+  title "Synchronize format-5 normative and public contracts"
+  description "Update requirements, architecture, storage-format, CLI, integrations, documentation index, runtime help, and completion from the accepted ADR bytes; bind fixed format-5 canonical and inspection JSON fixtures; remove contradictory format-4 parent authority from the format-5 sections; and pass cross-reference, schema-matrix, and full repository validation before READY."
+  duration 3p
+  status planned
+  source "ADRs 0023 through 0027 normative synchronization gate"
 
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
   model 1
