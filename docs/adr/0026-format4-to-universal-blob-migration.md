@@ -4,7 +4,7 @@
 - Date: 2026-08-28
 - Decision Owner: Operator
 - Related Claims: C-MG-001 through C-MG-010
-- Related Evidence: E-MG-001 through E-MG-009
+- Related Evidence: E-MG-001 through E-MG-011
 - Pending Decision: owner acceptance of the exact candidate after fresh review
 - Supersedes on acceptance: format-4 runtime compatibility as a requirement for
   the format-5 runtime; any legacy-parent fallback proposed by an earlier ADR
@@ -75,12 +75,13 @@ Before producing output it validates:
   both global parent and Cause edges;
 - every referenced content and attachment Blob;
 - canonical Seal bytes, graph acyclicity over the union of parent and Cause
-  dependencies, and stable complete repository observation; and
+  dependencies, and one complete repository observation value confirmed by two
+  equal captures; and
 - complete absence of candidate state, including corrupt or unrecognized
   candidate entries.
 
-The exporter implements that stable observation as an explicit double-capture
-transaction. The first capture `S_0` consists of:
+The exporter implements that equal-capture observation as an explicit
+double-capture transaction. The first capture `S_0` consists of:
 
 ```text
 config_bytes
@@ -116,16 +117,19 @@ emitting either warnings or stdout it captures `S_1` using the same path, entry
 kind, length, and byte-digest rules. It requires exact equality of all four
 members, including additions and removals. A mismatch fails with retryable
 `MIGRATION_SOURCE_CHANGED`, emits no document or semantic warning, and does not
-repair or lock in either observation. Equal maps establish the one source state
-used by the buffered result.
+repair or lock in either observation. Equal maps establish the recorded source
+observation value to which the buffered result is bound. They do not detect a
+change-and-restore between captures and therefore do not prove that every
+intermediate physical state was identical.
 
 Any candidate blocks export because mutable intent cannot be projected safely.
 The operator must explicitly seal or discard it using the format-4 runtime.
 Corruption, a dependency cycle, or concurrent change fails nonzero without a
 plausible partial document and without repair.
 
-This establishes C-MG-002: migration begins only from one complete, immutable,
-and coherently observed format-4 logical state.
+This establishes C-MG-002: migration output is bound to one complete,
+coherently observed format-4 logical value that is equal at `S_0` and `S_1`;
+continuous source immutability between those captures is not claimed.
 
 ### Deterministic migration document
 
@@ -136,7 +140,11 @@ missing or extra final byte are errors.
 
 JSON string validity, escaping, and byte-equality re-encoding use ADR 0025's
 canonical UTF-8 rules. Unicode normalization is never applied. Numbers occur
-only in the fixed format fields described below.
+only in the fixed format fields described below. Their lexical form is part of
+the canonical bytes: format 4 is the single ASCII byte `4` and format 5 is the
+single ASCII byte `5`. A sign, leading zero, decimal point, fraction, exponent,
+or any other JSON number spelling is non-canonical and rejected even when a
+generic JSON decoder would assign the same mathematical value.
 
 Its required top-level member order is:
 
@@ -167,12 +175,17 @@ merged_cause_link: observer, old_targets, new_target
 JSON types are fixed:
 
 - `schema` is exactly `sealgraph/universal-blob-migration/v1`;
-- `source_repository.format` is the integer `4`;
+- `source_repository.format` is the integer `4` encoded by exactly the single
+  ASCII byte `4`;
 - `source_repository.object_format` is exactly the string `sha256`; every
   other value is rejected before object or Seal projection;
 - every ID/digest is one 64-character lower-hex string;
-- `bytes_base64` and `payload_base64` use the standard padded base64 alphabet
-  with no whitespace or line breaks;
+- `bytes_base64` and `payload_base64` use canonical RFC 4648 standard padded
+  Base64 with no whitespace or line breaks. Unused pad bits must be zero. A
+  reader performs strict pad-bit validation and requires standard padded
+  Base64 re-encoding of the decoded bytes to equal the original string byte for
+  byte; alternate strings for the same decoded bytes are rejected. For example,
+  byte `0x66` is `Zg==`; `Zh==` is rejected for nonzero unused pad bits;
 - `objects`, `seals`, `refs`, `tags`, every semantic member,
   `excluded_objects`, and `excluded_state` are arrays; and
 - `old_targets` is a sorted duplicate-free array containing at least two old
@@ -392,12 +405,14 @@ load durability sequence is exact:
 
 1. create only regular files and directories inside sibling staging, without
    following symbolic links;
-2. write each final file completely, set its final mode, fsync it, and close it;
+2. write each final file completely, set its final mode, verify kind and mode
+   through the same open handle, fsync it, and close it;
 3. validate the staged config, complete physical object inventory, every typed
    reference, REF/tag manifest, semantic projection, and repository digest with
    the format-5 `fsck` boundary, then separately revalidate the non-canonical
    receipt bytes against those results;
-4. fsync every staging directory bottom-up after all child entries exist,
+4. set and verify each final directory mode through an open directory handle,
+   then fsync every staging directory bottom-up after all child entries exist,
    including the staging root;
 5. atomically rename staging to the absent `.sealgraph` target with one
    same-filesystem no-replace operation; and
@@ -406,7 +421,10 @@ load durability sequence is exact:
 
 Final modes are `0755` for directories, `0644` for config, `0444` for immutable
 loose objects, and `0600` for REF manifests and the migration receipt. The
-implementation sets these modes explicitly rather than relying on umask. No
+implementation sets and verifies these loader-transaction postconditions
+explicitly rather than relying on umask. They are operational hardening, not
+canonical identity or stable `fsck` validity; a later outer-Git checkout may
+restore writable ordinary-file modes without changing repository bytes. No
 Candidate, binding, cache entry, lock entry, or pre-existing recovery/event
 record is staged. Empty runtime directories use mode `0755`.
 
@@ -453,7 +471,8 @@ deleted automatically.
 This establishes C-MG-007: canonical repository namespace publication is
 atomic, nested and parent-directory durability have an explicit ordered
 contract, and every post-rename failure is reported without falsely claiming
-that the target is absent or safe to republish.
+that the target is absent or safe to republish. Loader-created modes are
+verified within that transaction but do not become canonical integrity state.
 
 ### Canonical load receipt
 
@@ -464,7 +483,9 @@ noncanonical member/array order, duplicate set members, malformed IDs, and
 missing or extra final bytes are errors.
 
 It uses the same canonical string escaping and byte-equality rules as the
-migration document. Numbers occur only as the fixed `published_format` value.
+migration document. Numbers occur only as the fixed `published_format` value,
+encoded by exactly the single ASCII byte `5`; alternate numeric spellings are
+rejected.
 
 The required top-level member order is:
 
@@ -501,7 +522,8 @@ JSON types and value domains are fixed:
   raw SHA-256 digests without a prefix;
 - all other IDs are 64-character lower-hex BlobID/typed-ID strings;
 - `kind` is exactly `material`, `provenance`, or `seal`;
-- `published_format` is the integer `5`;
+- `published_format` is the integer `5` encoded by exactly the single ASCII
+  byte `5`;
 - `old_seals` and `old_targets` are sorted duplicate-free ID arrays with at
   least two members;
 - `excluded_state` is exactly the constant array from the migration document;
@@ -546,22 +568,30 @@ repository_ref: name, head
 repository_tag: ref, name, target
 ```
 
-The schema is `sealgraph/repository-observation/v1`; `format` is integer `5`,
-`object_format` is `sha256`, and `config_sha256` is raw SHA-256 of exact config
-bytes. `objects` is the sorted complete physical BlobID inventory. `refs` uses
+The schema is `sealgraph/repository-observation/v1`; `format` is integer `5`
+encoded by exactly the single ASCII byte `5`, `object_format` is `sha256`, and
+`config_sha256` is raw SHA-256 of exact config bytes. `objects` is the sorted
+complete physical BlobID inventory. `refs` uses
 `name, head` records sorted by name; `tags` uses `ref, name, target` records
 sorted by `(ref, name)`. Readers validate every loose envelope and
 typed/reference closure before accepting the inventory. This digest therefore
-covers the published config, object store, and logical manifest contents.
+covers the published config, object store, and logical manifest contents. It
+deliberately excludes permission bits and physical entry identity: those are
+not portable canonical state. Load verifies its own creation-mode postconditions
+before publication and readback, while a later stable writable checkout can
+retain the same repository digest.
 
 ### Receipt delivery and recovery command
 
 After atomic rename and successful target-parent synchronization, `load`
 independently reopens the target, validates the complete repository
-observation, and requires its digest to equal the staged durable receipt. Only
-then does it copy the already stored receipt bytes to stdout. Successful exit
-zero means namespace publication, nested and parent durability, readback, and
-complete receipt delivery all succeeded.
+observation, requires its digest to equal the staged durable receipt, and
+separately verifies that entries created by this load still have their final
+modes. That mode check is a postcondition of this original load invocation,
+not a repository-digest member or a later `load-receipt` prerequisite. Only then
+does `load` copy the already stored receipt bytes to stdout. Successful exit
+zero means namespace publication, nested and parent durability, original-load
+mode postconditions, readback, and complete receipt delivery all succeeded.
 
 Receipt stdout failure does not roll back or relabel the already published
 repository. It returns `LOAD_PUBLISHED_RECEIPT_UNDELIVERED` on stderr and a
@@ -594,13 +624,14 @@ runtime; it is not an in-place downgrade of the format-5 repository.
 
 The exporter opens source config, manifests, objects, and Candidate-namespace
 entries read-only and has no source mutation capability. Its `S_0`/`S_1`
-equality check also proves that the complete admitted source observation did
-not change during export. The importer receives only migration-document bytes
-and one absent destination; its migration-only format-4 verifier has no source
-repository/store interface. Import writes only a sibling staging tree, the
-absent destination, and the destination parent synchronization required by the
-publication transaction. Neither command accepts a source cleanup, rename,
-mark, or delete option.
+equality check proves that both complete admitted source captures have the same
+recorded value and binds output to that value; it does not prove continuous
+absence of source mutation during export. The importer receives only migration-
+document bytes and one absent destination; its migration-only format-4 verifier
+has no source repository/store interface. Import writes only a sibling staging
+tree, the absent destination, and the destination parent synchronization
+required by the publication transaction. Neither command accepts a source
+cleanup, rename, mark, or delete option.
 
 The migration document and recovered receipt bytes are the portable audit
 bridge. The durable repository copy is local recovery evidence, not canonical
@@ -648,14 +679,16 @@ On acceptance:
   specific to format 3 to format 4.
 - ADR 0013's REF/tag inventory and atomic manifest semantics remain and are
   rewritten through the complete mapping.
-- ADR 0016's fail-closed integrity intent remains; its format-4 parent closure
-  is validated by the exporter and then replaced, not retained at runtime.
+- ADR 0016's fail-closed, mode-neutral integrity intent remains; its format-4
+  parent closure is validated by the exporter and then replaced, not retained
+  at runtime.
 - ADR 0018 recovery state remains local and is explicitly excluded.
 - ADR 0019 and ADR 0024 local source bindings are excluded and recreated
   explicitly after migration when needed.
 - ADR 0021's historical attachment preservation requirement is satisfied by
   Material Blob projection.
-- ADR 0023 defines new graph meaning and ADR 0025 defines target bytes.
+- ADR 0023 defines new graph meaning; ADR 0025 defines target bytes and the
+  mode-neutral physical integrity boundary.
 - ADR 0027 defines the format-5 authoring and inspection interface. Migration
   receipts remain the exact schemas in this ADR rather than inspection output.
 
@@ -704,6 +737,21 @@ Rejected because namespace atomicity does not persist the nested staging tree
 or the renamed destination entry across a crash. File sync, bottom-up directory
 sync, rename, and destination-parent sync are distinct ordered obligations.
 
+### Accept any Base64 string that a decoder maps to the same bytes
+
+Rejected because permissive and strict decoders disagree on nonzero unused pad
+bits. Strict RFC 4648 decoding plus exact standard re-encoding gives one
+portable artifact byte sequence and digest for every payload.
+
+### Require a non-ABA generation or shared lock across export
+
+Rejected because migration identity is bound to the exact complete value seen
+at both captures, not to an otherwise unrepresented transition history between
+equal endpoints. A continuous guarantee would require one new coordination
+authority honored by every format-4 writer and external filesystem actor. The
+exporter instead fails every detected capture mismatch and makes the
+change-and-restore limit explicit.
+
 ## Consequences
 
 Good:
@@ -715,6 +763,8 @@ Good:
 - Lost parent meaning, including collapse-induced self-revision meaning, is
   explicit instead of hidden behind compatibility logic.
 - Receipt delivery failure is recoverable without rerunning publication.
+- Strict Base64 pad bits and re-encoding eliminate decoder-dependent accepted
+  migration bytes.
 
 Bad / Risk:
 
@@ -725,6 +775,9 @@ Bad / Risk:
 - A revision assertion whose endpoints collapse to one new SealID is removed.
 - Candidates and corrupt repositories require operator resolution before
   export.
+- Double capture cannot detect a source change-and-restore between `S_0` and
+  `S_1`; the artifact is bound to their equal recorded value, not to a claim
+  about every intermediate physical state.
 - Migration artifacts may be large because complete referenced bytes are
   embedded and buffered.
 - A post-publication readback failure can leave a target requiring explicit
@@ -736,6 +789,8 @@ Neutral:
 
 - Semantic warnings retain success when receipt delivery succeeds; policy
   automation must inspect the structured classification.
+- Loader-created modes are verified for the original load transaction but are
+  excluded from canonical repository identity and later receipt recovery.
 - No automatic source binding, outer-Git state, cache, event, or recovery state
   migration is added.
 
@@ -743,15 +798,21 @@ Neutral:
 
 | Action | Accepted ADR gate | Claim | Evidence required before completion |
 | --- | --- | --- | --- |
-| A-MG-001 implement final format-4 exporter | ADR 0026 | C-MG-002, C-MG-003, C-MG-005, C-MG-006, C-MG-009 | exact double-capture maps, read-only source capability, candidate/source-structure rejection, fixed artifact bytes/digest, Kahn order, exact object format, tag reservation, constant exclusions including recovery journal, classification warnings, source pre/post equality, and no-output failure fixtures |
-| A-MG-002 implement deterministic projector | ADRs 0023, 0025, 0026 | C-MG-004 through C-MG-006 | complete old/new ID, materialized, unobserved, collapsed, merged-message, and remaining-cycle fixtures |
-| A-MG-003 implement isolated format-5 load | ADRs 0025 and 0026 | C-MG-001, C-MG-003 through C-MG-007, C-MG-009 | migration-only format-4 decode/re-encode and old-ID verification with no source repository interface; malformed/noncanonical document rejection; projection and warning recomputation; destination-only path-scope, final-mode, file-sync, bottom-up-directory-sync, no-replace, parent-sync, durability-uncertain, target-exists, and staging fault tests |
-| A-MG-004 implement receipt/readback/recovery | ADR 0026 | C-MG-007 through C-MG-009 | fixed receipt bytes/digest, full-object readback, durability-uncertain/readback/stdout failure separation, and idempotent load-receipt tests |
+| A-MG-001 implement final format-4 exporter | ADRs 0023, 0025, 0026, and 0027 | C-MG-002, C-MG-003, C-MG-005, C-MG-006, C-MG-009 | exact double-capture maps, read-only source capability, candidate/source-structure rejection, fixed artifact bytes/digest, canonical zero-pad-bit Base64 encoding and re-encoding fixtures, alternate-number-spelling rejection, Kahn order, exact object format, tag reservation, constant exclusions including recovery journal, classification warnings, source pre/post equality, explicit change-and-restore observational-boundary fixture, and no-output failure fixtures |
+| A-MG-002 implement deterministic projector | ADRs 0023, 0025, 0026, and 0027 | C-MG-004 through C-MG-006 | complete old/new ID, materialized, unobserved, collapsed, merged-message, and remaining-cycle fixtures |
+| A-MG-003 implement isolated format-5 load | ADRs 0023, 0025, 0026, and 0027 | C-MG-001, C-MG-003 through C-MG-007, C-MG-009 | migration-only format-4 decode/re-encode and old-ID verification with no source repository interface; malformed/noncanonical document, alternate-number-spelling, nonzero-pad-bit Base64, and Base64 re-encoding mismatch rejection; projection and warning recomputation; destination-only path-scope, operational final-mode verification, file-sync, bottom-up-directory-sync, no-replace, parent-sync, durability-uncertain, target-exists, and staging fault tests |
+| A-MG-004 implement receipt/readback/recovery | ADRs 0023, 0025, 0026, and 0027 | C-MG-007 through C-MG-009 | fixed mode-neutral receipt/repository digest bytes, alternate-number-spelling rejection, full-object and stable-writable-mode readback, durability-uncertain/readback/stdout failure separation, and idempotent load-receipt tests |
 | A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026, and 0027 | C-MG-010 | exact exporter/importer artifact IDs, public-schema fixtures, normative-document synchronization, and independent fixture reproduction |
 
 No implementation or repository conversion is authorized by this Proposed
 record. Migration of tracked dogfood requires a separately reviewed exact dump,
 warning set, destination, command, and owner approval.
+
+ADRs 0023, 0025, 0026, and 0027 must be reviewed as one exact decision set and
+accepted by the operator before any format-5 implementation action or
+normative-document conversion. Action tables in all four ADRs repeat that same
+execution prerequisite; narrower Claim ownership never authorizes an earlier
+slice.
 
 ## Review
 
@@ -769,6 +830,50 @@ The subsequent exact review found that C-MG-009 assigned source-retention
 responsibility only to receipt implementation. This candidate assigns the
 read-only source and destination-only importer obligations to their actual
 export/load actions while retaining receipt recovery under A-MG-004.
+
+The 2026-08-31 three-scope review of exact ADR 0026 digest
+`a9c8057dd42ad14f3cd17b0750cfec2fbaf7b7e24ac303824b3378f1bf50d4b6`
+found that mathematical integer values did not determine the exact JSON number
+bytes used by the migration document, receipt, and repository digest, and that
+action gates could be read more narrowly than the shared decision-set gate.
+This candidate fixes the only allowed numeric lexemes and applies the same
+four-ADR execution prerequisite throughout. These are proposed corrections,
+not owner acceptance.
+
+The next three-scope review of exact ADR 0026 digest
+`a81ac8255271b33026dbb8538804e0f70acfd349811964ceeefeecd9d543ab35`
+confirmed the substantive migration contract but found that the shared gate's
+`normative-conversion` wording differed from ADR 0027 and could be confused with
+repository conversion. This candidate uses the same exact
+`normative-document conversion` gate sentence as the other three ADRs while
+retaining the separate per-repository migration approval above.
+
+The primary-agent pre-delegation review re-ran the document/receipt byte-domain,
+topological projection, durability, readback, excluded-state, source-retention,
+and separate repository-approval checks. It found no additional migration
+decision change was required before digest freeze.
+
+The next three-scope review of exact ADR 0026 digest
+`37a1c485fe6e94e58ba33e2c89dcf9a4bdb9ce65d477411fbee73b89cdfe9a0b`
+found that the standard padded Base64 wording still admitted nonzero unused pad
+bits to permissive decoders and that loader-created modes had been conflated
+with global canonical integrity. This candidate requires strict pad-bit checks
+plus exact decode/re-encode equality, retains final modes as loader
+postconditions, and makes their exclusion from repository digests explicit.
+These corrections do not authorize migration.
+
+The primary correction review then separated the original load invocation's
+final-mode readback from later mode-neutral `load-receipt` recovery and added a
+concrete nonzero-pad-bit example plus exporter/importer fixtures.
+
+The next three-scope review of exact ADR 0026 digest
+`f5abdcc783991356a95b0180a7f55a1a94eb428370294693954daf1d5f6439c2`
+confirmed the durable RV-28 provenance correction but found that `S_0`/`S_1`
+equality was described as proof that no intermediate source change occurred.
+This candidate defines equal endpoint observations as the complete portable
+boundary, explicitly excludes change-and-restore detection and continuous
+immutability, and requires that boundary as an exporter fixture. It remains
+Proposed.
 
 A three-scope review must check the artifact byte contract, closure and cycle
 rules, semantic classification completeness, atomic publication feasibility,
@@ -804,20 +909,32 @@ and every precedence claim before owner acceptance.
   `6d6331267464e53438a6b445001acbd222254bf9491ffd8533de3809a7b10dda`
   found C-MG-009 action ownership incomplete; the exact target and finding are
   recorded in the same decision/review record.
+- E-MG-010: the three-scope review of digest
+  `37a1c485fe6e94e58ba33e2c89dcf9a4bdb9ce65d477411fbee73b89cdfe9a0b`
+  recorded in
+  [`../process/cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md)
+  identified non-canonical Base64 pad-bit ambiguity. Accepted ADR 0016 and the
+  retained ADR 0011 Git-sidecar boundary also require mode-neutral integrity,
+  while this ADR's explicit final modes remain evidence of loader behavior.
+- E-MG-011: the three-scope review of digest
+  `f5abdcc783991356a95b0180a7f55a1a94eb428370294693954daf1d5f6439c2`
+  recorded in
+  [`../process/cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md)
+  identified the double-capture change-and-restore observation limit.
 
 Exact traceability is:
 
 | Claim | Evidence | Implementation action |
 | --- | --- | --- |
 | C-MG-001 | E-MG-002, E-MG-004, E-MG-005 | A-MG-003 |
-| C-MG-002 | E-MG-001, E-MG-002, E-MG-008 | A-MG-001 |
-| C-MG-003 | E-MG-001, E-MG-007, E-MG-008 | A-MG-001, A-MG-003 |
+| C-MG-002 | E-MG-001, E-MG-002, E-MG-008, E-MG-011 | A-MG-001 |
+| C-MG-003 | E-MG-001, E-MG-007, E-MG-008, E-MG-010 | A-MG-001, A-MG-003 |
 | C-MG-004 | E-MG-002, E-MG-003, E-MG-004, E-MG-007, E-MG-008 | A-MG-002, A-MG-003 |
 | C-MG-005 | E-MG-004, E-MG-006, E-MG-007 | A-MG-001, A-MG-002, A-MG-003 |
 | C-MG-006 | E-MG-001, E-MG-006, E-MG-007, E-MG-008 | A-MG-001, A-MG-002, A-MG-003 |
-| C-MG-007 | E-MG-001, E-MG-005, E-MG-007, E-MG-008 | A-MG-003, A-MG-004 |
-| C-MG-008 | E-MG-001, E-MG-006, E-MG-007 | A-MG-004 |
-| C-MG-009 | E-MG-001, E-MG-005, E-MG-009 | A-MG-001, A-MG-003, A-MG-004 |
+| C-MG-007 | E-MG-001, E-MG-005, E-MG-007, E-MG-008, E-MG-010 | A-MG-003, A-MG-004 |
+| C-MG-008 | E-MG-001, E-MG-006, E-MG-007, E-MG-010 | A-MG-004 |
+| C-MG-009 | E-MG-001, E-MG-005, E-MG-009, E-MG-010 | A-MG-001, A-MG-003, A-MG-004 |
 | C-MG-010 | E-MG-001, E-MG-004, E-MG-005, E-MG-007 | A-MG-005 |
 
 ## Follow-ups

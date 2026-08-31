@@ -152,10 +152,112 @@ Original line evidence in the reviewed working candidate:
   `PLAN.pert`:251-263.
 - **RV-24:** ADR 0006:127-131; ADR 0023:9-11, 192-199.
 
+## Exact permission, Base64, and physical-observation re-review target
+
+The next three-scope read-only review used the following exact working-
+candidate ADR bytes. HEAD remained unchanged, and no reviewer edited files or
+Git state:
+
+```text
+HEAD      2a2b08b72475e36efea6873608c60695e8ca81f7
+ADR0023   0d007265c006e8e6bc4f0599cd4c8b205684dbbca7167f9f0bdcd4b59f146f9a
+ADR0025   3828c5584ee6af43715a18dcbefd199b9e32ac5514d785e34063606a2f1d39ac
+ADR0026   37a1c485fe6e94e58ba33e2c89dcf9a4bdb9ce65d477411fbee73b89cdfe9a0b
+ADR0027   3f7181baa58b88b2a9c7fab5882a68c6fb9cb6abce07a716bb1eec9db1126b69
+```
+
+The integrated findings were:
+
+| ID | Severity | Creating mechanism | Required correction | Candidate disposition |
+| --- | --- | --- | --- | --- |
+| RV-25 | P1 | Exact loader/native-writer permission modes were promoted to canonical `fsck` validity, contradicting Accepted ADR 0016's mode-neutral integrity boundary and the ordinary-file outer-Git sidecar contract. | Keep exact modes as new-entry writer and original-load postconditions only; accept stable writable checkout modes, treat only an observed mode change as concurrent mutation, exclude modes from repository identity/digest, and never `chmod` an exact reused Blob. | Addressed by ADR 0023's `P_O` boundary, ADR 0025 C-UB-012, ADR 0026 C-MG-007, and ADR 0027's mode-neutral physical-validity rule; re-review pending. |
+| RV-26 | P2 | “Standard padded Base64” still admitted encodings with nonzero unused pad bits to permissive decoders. | Require zero unused pad bits, strict decoding, and byte-for-byte equality with standard padded re-encoding; cover empty, one-byte, two-byte, and three-byte-multiple payloads. | Addressed by ADR 0026 C-MG-003 and A-MG-001/A-MG-003; re-review pending. |
+| RV-27 | P2 | `P_O` promised detection of a physical replacement that preserved every recorded path, kind, mode, length, and content-digest field. | Define captured-tuple equality as the complete portable observation boundary; do not claim inode identity or detection of a tuple-identical replacement. | Addressed by ADR 0023 C-CR-006 and A-CR-002; re-review pending. |
+
+The exact reviewed target and dispositions are also distributed across the
+`Review` sections of ADRs 0023, 0025, 0026, and 0027. Those repetitions do not
+replace this common evidence locator.
+
+## Exact corrected-candidate review target
+
+After the RV-25 through RV-27 corrections and primary-agent self-review, three
+independent read-only reviewers verified the following four exact ADR byte
+targets before and after review. HEAD remained unchanged, and no reviewer
+edited files or Git state:
+
+```text
+HEAD      2a2b08b72475e36efea6873608c60695e8ca81f7
+ADR0023   2cac277d6b463a97948a20e40420e6c6a6472107666027146dbb6f08c8b6691b
+ADR0025   152cfbecc7a09c3c63afe7d1df11d165fef3a8592259988194715dbe677a5bb0
+ADR0026   9d8b6b1157c2a254e114c6b36843b7b1cd87cb854451f628e5ea2bfb4f08fc48
+ADR0027   5975e329da791dfdc155e3f354a360c5aac2a63213a137d236e6522a252c30ef
+```
+
+The related-ADR and repository-wide scopes also inspected this common record
+at pre-correction digest
+`10a154755168c3a1d925bd89ad0443a679cae2ed80fc574ff468a6a27ec4998b`.
+The ADR-internal scope was deliberately limited to the four ADR byte targets
+and did not review this record.
+
+The ADR-internal and repository-wide verdicts were `PASS`. The related-ADR
+verdict was `PASS_WITH_FINDINGS`; therefore the integrated verdict was
+`PASS_WITH_FINDINGS`. No P0 through P2 finding remained. The one finding was:
+
+| ID | Severity | Creating mechanism | Required correction | Candidate disposition |
+| --- | --- | --- | --- | --- |
+| RV-28 | P3 | ADR 0026 E-MG-010 attributed the Base64 ambiguity to the `37a1c485...` review, but this common record ended at the earlier `6d633126...` target and did not let a repository reader resolve that exact review result. | Persist the exact `37a1c485...` target and integrated finding in this common review record, preserving the separate Accepted-ADR evidence for mode-neutral integrity. | Addressed by the preceding exact-target and RV-25 through RV-27 inventory plus E-MG-010's direct link to this record; fresh review is pending. |
+
+The root cause of RV-28 was copying a later, transient review result into an ADR
+Evidence item without extending the common durable evidence locator. The escape
+cause was that primary self-review checked semantic authority, identifier
+coverage, and Claim/Evidence/Action symmetry but did not resolve every newly
+added review attribution through its exact target and durable repository
+record. Future pre-delegation self-review must perform that reverse lookup for
+every review- or operator-derived Evidence item before digest freeze.
+
+The two `PASS` scopes found no additional issue. The related-ADR reviewer
+confirmed that RV-28 was a provenance weakness, not a semantic, implementation-
+authority, mode, migration, Base64, or `P_O` contradiction. Reviewer headcount
+does not override the supported P3 finding.
+
+## Exact durable-evidence candidate re-review target
+
+After the RV-28 correction and expanded primary self-review, three independent
+read-only reviewers verified the following exact ADR and cited evidence-record
+bytes before and after review. HEAD remained unchanged, and no reviewer edited
+files or Git state:
+
+```text
+HEAD      2a2b08b72475e36efea6873608c60695e8ca81f7
+ADR0023   2cac277d6b463a97948a20e40420e6c6a6472107666027146dbb6f08c8b6691b
+ADR0025   152cfbecc7a09c3c63afe7d1df11d165fef3a8592259988194715dbe677a5bb0
+ADR0026   f5abdcc783991356a95b0180a7f55a1a94eb428370294693954daf1d5f6439c2
+ADR0027   5975e329da791dfdc155e3f354a360c5aac2a63213a137d236e6522a252c30ef
+REVIEW    0c9a590a57b148e48954396ccc2f3d02f66c23884870c8a760fb745d34fea0c1
+```
+
+The related-ADR and repository-wide verdicts were `PASS`. The ADR-internal
+verdict was `PASS_WITH_FINDINGS`; therefore the integrated verdict was
+`PASS_WITH_FINDINGS`. All three scopes confirmed that RV-28 was durably and
+directly resolved. The one new finding was:
+
+| ID | Severity | Creating mechanism | Required correction | Candidate disposition |
+| --- | --- | --- | --- | --- |
+| RV-29 | P3 | ADR 0026 equated equality of two complete source captures with proof that no intermediate source change occurred. A change-and-restore sequence can leave `S_0 == S_1`. | Bind output to the equal recorded values at `S_0` and `S_1`, explicitly exclude continuous non-change and change-and-restore detection, and require an observational-boundary fixture. | Addressed by ADR 0026 C-MG-002, A-MG-001, its Review section, and E-MG-011; the horizontal recurrence audit also clarified ADR 0023's `O`/`I_O`/`P_O` boundary and A-CR-002; fresh review is pending. |
+
+The root cause of RV-29 was treating equality of two samples as evidence about
+the complete transition history between them. The escape cause was that primary
+self-review applied transient-change analysis to ADR 0023's `P_O` capture but
+did not horizontally enumerate every two-capture or revalidation contract in
+the four-ADR set. Future pre-delegation review must inventory each such contract
+and distinguish captured-value equality, detected mismatch, and unobservable
+change-and-restore before digest freeze.
+
 ## Review and authority boundary
 
 `Candidate disposition` means that the current working candidate contains a
 proposed correction. It is not a finding closure. Closure requires a fresh
-three-scope review over exact new ADR bytes, followed by explicit owner
-acceptance. Any material edit changes the digests and invalidates a prior PASS
-or owner-decision request.
+three-scope review over the exact candidate ADR bytes and every materially
+changed cited review-evidence record, followed by explicit owner acceptance.
+Any material edit to that reviewed target changes a digest and invalidates a
+prior PASS or owner-decision request.

@@ -3,8 +3,8 @@
 - Status: Proposed
 - Date: 2026-08-28
 - Decision Owner: Operator
-- Related Claims: C-UB-001 through C-UB-011
-- Related Evidence: E-UB-001 through E-UB-008
+- Related Claims: C-UB-001 through C-UB-012
+- Related Evidence: E-UB-001 through E-UB-010
 - Pending Decision: owner acceptance of the exact candidate after fresh review
 - Supersedes on acceptance: the format-4 canonical Seal and Candidate shape in
   ADR 0011; the format-4 attachment placement retained by ADR 0021
@@ -258,12 +258,16 @@ fields with publication CAS state kept outside immutable identity.
 
 A successful seal operation:
 
-1. validates the complete Candidate and coherent graph observation;
-2. writes or verifies content/attachment Blobs selected by explicit input;
-3. writes or verifies one canonical Material Blob;
-4. writes or verifies one canonical Provenance Blob;
-5. writes or verifies one canonical Seal Blob; and
-6. performs exactly one expected-old REF-head CAS for exactly one logical REF.
+1. acquires ADR 0023's repository-wide writer guard before the first coherent
+   graph observation and retains it through publication classification;
+2. validates the complete Candidate and coherent graph observation;
+3. writes or verifies content/attachment Blobs selected by explicit input;
+4. writes or verifies one canonical Material Blob;
+5. writes or verifies one canonical Provenance Blob;
+6. writes or verifies one canonical Seal Blob;
+7. revalidates the complete graph observation while still holding the guard;
+   and
+8. performs exactly one expected-old REF-head CAS for exactly one logical REF.
 
 Several immutable Blob puts still produce exactly one prospective logical Seal
 identity. Failure before the REF CAS may leave unreachable immutable Blobs;
@@ -308,8 +312,26 @@ ADR 0024 source adapters terminate at exact content bytes. They do not create
 special Git-backed Blob kinds, make external object availability a read
 dependency, or bypass Candidate review.
 
-This establishes C-UB-009: source acquisition, immutable byte storage, domain
+This establishes C-UB-009: exact config bytes select one typed repository
+validation contract, while source acquisition, immutable byte storage, domain
 validation, and REF publication remain separate responsibilities.
+
+Format-5 init, load, and native writers set explicit permission modes on entries
+they newly create as operational hardening: `0755` for repository/directories,
+`0644` for config, `0444` for immutable loose objects, and `0600` for REF
+manifests. They verify their own creation-mode postconditions before reporting
+success. Idempotent Blob reuse validates the pre-existing exact envelope and
+bytes but does not chmod it. These bits are not persisted identity,
+repository-digest input, or canonical validity. Outer Git may restore every
+ordinary non-executable tracked file as writable without changing canonical
+bytes; standalone and Git-sidecar validation must still accept that stable
+byte-valid state. `fsck` records mode in its physical observation only to
+reject a different mode observed at recapture, rejects wrong kinds,
+unreadability, and invalid bytes, and never repairs a stable mode.
+
+This establishes C-UB-012: writer-created modes are explicit operational
+postconditions while format-5 integrity remains mode-neutral and portable
+through the retained ordinary-file Git-sidecar boundary.
 
 ### Decision precedence
 
@@ -321,6 +343,9 @@ On acceptance:
   independence, exact Cause identity, and Merkle-DAG intent remain.
 - ADR 0013's REF-manifest and tag semantics remain, with targets validated as
   format-5 Seal Blobs.
+- ADR 0016's mode-neutral `fsck` integrity boundary remains; permission bits
+  may be hardened by writers and observed for concurrent change but are not
+  canonical corruption authority.
 - ADR 0017 may extend metadata only through another accepted typed schema and
   may not introduce unvalidated generic fields into these Blobs.
 - ADR 0019 and ADR 0024 retain non-canonical source bindings and exact-byte
@@ -369,6 +394,14 @@ in mutation CAS and cleanup. Leaving their fields or reader/writer normal form
 open would permit incompatible implementations even though Candidates are not
 content-addressed Blobs.
 
+### Make exact POSIX permission bits canonical integrity state
+
+Rejected because outer Git preserves only its ordinary-file executable
+distinction and cannot round-trip `0444` versus `0600`. That rule would make an
+exact byte-valid checkout fail the retained native/Git-sidecar validators and
+would reverse ADR 0016's accepted integrity boundary. Explicit creation modes
+remain worthwhile writer hardening without becoming repository identity.
+
 ## Consequences
 
 Good:
@@ -380,6 +413,8 @@ Good:
 - Existing content and attachment BlobIDs can survive migration unchanged.
 - RefGraph remains a separate theoretical tool rather than a production
   dependency.
+- Fresh outer-Git checkouts remain valid while new native entries still receive
+  explicit hardened creation modes.
 
 Bad / Risk:
 
@@ -391,24 +426,32 @@ Bad / Risk:
 - The schema split changes all format-4 SealIDs even when material is unchanged.
 - Strict Candidate byte equality makes noncanonical manual edits invalid;
   explicit discard remains the recovery path for corrupt local intent.
+- Permission drift must be governed operationally when it matters; stable
+  writable bits alone are not reported as canonical corruption.
 
 Neutral:
 
 - This ADR does not add attachment mutation, garbage collection, pack files,
   remote fetching, or Git repository semantics.
 - This ADR does not authorize runtime dual-read compatibility.
+- Physical mode remains useful for concurrent-observation equality, but
+  `fsck` neither canonicalizes nor repairs it.
 
 ## Implementation Notes
 
 | Action | Accepted ADR gate | Claim | Evidence required before completion |
 | --- | --- | --- | --- |
-| A-UB-001 isolate universal Blob store | ADR 0025 | C-UB-001 through C-UB-003 | byte-envelope, idempotent put, corrupt-object, and typed-mismatch tests |
-| A-UB-002 implement three canonical schemas | ADR 0025 | C-UB-004 through C-UB-007 | fixed byte/ID fixtures for control, slash, quote, backslash, non-ASCII BMP and supplementary scalars; ordering, duplicate, unknown-field, and transitive identity tests |
-| A-UB-003 update candidate publication | ADRs 0023, 0025, and 0027 | C-UB-007 through C-UB-011 | exact Candidate bytes, one-target authoring transitions, read/re-encode rejection, corrupt discard, fault-injection, pre-existing-ID, unchanged-ID, and REF-CAS tests proving one logical publication and no partial publication |
-| A-UB-004 update inspection and fsck | ADRs 0023, 0025, and 0027 | C-UB-003, C-UB-006, C-UB-007 | missing/wrong-schema/cyclic-reference fixtures and fixed format-5 inspection bytes |
+| A-UB-001 isolate universal Blob store | ADRs 0023, 0025, 0026, and 0027 | C-UB-001 through C-UB-003, C-UB-012 | byte-envelope, new-object mode postcondition, writable pre-existing exact-Blob idempotent reuse without chmod, corrupt-object, and typed-mismatch tests |
+| A-UB-002 implement three canonical schemas | ADRs 0023, 0025, 0026, and 0027 | C-UB-004 through C-UB-007 | fixed byte/ID fixtures for control, slash, quote, backslash, non-ASCII BMP and supplementary scalars; ordering, duplicate, unknown-field, and transitive identity tests |
+| A-UB-003 update candidate publication | ADRs 0023, 0025, 0026, and 0027 | C-UB-007, C-UB-008, C-UB-010, C-UB-011 | exact Candidate bytes, one-target authoring transitions, read/re-encode rejection, corrupt discard, fault-injection, pre-existing-ID, unchanged-ID, cross-REF writer serialization, and REF-CAS tests proving one logical publication and no partial publication |
+| A-UB-004 update inspection and fsck | ADRs 0023, 0025, 0026, and 0027 | C-UB-003, C-UB-006, C-UB-007, C-UB-009, C-UB-012 | missing/wrong-schema/cyclic-reference, complete physical canonical namespace/kind, stable writable-mode acceptance, concurrent mode-change rejection, and fixed format-5 inspection-byte fixtures |
+| A-UB-005 update repository format boundary and standalone init | ADRs 0023, 0025, 0026, and 0027 | C-UB-009, C-UB-012 | exact config bytes, writer-created repository-root/config/object/REF mode postconditions, mode-neutral Git-checkout readback, format-4 rejection, format-5 init/readback, typed manifest-target validation, no dual reader, and no Git-detection fixtures |
 
-No implementation action is authorized by this Proposed record. Normative
-documentation changes follow acceptance of the exact reviewed candidate.
+ADRs 0023, 0025, 0026, and 0027 must be reviewed as one exact decision set and
+accepted by the operator before any format-5 implementation action or
+normative-document conversion. Action tables in all four ADRs repeat that same
+execution prerequisite; narrower Claim ownership never authorizes an earlier
+slice.
 
 ## Review
 
@@ -424,6 +467,44 @@ both exactly and preserves the existing non-empty attachment-name invariant.
 The subsequent exact review found the format-5 public JSON transition and
 Cause Link option grouping incomplete; ADR 0027 supplies those separate
 public-interface contracts without changing this storage decision.
+
+The 2026-08-31 three-scope review of exact ADR 0025 digest
+`9aa8f4c2aa850b3f69f4a9d78fd25e12e619676bb99aae79a02df119d4dbff1d`
+found that the publication sequence did not explicitly retain the repository
+writer guard through coherent revalidation and REF CAS, that action gates could
+be read more narrowly than the shared four-ADR boundary, and that C-UB-006
+omitted the evidence item recording its canonical-encoding blocker. This
+candidate makes the guard lifetime and shared gate explicit and repairs that
+traceability row. These edits do not accept the decision.
+
+The next three-scope review of exact ADR 0025 digest
+`b421aa6a176d64e2c82f7aabcab76ba2f383fe94cfa0d255f7711eada4d1e203`
+confirmed the publication sequence but found that its traceability did not cite
+the accepted writer-serialization and one-REF CAS authority. This candidate
+adds that evidence and maps it to C-UB-008/A-UB-003. It also uses the exact
+shared four-ADR gate sentence. These are proposed corrections, not acceptance.
+
+The primary-agent pre-delegation review rechecked every typed identity,
+Candidate publication branch, action gate, and trace row. It found E-UB-003 was
+otherwise orphaned from the exact trace table and connected it to C-UB-005,
+which is the reusable Material/Provenance placement claim it supports. The
+repository-wide reverse trace also found exact config/init implementation was
+hidden inside Candidate publication; A-UB-005 now owns that boundary explicitly.
+The action-to-Claim reverse comparison also adds A-UB-004 to C-UB-007 so the
+action table and exact trace table are symmetric.
+
+The next three-scope review of exact ADR 0025 digest
+`3828c5584ee6af43715a18dcbefd199b9e32ac5514d785e34063606a2f1d39ac`
+found that A-UB-004/A-UB-005 had promoted migration writer modes to canonical
+integrity without a supporting Claim and in conflict with ADRs 0011 and 0016.
+This candidate separates writer hardening from integrity authority in
+C-UB-012, supplies its accepted evidence, and assigns both fsck and init/writer
+fixtures to that boundary. The decision remains Proposed.
+
+The primary correction review then found that idempotent reuse of an exact
+pre-existing writable Blob must not silently chmod it. C-UB-012 and A-UB-001
+now distinguish modes on newly created entries from byte validation of reused
+entries and require an explicit no-chmod fixture.
 
 A three-scope review must verify canonical implementability, interaction with
 ADRs 0003/0011/0021/0023/0024/0026, and repository-wide effects before owner
@@ -455,6 +536,15 @@ acceptance.
   canonical string encoding and exact Candidate persistence as acceptance
   blockers; the exact findings and target digests are recorded in
   [`../process/cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md).
+- E-UB-009: accepted ADR 0011 requires repository-wide writer serialization and
+  defines successful expected-old REF CAS as the one-REF publication
+  linearization point; accepted ADR 0018 keeps journal and REF work inside that
+  guard through mutation classification.
+- E-UB-010: accepted ADR 0016 states that writable checkout modes are not
+  integrity authority. Accepted ADR 0011 retains one ordinary-file Git-sidecar
+  representation whose worktree, staged-tree, and commit-tree views use the
+  same native byte/path validators; outer Git cannot preserve `0444` versus
+  `0600` for ordinary non-executable files.
 
 Exact traceability is:
 
@@ -464,13 +554,14 @@ Exact traceability is:
 | C-UB-002 | E-UB-001, E-UB-005 | A-UB-001 |
 | C-UB-003 | E-UB-001, E-UB-005 | A-UB-001, A-UB-004 |
 | C-UB-004 | E-UB-002, E-UB-005 | A-UB-002 |
-| C-UB-005 | E-UB-002, E-UB-005 | A-UB-002 |
-| C-UB-006 | E-UB-001, E-UB-005, E-UB-007 | A-UB-002, A-UB-004 |
-| C-UB-007 | E-UB-004, E-UB-005, E-UB-007 | A-UB-002, A-UB-003 |
-| C-UB-008 | E-UB-002, E-UB-005 | A-UB-003 |
-| C-UB-009 | E-UB-004, E-UB-006 | A-UB-003 |
+| C-UB-005 | E-UB-002, E-UB-003, E-UB-005 | A-UB-002 |
+| C-UB-006 | E-UB-001, E-UB-005, E-UB-007, E-UB-008 | A-UB-002, A-UB-004 |
+| C-UB-007 | E-UB-004, E-UB-005, E-UB-007 | A-UB-002, A-UB-003, A-UB-004 |
+| C-UB-008 | E-UB-005, E-UB-009 | A-UB-003 |
+| C-UB-009 | E-UB-001, E-UB-004, E-UB-006 | A-UB-004, A-UB-005 |
 | C-UB-010 | E-UB-001, E-UB-002, E-UB-007 | A-UB-003 |
 | C-UB-011 | E-UB-002, E-UB-005, E-UB-008 | A-UB-003 |
+| C-UB-012 | E-UB-001, E-UB-010 | A-UB-001, A-UB-004, A-UB-005 |
 
 ## Follow-ups
 

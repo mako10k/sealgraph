@@ -4,7 +4,7 @@
 - Date: 2026-08-28
 - Decision Owner: Operator
 - Related Claims: C-CR-001 through C-CR-013
-- Related Evidence: E-CR-001 through E-CR-010
+- Related Evidence: E-CR-001 through E-CR-012
 - Pending Decision: owner acceptance of the exact candidate after fresh review
 - Supersedes on acceptance: the ancestry-based Link-repoint inference in ADR
   0006; the intrinsic-parent revision semantics and parent-based selector,
@@ -148,16 +148,70 @@ Every operation whose answer or admissibility depends on `O`, `V_O`, `C_O`,
    absence, exact HEADs, and complete tag arrays; and
 6. fail with a retryable concurrent-observation error if they differ.
 
+Every supported Candidate or canonical-manifest mutation surface retains ADRs
+0011 and 0018's one repository-wide process writer guard. A graph-dependent
+mutation acquires that guard before its first capture of `O` and holds it
+through the final byte-equality check, journal preparation when applicable,
+the one-REF CAS or other already accepted manifest transaction, and the
+resulting publication classification. Every native and Git-sidecar manifest
+writer must participate in the same guard; a command may not implement a
+private per-REF substitute.
+The expected-old CAS remains the one-REF publication linearization point, while
+the guard prevents two different REF publications from both being admitted
+against one old repository graph. Runtime lock bytes remain non-canonical.
+Concurrent direct filesystem or outer-VCS rewriting that does not participate
+in the guard is outside the supported mutation protocol and must never be
+treated as a successful serializable Sealgraph write.
+
 Repository-wide `@SEAL_TOKEN` prefix resolution has one additional observation
 component. Before resolving it, the operation captures `I_O`, the sorted
 complete set of every valid physical loose-object ID. It resolves uniqueness
 across all of `I_O` and then requires the unique object to decode as a canonical
 format-5 Seal Blob, preserving ADR 0006's object-name-prefix domain. It buffers
 the dependent result, recaptures the same complete loose-object inventory
-immediately before output or mutation, and requires exact equality. An added or
-removed object that changes or could change prefix uniqueness therefore causes
-the same retryable concurrent-observation failure. Operations that do not use
-a repository-wide Seal prefix do not scan `I_O` merely to validate graph facts.
+immediately before output or mutation, and requires exact equality. An object
+present in only one of the two captured inventories causes the same retryable
+concurrent-observation failure whether or not it changes prefix uniqueness.
+Operations that do not use a repository-wide Seal prefix do not scan `I_O`
+merely to validate graph facts; `fsck` has the separate complete physical
+observation below.
+
+`fsck` captures `P_O`, the complete sorted physical canonical-namespace
+observation. It has a fixed `ROOT` slot for the `.sealgraph` repository entry, a
+fixed `CONFIG` slot, and a namespace map containing every entry at or below the
+canonical `objects` and `refs` roots, including those roots, the `refs/seals`
+root, intermediate directories, invalid names, and unexpected entries. `ROOT`
+contains its `lstat` kind and mode. `CONFIG` is explicitly `ABSENT` or contains
+its `lstat` kind, mode, and, when regular, captured exact-byte length and SHA-256.
+Namespace-map keys are raw path bytes relative to `.sealgraph`; values contain
+`lstat` kind and mode and, for a regular file, a captured exact-byte length and
+SHA-256. Directories contain no byte digest. Symlinks and special entries are
+recorded by kind and never followed or opened.
+
+Permission bits are observation fields and explicit init/load/writer
+postconditions, not canonical identity or stable integrity authority. A stable
+writable mode restored by an outer Git checkout does not by itself make exact
+canonical bytes corrupt. During one `fsck` invocation, however, a mode value
+that differs between the two `P_O` captures is a concurrent-observation
+failure. Wrong entry kinds, symlinks, special files, unreadability, invalid
+layout, or invalid bytes remain integrity or operational failures. `fsck`
+reports but never changes modes.
+
+`O` is the validated logical REF-manifest projection of the same captured REF
+namespace; it does not replace the physical REF/config portion of `P_O`. The
+command captures both `O` and `P_O`, validates config, every physical canonical
+layout entry, envelope, BlobID, typed role, reference, REF manifest, tag, and
+combined graph, buffers the complete result, then recaptures both observations
+immediately before output. Any added or removed entry, or any change to a
+captured path, kind, mode, length, or digest for config, object, REF, root, or
+intermediate entries, fails retryably without success JSON. A physical
+replacement that preserves the complete recorded tuple is observationally
+equal and need not be distinguished; `P_O` deliberately contains no inode or
+other non-portable entry identity. A change-and-restore between captures that
+also preserves the complete recorded tuple is likewise observationally equal;
+neither `O`, `I_O`, nor `P_O` claims continuous monitoring. An absent config or
+invalid path, entry, manifest, or Blob prevents success; any difference it
+contributes between captured tuples must cause failure rather than be omitted.
 
 This applies to `show` when it includes derived relations, `log`, `linklog`,
 `status`, `stale`, `impact`, `graph`, selectors, `fsck`, candidate mutation,
@@ -190,10 +244,15 @@ revision edge with all sorted supporting assertion sources. A shared ancestor
 is one entry even when several branches reach it; no traversal algorithm,
 filesystem order, or preferred predecessor changes membership or ordering.
 
-`--all-paths` additionally retains distinct simple paths from `H`, including
-their assertion sources, but does not invent a preferred parent. Exact path
-order, bounded enumeration, truncation, and machine representation are defined
-by ADR 0027.
+Let a history leaf be a member of `G_O(H)` with no outgoing `E_O` edge to
+another member. `--all-paths` retains exactly every maximal leaf-terminated
+path `[H, ..., L]` whose adjacent pairs are `E_O` edges and whose final member
+`L` is a history leaf. When `H` is itself a leaf, the exact path set is the one
+zero-edge path `[H]`. Validated acyclicity makes every such path simple. Shared
+prefixes remain repeated in their distinct complete paths, and no non-maximal
+prefix is a separate path. Assertion sources remain attached to each adjacent
+edge; no preferred parent is invented. Exact path order, bounded enumeration,
+truncation, and machine representation are defined by ADR 0027.
 
 `linklog REF` also begins at the exact REF head, but it compares each reachable
 structural revision edge rather than choosing one predecessor. Let:
@@ -237,6 +296,36 @@ A dependent Seal is stale when a direct or transitive Cause target used by its
 Provenance is not an active current revision leaf under the same `O`. Staleness
 is derived and never persisted. Historical and draft inspection may show a
 non-leaf target without repairing or rejecting the existing immutable Seal.
+
+The exact classification and review frontier are:
+
+```text
+direct_stale_O(H) = { D | (H -> D) is in C_O and D is not an active leaf }
+
+transitive_stale_paths_O(H) =
+  empty, when direct_stale_O(H) is non-empty
+  otherwise every first-stale Cause path [D_0, ..., D_n], n >= 1, where
+    (H -> D_0) is in C_O,
+    D_0 through D_(n-1) are active leaves,
+    every adjacent pair is in C_O, and
+    D_n is not an active leaf
+
+S_O = { r | r has current head H and
+              (H is an active non-leaf
+               or direct_stale_O(H) is non-empty
+               or transitive_stale_paths_O(H) is non-empty) }
+Q_O = { HEAD(r) | r is in S_O }
+CausePlus_O(H) = strict transitive closure from H through C_O
+F_O = { r in S_O | CausePlus_O(HEAD(r)) intersects Q_O at no Seal }
+```
+
+`stale` selects `S_O`; `stale --frontier` selects `F_O`. Multiple REF aliases
+of the same stale head are either all selected or all omitted: an alias does
+not block another alias because the closure is strict and the combined graph
+is acyclic. A clean or unselected sibling tip, a revision edge, and Candidate
+state do not affect frontier membership. Direct and transitive Cause labels are
+therefore mutually exclusive for one current head, while self-stale may coexist
+with either Cause classification.
 
 This establishes:
 
@@ -283,8 +372,12 @@ Immutable comparison requires exactly two explicit selectors:
 sealgraph compare LEFT RIGHT
 ```
 
-It compares the exact selected Seal, Material, Provenance, and derived graph
-records. The old one-selector form is removed and fails with
+It compares the exact selected immutable Seal, Material, and Provenance views,
+including each Provenance's complete canonical Cause Link array. Derived graph
+state, REF aliases, revision observations, and assertion-source unions are not
+comparison fields; commands expose those observation-relative records through
+`show`, `graph`, `log`, `linklog`, and `impact`. The old one-selector form is
+removed and fails with
 `SECOND_SELECTOR_REQUIRED`; no previous revision is inferred.
 
 `candidate compare REF` compares the prospective Candidate projection with its
@@ -484,8 +577,10 @@ Draft and explicit historical workflows may preserve non-leaf dependencies,
 but they must label that policy in output and may not present it as normal
 HEAD-consistent publication.
 
-This establishes C-CR-008: admission is strict for the candidate's Cause
-closure without turning unrelated repository state into a global write lock.
+This establishes C-CR-008: semantic admission is strict for the candidate's
+Cause closure without requiring unrelated heads to be clean; the orthogonal
+repository writer guard supplies serializable publication rather than changing
+that semantic quantifier.
 
 ### Authoring contract
 
@@ -523,8 +618,10 @@ the scope of every revision assertion explicit.
 
 On acceptance:
 
-- ADR 0010's stale/frontier intent remains, but its revision edges are derived
-  from the observation defined here.
+- ADR 0010's factual stale intent and stable `--refs-only` protocol remain. ADR
+  0011's later exact-Seal `S_O`/`Q_O`/`F_O` frontier replacement remains
+  authoritative, with `CausePlus_O` evaluated over this ADR's `C_O` and the REF
+  alias behavior made explicit here.
 - ADR 0006 retains full IDs, immutable tags, TAGNAME grammar, and Link
   messages. Its ancestry-based `linklog` repoint inference is superseded;
   format 5 reports exact Cause Link removal and addition instead.
@@ -537,8 +634,8 @@ On acceptance:
 - ADR 0015 retains inspection safety and deterministic output; its history
   projection follows this ADR, while ADR 0027 defines format-5 successor JSON
   schemas.
-- ADR 0016 retains integrity and fail-closed behavior; its parent-closure
-  checks become observation-derived assertion checks.
+- ADR 0016 retains fail-closed, mode-neutral integrity behavior; its
+  parent-closure checks become observation-derived assertion checks.
 - ADR 0017 may add generic metadata only through a later accepted schema; it
   may not duplicate or reinterpret the core revision assertion.
 - ADR 0019 retains local source bindings but loses candidate-global parent
@@ -620,6 +717,14 @@ distinguishable from no observer.
 Rejected because a dependency occurrence is not publication. Only current REF
 heads establish active revision roots.
 
+### Add inode or filesystem generation identity to `P_O`
+
+Rejected because such identity is not portable across filesystems, outer-Git
+checkouts, or staged/commit-tree views and is unnecessary for deterministic
+Sealgraph output. Equality of the complete path/kind/mode/length/digest tuple is
+the supported observation boundary; a physically replaced but tuple-identical
+entry is the same observation.
+
 ## Consequences
 
 Good:
@@ -634,6 +739,8 @@ Good:
 - Impact defaults to the conservative all-observer revision union while an
   explicit observer filter can inspect a narrower asserted history without
   changing the Cause traversal domain.
+- Physical observation detects every difference in its portable tuple without
+  claiming non-portable entry identity or treating stable mode as corruption.
 
 Bad / Risk:
 
@@ -655,23 +762,26 @@ Neutral:
 - This ADR defines semantic graph rules, not the physical Blob schema or
   migration encoding.
 - Acceptance does not mutate a repository, implement a CLI, or accept ADRs
-  0025 and 0026.
+  0025, 0026, or 0027.
 
 ## Implementation Notes
 
 | Action | Accepted ADR gate | Claim | Evidence required before completion |
 | --- | --- | --- | --- |
-| A-CR-001 implement assertion-aware graph model | ADR 0023 | C-CR-001 through C-CR-005 | canonical mixed-observer, empty/non-empty, branch, cycle, and inactive-object fixtures |
-| A-CR-002 add observation transaction | ADR 0023 | C-CR-003, C-CR-006 | deterministic concurrent-HEAD, tag-only, manifest-presence, and repository-wide loose-object-prefix inventory mutation tests for each dependent command family |
-| A-CR-003 replace history/stale/admission algorithms | ADR 0023 | C-CR-007, C-CR-008, C-CR-013 | worked multi-REF tests proving candidate-scoped admission, repository-wide edge effects, unique-node minimum-depth log order, shared-ancestor deduplication, and complete source evidence |
-| A-CR-004 replace parent authoring surfaces | ADRs 0023, 0025, and 0027 | C-CR-009 | one-target whole-record CLI contract, candidate canonicalization fixtures, and rejection tests for removed parent vocabulary and ambiguous option grouping |
-| A-CR-005 expose assertion sources | ADR 0023 | C-CR-002, C-CR-004, C-CR-007 | stable human and JSON fixtures for unobserved, empty, asserted, and mixed states |
-| A-CR-006 replace selector and comparison contracts | ADR 0023 | C-CR-006, C-CR-007, C-CR-010 | scoped closure, regex-complement tag/hex disambiguation, short/long all-hex tags, ambiguity, two-selector, absent-baseline, concurrent-manifest, and prefix-inventory fixtures |
-| A-CR-007 redefine impact and filtered evidence | ADR 0023 | C-CR-004, C-CR-006, C-CR-011 | all-observer, single/multiple-observer, stitched-chain, empty/unobserved, deterministic proof, cache-hit/canonical-scan equivalence, and bounded-path fixtures for human and `sealgraph/impact/v2` output |
-| A-CR-008 replace branching linklog | ADR 0023 | C-CR-004, C-CR-006, C-CR-012 | multi-previous, shared-edge deduplication, observer-source, exact Cause-record before/after, no-repoint, deterministic order, and `sealgraph/linklog/v2` fixtures |
+| A-CR-001 implement assertion-aware graph model | ADRs 0023, 0025, 0026, and 0027 | C-CR-001 through C-CR-005 | canonical mixed-observer, empty/non-empty, branch, cycle, and inactive-object fixtures |
+| A-CR-002 add observation transaction | ADRs 0023, 0025, 0026, and 0027 | C-CR-003, C-CR-006 | deterministic concurrent-HEAD, tag-only, manifest-presence, cross-REF write-skew, writer-guard participation, complete repository-root/config/object/REF physical-namespace tuple mutation, stable writable-mode acceptance, observationally equal replacement and change-and-restore, and repository-wide loose-object-prefix inventory mutation tests for each dependent command family |
+| A-CR-003 replace history/stale/admission algorithms | ADRs 0023, 0025, 0026, and 0027 | C-CR-007, C-CR-008, C-CR-013 | worked multi-REF tests proving candidate-scoped admission, repository-wide edge effects, direct/transitive exclusivity, exact-Seal frontier aliases/self-stale/branch/downstream membership, unique-node minimum-depth log order, maximal leaf-path membership including the zero-edge path, shared-ancestor deduplication, and complete source evidence |
+| A-CR-004 replace parent authoring surfaces | ADRs 0023, 0025, 0026, and 0027 | C-CR-009 | one-target whole-record CLI contract, candidate canonicalization fixtures, and rejection tests for removed parent vocabulary and ambiguous option grouping |
+| A-CR-005 expose assertion sources | ADRs 0023, 0025, 0026, and 0027 | C-CR-002, C-CR-004, C-CR-007, C-CR-011, C-CR-012 | stable human and JSON fixtures for unobserved, empty, asserted, and mixed states |
+| A-CR-006 replace selector and comparison contracts | ADRs 0023, 0025, 0026, and 0027 | C-CR-006, C-CR-007, C-CR-010 | scoped closure, regex-complement tag/hex disambiguation, short/long all-hex tags, ambiguity, two-selector, absent-baseline, concurrent-manifest, and prefix-inventory fixtures |
+| A-CR-007 redefine impact and filtered evidence | ADRs 0023, 0025, 0026, and 0027 | C-CR-004, C-CR-006, C-CR-011 | all-observer, single/multiple-observer, stitched-chain, empty/unobserved, deterministic proof, cache-hit/canonical-scan equivalence, and bounded-path fixtures for human and `sealgraph/impact/v2` output |
+| A-CR-008 replace branching linklog | ADRs 0023, 0025, 0026, and 0027 | C-CR-004, C-CR-006, C-CR-012 | multi-previous, shared-edge deduplication, observer-source, exact Cause-record before/after, no-repoint, deterministic order, target-filter membership, and `sealgraph/linklog/v2` fixtures |
 
-No action may start from this Proposed ADR alone. Acceptance of the exact ADR,
-then the corresponding storage and migration ADRs, is the implementation gate.
+ADRs 0023, 0025, 0026, and 0027 must be reviewed as one exact decision set and
+accepted by the operator before any format-5 implementation action or
+normative-document conversion. Action tables in all four ADRs repeat that same
+execution prerequisite; narrower Claim ownership never authorizes an earlier
+slice.
 
 ## Review
 
@@ -693,6 +803,61 @@ incomplete branching `log`, a non-total selector lexical partition, and
 format-5 public-schema/authoring gaps. This candidate corrects the semantic and
 observation mechanisms; ADR 0027 owns their exact CLI and machine-output
 representation.
+
+The 2026-08-31 three-scope review of exact ADR 0023 digest
+`17287daf9b82a087a82215a48008e4598abaf2a82d6e04fe87f4c1645ff6affa`
+found that graph revalidation plus one-REF CAS did not state the retained
+repository-writer serialization needed to prevent cross-REF write skew, that
+`fsck` lacked a complete physical namespace transaction, that
+`log --all-paths` did not choose its terminal path set, and that action tables
+could be read as narrower gates than the four-ADR acceptance boundary. This
+candidate explicitly retains the shared writer guard through publication,
+defines the complete `fsck` observation and maximal leaf-path set, and applies
+one four-ADR execution gate. These are proposed corrections, not finding
+closure or owner acceptance.
+
+The next three-scope review of exact ADR 0023 digest
+`74178fecb58f5d018f1286b2f1a5d575b96b14b58fd306e5c4a7f138c79ae299`
+found that the physical observation omitted REF/config metadata, the frontier
+reference pointed to ADR 0010's superseded named-REF predicate, immutable
+comparison claimed an unrepresented derived-graph view, and writer/CAS
+authority was not traced to its accepted source. It also confirmed that
+direct/transitive stale coexistence would contradict the retained accepted
+classification. This candidate defines the complete physical canonical
+namespace, carries forward ADR 0011's exact-Seal frontier, narrows immutable
+comparison to represented immutable fields, restores Cause-classification
+exclusivity, and adds the accepted writer/CAS evidence below. These remain
+proposed corrections.
+
+The primary-agent pre-delegation review then exercised empty, alias, mixed-
+branch, concurrent-write, invalid-namespace, and permission-boundary cases. It
+found that the physical map still needed an unambiguous repository-root slot
+and initially treated exact writer-created modes as successful `fsck` rules;
+the independent correction below narrows those modes to observation and writer
+postconditions. That review also made `S_O` grouping explicit and found
+asymmetric action ownership by reverse-comparing every action's Claim column
+with the exact trace table.
+
+The next three-scope review of exact ADR 0023 digest
+`0d007265c006e8e6bc4f0599cd4c8b205684dbbca7167f9f0bdcd4b59f146f9a`
+found that exact loader-created modes had been incorrectly promoted above ADR
+0016's mode-neutral integrity boundary and that `P_O` promised to detect a
+byte-, kind-, mode-, and path-identical physical replacement absent from its
+tuple. This candidate keeps mode changes observable within one command, makes
+stable mode values non-canonical, and defines tuple equality as the complete
+portable observation boundary. These remain proposed corrections.
+
+The primary correction review then checked transient changes and
+outer-Git/staged-tree portability. It narrowed concurrency failure to differing
+captured tuples, rejected non-portable inode identity explicitly, and added
+tuple-equal replacement fixtures before the next digest freeze.
+
+The next primary pre-delegation horizontal audit applied ADR 0026's RV-29
+change-and-restore finding to every two-capture contract. It clarified that
+`O`, `I_O`, and `P_O` compare only their two complete captured tuples, claim no
+continuous monitoring, and treat a change-and-restore to the same tuple as
+observationally equal. A-CR-002 carries that boundary into implementation
+fixtures without expanding the portable tuple.
 
 A fresh three-scope review of these exact bytes is still required. Review PASS
 does not itself change `Proposed` to `Accepted`.
@@ -731,19 +896,29 @@ does not itself change `Proposed` to `Accepted`.
   identified the impact-quantifier, manifest-observation, branching-log,
   selector-partition, and public-schema gaps recorded in the same review
   record. These are review findings, not owner acceptance evidence.
+- E-CR-011: accepted ADR 0011 requires every standalone mutation to retain one
+  repository-wide writer guard and makes the successful expected-old REF CAS
+  the publication linearization point; accepted ADR 0018 requires journal and
+  REF work to remain inside that same guard through mutation classification.
+- E-CR-012: accepted ADR 0016 explicitly rejects writable checkout modes as
+  integrity authority, and accepted ADR 0011 requires Git-sidecar views of
+  ordinary tracked `.sealgraph` files to use the same native byte/path
+  validators. A portable observation therefore records kind, mode, length, and
+  digest changes without inventing a stable inode identity or canonicalizing
+  permission bits.
 
 Exact traceability is:
 
 | Claim | Evidence | Implementation action |
 | --- | --- | --- |
-| C-CR-001 | E-CR-001, E-CR-004 | A-CR-001 |
-| C-CR-002 | E-CR-004, E-CR-006 | A-CR-005 |
+| C-CR-001 | E-CR-001, E-CR-004, E-CR-005 | A-CR-001 |
+| C-CR-002 | E-CR-004, E-CR-006 | A-CR-001, A-CR-005 |
 | C-CR-003 | E-CR-002, E-CR-010 | A-CR-001, A-CR-002 |
-| C-CR-004 | E-CR-004, E-CR-006 | A-CR-001, A-CR-005 |
+| C-CR-004 | E-CR-004, E-CR-006 | A-CR-001, A-CR-005, A-CR-007, A-CR-008 |
 | C-CR-005 | E-CR-001, E-CR-002 | A-CR-001 |
-| C-CR-006 | E-CR-002, E-CR-010 | A-CR-002 |
-| C-CR-007 | E-CR-001, E-CR-002 | A-CR-003, A-CR-005 |
-| C-CR-008 | E-CR-002, E-CR-010 | A-CR-003 |
+| C-CR-006 | E-CR-002, E-CR-010, E-CR-011, E-CR-012 | A-CR-002, A-CR-006, A-CR-007, A-CR-008 |
+| C-CR-007 | E-CR-001, E-CR-002 | A-CR-003, A-CR-005, A-CR-006 |
+| C-CR-008 | E-CR-002, E-CR-010, E-CR-011 | A-CR-003 |
 | C-CR-009 | E-CR-003, E-CR-004 | A-CR-004 |
 | C-CR-010 | E-CR-002, E-CR-007 | A-CR-006 |
 | C-CR-011 | E-CR-002, E-CR-006, E-CR-008 | A-CR-005, A-CR-007 |
