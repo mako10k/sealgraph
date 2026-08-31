@@ -1,12 +1,19 @@
 # ADR 0027: Format-5 CLI authoring and inspection schemas
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-28
 - Decision Owner: Operator
+- Accepted: 2026-08-31 by explicit Operator acceptance of the exact reviewed
+  candidate
+- Acceptance Record:
+  [`cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#owner-acceptance-receipt)
 - Related Claims: C-IO-001 through C-IO-006
 - Related Evidence: E-IO-001 through E-IO-006
-- Pending Decision: owner acceptance of the exact candidate after fresh review
-- Supersedes on acceptance: for format-5 repositories only, the format-4 Link
+- Pending Decision: None
+- Execution Authority: Separate; acceptance does not authorize implementation,
+  normative-document conversion, repository migration, branch synchronization,
+  release, or deployment
+- Supersedes: for format-5 repositories only, the format-4 Link
   option grouping and parent-based inspection schema meanings in ADRs 0015,
   0020, and 0022
 - Superseded by: None
@@ -24,7 +31,7 @@ set, and a message set. The format-4 multi-target `--depend-on` invocation and
 single shared message cannot express those three arrays without ambiguous
 positional grouping or cross-product behavior.
 
-This ADR is the public-interface member of the Proposed format-5 decision set.
+This ADR is the public-interface member of the accepted format-5 decision set.
 ADR 0023 owns graph semantics, ADR 0025 owns Blob and Candidate bytes, ADR 0026
 owns migration, and this ADR owns exact format-5 authoring grammar and
 successful inspection JSON.
@@ -586,7 +593,7 @@ deterministic Candidate transition and one exact observer-local assertion.
 
 ### Decision precedence and acceptance boundary
 
-On acceptance:
+With this ADR accepted:
 
 - ADR 0015 retains safety, complete IDs, result/diagnostic exit separation,
   and human terminology; this ADR replaces only incompatible format-5 JSON
@@ -611,6 +618,10 @@ accepted by the operator before any format-5 implementation action or
 normative-document conversion. Action tables in all four ADRs repeat that same
 execution prerequisite; narrower Claim ownership never authorizes an earlier
 slice.
+
+The acceptance recorded here satisfies only that decision prerequisite. It
+does not start any action in this table; execution requires a separately
+authorized task.
 
 This establishes C-IO-006: semantic, storage, migration, and public-interface
 authority remain separate but share one acceptance gate.
@@ -678,8 +689,8 @@ Neutral:
 | A-IO-003 implement one-target authoring | ADRs 0023, 0025, 0026, and 0027 | C-IO-005 | add/set/replace/remove, selector-resolution, repeat ordering, no-previous, root/non-root, ambiguity rejection, and exact Candidate-byte fixtures |
 | A-IO-004 synchronize normative/public contracts | ADRs 0023, 0025, 0026, and 0027 | C-IO-001 through C-IO-006 | requirements, architecture, storage-format, CLI, integrations, index, help, completion, and cross-reference checks in the accepted implementation candidate |
 
-No implementation action starts from this Proposed ADR alone or from a proper
-subset of the four accepted ADRs.
+No implementation action starts from acceptance of this ADR alone or from a
+proper subset of the four accepted ADRs.
 
 ## Review
 
@@ -729,13 +740,19 @@ ordinary-file Git-sidecar boundary. This candidate cites ADR 0025's explicit
 mode-neutral integrity Claim and distinguishes stable permission values from
 mode changes during observation. It remains Proposed.
 
+The final exact-candidate review and owner acceptance are recorded in the
+linked acceptance record. All three scopes passed with no P0 through P3
+finding. On 2026-08-31, the Operator accepted this ADR at pre-transition digest
+`5975e329da791dfdc155e3f354a360c5aac2a63213a137d236e6522a252c30ef`
+as part of the exact four-ADR decision set.
+
 ## Evidence
 
 - E-IO-001: accepted ADR 0015 requires a new version for incompatible JSON
   changes.
 - E-IO-002: accepted ADR 0022 makes Candidate inspection and existing JSON
   schemas public compatibility contracts.
-- E-IO-003: Proposed ADRs 0023 and 0025 remove intrinsic parents and define
+- E-IO-003: Accepted ADRs 0023 and 0025 remove intrinsic parents and define
   branching revision and parentless Candidate semantics.
 - E-IO-004: the current format-4 JSON implementation exposes parent fields in
   show, Candidate inspection, graph, log, linklog, and compare, demonstrating
@@ -762,8 +779,9 @@ Exact traceability is:
 
 ## Follow-ups
 
-- Freeze the exact candidate bytes and run the same three-scope read-only review
-  over ADRs 0023, 0025, 0026, and 0027 before owner acceptance.
-- After acceptance, replace the format-4 normative/help schema text and add
-  fixed format-5 JSON fixture bytes.
+- Preserve the frozen review target and owner-acceptance receipt for ADRs 0023,
+  0025, 0026, and 0027; materially changing the decision set requires a new
+  exact-candidate review.
+- Under a separately authorized implementation task, replace the format-4
+  normative/help schema text and add fixed format-5 JSON fixture bytes.
 - Add a machine diagnostic schema only under a separate consumer-driven ADR.

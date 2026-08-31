@@ -1,12 +1,19 @@
 # ADR 0023: Cause-scoped revision observation
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-28
 - Decision Owner: Operator
+- Accepted: 2026-08-31 by explicit Operator acceptance of the exact reviewed
+  candidate
+- Acceptance Record:
+  [`cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#owner-acceptance-receipt)
 - Related Claims: C-CR-001 through C-CR-013
 - Related Evidence: E-CR-001 through E-CR-012
-- Pending Decision: owner acceptance of the exact candidate after fresh review
-- Supersedes on acceptance: the ancestry-based Link-repoint inference in ADR
+- Pending Decision: None
+- Execution Authority: Separate; acceptance does not authorize implementation,
+  normative-document conversion, repository migration, branch synchronization,
+  release, or deployment
+- Supersedes: the ancestry-based Link-repoint inference in ADR
   0006; the intrinsic-parent revision semantics and parent-based selector,
   comparison, and impact rules in ADRs 0011, 0013, 0016, 0019, and 0020
 - Superseded by: None
@@ -616,7 +623,7 @@ the scope of every revision assertion explicit.
 
 ### Decision precedence
 
-On acceptance:
+With this ADR accepted:
 
 - ADR 0010's factual stale intent and stable `--refs-only` protocol remain. ADR
   0011's later exact-Seal `S_O`/`Q_O`/`F_O` frontier replacement remains
@@ -783,6 +790,10 @@ normative-document conversion. Action tables in all four ADRs repeat that same
 execution prerequisite; narrower Claim ownership never authorizes an earlier
 slice.
 
+The acceptance recorded here satisfies only that decision prerequisite. It
+does not start any action in this table; execution requires a separately
+authorized task.
+
 ## Review
 
 Earlier ADR 0023 candidates failed three-scope review because they did not
@@ -859,8 +870,11 @@ continuous monitoring, and treat a change-and-restore to the same tuple as
 observationally equal. A-CR-002 carries that boundary into implementation
 fixtures without expanding the portable tuple.
 
-A fresh three-scope review of these exact bytes is still required. Review PASS
-does not itself change `Proposed` to `Accepted`.
+The final exact-candidate review and owner acceptance are recorded in the
+linked acceptance record. All three scopes passed with no P0 through P3
+finding. On 2026-08-31, the Operator accepted this ADR at pre-transition digest
+`62eb10bf8cc2f02ed6a107950c396c5333fba85097346177438b59f7257213e2`
+as part of the exact four-ADR decision set.
 
 ## Evidence
 
@@ -927,9 +941,9 @@ Exact traceability is:
 
 ## Follow-ups
 
-- Accept or revise ADR 0025's exact Universal Blob canonical schema.
-- Accept or revise ADR 0026's deterministic incompatible migration contract.
-- Accept or revise ADR 0027's format-5 CLI and inspection schema contract.
-- Run a fresh three-scope ADR review against this exact candidate digest.
-- After acceptance, align normative requirements, storage, CLI, architecture,
-  integration documentation, and implementation plan in one change set.
+- Preserve ADRs 0025, 0026, and 0027 as members of the same accepted decision
+  set; materially changing any member requires a new exact-candidate review and
+  owner decision.
+- Under a separately authorized implementation task, align normative
+  requirements, storage, CLI, architecture, integration documentation, and the
+  implementation plan in one change set.

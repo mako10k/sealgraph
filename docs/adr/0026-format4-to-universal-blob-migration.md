@@ -1,12 +1,19 @@
 # ADR 0026: Incompatible format-4 to Universal Blob migration
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-28
 - Decision Owner: Operator
+- Accepted: 2026-08-31 by explicit Operator acceptance of the exact reviewed
+  candidate
+- Acceptance Record:
+  [`cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#owner-acceptance-receipt)
 - Related Claims: C-MG-001 through C-MG-010
 - Related Evidence: E-MG-001 through E-MG-011
-- Pending Decision: owner acceptance of the exact candidate after fresh review
-- Supersedes on acceptance: format-4 runtime compatibility as a requirement for
+- Pending Decision: None
+- Execution Authority: Separate; acceptance does not authorize implementation,
+  normative-document conversion, repository migration, branch synchronization,
+  release, or deployment
+- Supersedes: format-4 runtime compatibility as a requirement for
   the format-5 runtime; any legacy-parent fallback proposed by an earlier ADR
   0023 candidate
 - Superseded by: None
@@ -672,7 +679,7 @@ reproducible migration path.
 
 ### Decision precedence
 
-On acceptance:
+With this ADR accepted:
 
 - ADR 0012 remains precedent for deterministic dump, isolated load,
   no-replace publication, and mapping receipts; its `logical-v1` artifact is
@@ -804,15 +811,19 @@ Neutral:
 | A-MG-004 implement receipt/readback/recovery | ADRs 0023, 0025, 0026, and 0027 | C-MG-007 through C-MG-009 | fixed mode-neutral receipt/repository digest bytes, alternate-number-spelling rejection, full-object and stable-writable-mode readback, durability-uncertain/readback/stdout failure separation, and idempotent load-receipt tests |
 | A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026, and 0027 | C-MG-010 | exact exporter/importer artifact IDs, public-schema fixtures, normative-document synchronization, and independent fixture reproduction |
 
-No implementation or repository conversion is authorized by this Proposed
-record. Migration of tracked dogfood requires a separately reviewed exact dump,
-warning set, destination, command, and owner approval.
+Acceptance of this ADR does not by itself authorize implementation or repository
+conversion. Migration of tracked dogfood requires a separately reviewed exact
+dump, warning set, destination, command, and owner approval.
 
 ADRs 0023, 0025, 0026, and 0027 must be reviewed as one exact decision set and
 accepted by the operator before any format-5 implementation action or
 normative-document conversion. Action tables in all four ADRs repeat that same
 execution prerequisite; narrower Claim ownership never authorizes an earlier
 slice.
+
+The acceptance recorded here satisfies only that decision prerequisite. It
+does not start any action in this table; execution requires a separately
+authorized task.
 
 ## Review
 
@@ -875,9 +886,11 @@ boundary, explicitly excludes change-and-restore detection and continuous
 immutability, and requires that boundary as an exporter fixture. It remains
 Proposed.
 
-A three-scope review must check the artifact byte contract, closure and cycle
-rules, semantic classification completeness, atomic publication feasibility,
-and every precedence claim before owner acceptance.
+The final exact-candidate review and owner acceptance are recorded in the
+linked acceptance record. All three scopes passed with no P0 through P3
+finding. On 2026-08-31, the Operator accepted this ADR at pre-transition digest
+`b5c10f1890ad1b08c9b18c4c2d440bf0c2e06461939b2bea3812b3c115290feb`
+as part of the exact four-ADR decision set.
 
 ## Evidence
 
@@ -939,11 +952,12 @@ Exact traceability is:
 
 ## Follow-ups
 
-- Run one three-scope review for each exact ADR candidate and an integrated
-  cross-ADR consistency pass.
-- After acceptance, copy the fixed canonical migration and receipt bytes into
-  `docs/storage-format.md`; ADR 0027's accepted terminal/JSON behavior is copied
-  into `docs/cli.md` in the same normative synchronization gate.
+- Preserve the completed three-scope and integrated review receipt for this
+  exact accepted decision set; materially changing it requires a new review.
+- Under a separately authorized implementation task, copy the fixed canonical
+  migration and receipt bytes into `docs/storage-format.md`; ADR 0027's accepted
+  terminal/JSON behavior is copied into `docs/cli.md` in the same normative
+  synchronization gate.
 - Inventory external systems that persist SealIDs and define explicit
   receipt-based rewrites before any real repository conversion.
 - Prepare a dogfood migration proposal with exact source digest and full

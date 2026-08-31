@@ -1,12 +1,19 @@
 # ADR 0025: Universal Blob instances for Seal, Material, and Provenance
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-28
 - Decision Owner: Operator
+- Accepted: 2026-08-31 by explicit Operator acceptance of the exact reviewed
+  candidate
+- Acceptance Record:
+  [`cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#owner-acceptance-receipt)
 - Related Claims: C-UB-001 through C-UB-012
 - Related Evidence: E-UB-001 through E-UB-010
-- Pending Decision: owner acceptance of the exact candidate after fresh review
-- Supersedes on acceptance: the format-4 canonical Seal and Candidate shape in
+- Pending Decision: None
+- Execution Authority: Separate; acceptance does not authorize implementation,
+  normative-document conversion, repository migration, branch synchronization,
+  release, or deployment
+- Supersedes: the format-4 canonical Seal and Candidate shape in
   ADR 0011; the format-4 attachment placement retained by ADR 0021
 - Superseded by: None
 
@@ -335,7 +342,7 @@ through the retained ordinary-file Git-sidecar boundary.
 
 ### Decision precedence
 
-On acceptance:
+With this ADR accepted:
 
 - ADR 0003 remains authoritative for the loose-blob envelope and non-porcelain
   boundary.
@@ -453,6 +460,10 @@ normative-document conversion. Action tables in all four ADRs repeat that same
 execution prerequisite; narrower Claim ownership never authorizes an earlier
 slice.
 
+The acceptance recorded here satisfies only that decision prerequisite. It
+does not start any action in this table; execution requires a separately
+authorized task.
+
 ## Review
 
 The prior three-scope review confirmed the layer separation but found that
@@ -506,9 +517,11 @@ pre-existing writable Blob must not silently chmod it. C-UB-012 and A-UB-001
 now distinguish modes on newly created entries from byte validation of reused
 entries and require an explicit no-chmod fixture.
 
-A three-scope review must verify canonical implementability, interaction with
-ADRs 0003/0011/0021/0023/0024/0026, and repository-wide effects before owner
-acceptance.
+The final exact-candidate review and owner acceptance are recorded in the
+linked acceptance record. All three scopes passed with no P0 through P3
+finding. On 2026-08-31, the Operator accepted this ADR at pre-transition digest
+`152cfbecc7a09c3c63afe7d1df11d165fef3a8592259988194715dbe677a5bb0`
+as part of the exact four-ADR decision set.
 
 ## Evidence
 
@@ -530,8 +543,9 @@ acceptance.
   uniqueness, draft/non-root validity, and existing-ID publication as missing
   decisions. D-MG-002 records operator direction only for warning-backed
   collapse semantic loss. The non-root and existing-ID clauses in this ADR are
-  Proposed design responses whose authority remains pending exact owner
-  acceptance; D-REVIEW-001 is not substituted for those decisions.
+  Proposed design responses whose authority was pending exact owner acceptance
+  at that review stage. Their later acceptance is recorded in the linked
+  acceptance record; D-REVIEW-001 is not substituted for those decisions.
 - E-UB-008: the committed three-scope re-review at commit `df113d7` identified
   canonical string encoding and exact Candidate persistence as acceptance
   blockers; the exact findings and target digests are recorded in
@@ -565,9 +579,10 @@ Exact traceability is:
 
 ## Follow-ups
 
-- Review ADR 0023, this ADR, ADR 0026, and ADR 0027 as one decision set while
-  preserving their separate authority boundaries.
-- After acceptance, replace format-4 normative schema text with the exact
-  format-5 byte contract and fixed fixture digests.
+- Preserve ADR 0023, this ADR, ADR 0026, and ADR 0027 as one accepted decision
+  set while preserving their separate authority boundaries.
+- Under a separately authorized implementation task, replace format-4
+  normative schema text with the exact format-5 byte contract and fixed fixture
+  digests.
 - Decide garbage collection only in a separate ADR with reachability,
   concurrency, recovery, and outer-Git safety evidence.

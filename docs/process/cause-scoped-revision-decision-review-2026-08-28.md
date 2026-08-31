@@ -1,15 +1,14 @@
 # Cause-scoped revision decision and review record — 2026-08-28
 
-Status: review evidence and operator-direction record for Proposed ADRs 0023,
-0025, 0026, and 0027. This record does not accept an ADR or authorize
+Status: review, operator-direction, and owner-acceptance evidence record for
+Accepted ADRs 0023, 0025, 0026, and 0027. This record does not authorize
 implementation, migration, publication, or external writes.
 
 ## Operator directions recorded
 
 The following directions were given during the design discussion and are the
-source for the corresponding Proposed ADR evidence entries. Exact ADR-owner
-acceptance remains pending until the final candidate bytes are reviewed and
-confirmed.
+source for the corresponding ADR evidence entries. The final exact-candidate
+review and ADR-owner acceptance are recorded at the end of this document.
 
 - **D-CR-001:** Seal has no intrinsic parent/child relation. A Cause Link may
   assert zero or more previous revisions of its exact target.
@@ -261,3 +260,42 @@ three-scope review over the exact candidate ADR bytes and every materially
 changed cited review-evidence record, followed by explicit owner acceptance.
 Any material edit to that reviewed target changes a digest and invalidates a
 prior PASS or owner-decision request.
+
+That required sequence was subsequently completed for the final target below.
+The earlier candidate dispositions remain historical evidence of the state at
+each review.
+
+## Final exact-candidate review target
+
+After the RV-29 correction and expanded primary-agent self-review, three
+independent read-only review scopes verified the following exact bytes before
+and after review. The ADR-internal scope reviewed the four ADRs; the related-ADR
+and repository-wide scopes also reviewed this common evidence record.
+
+```text
+HEAD      2a2b08b72475e36efea6873608c60695e8ca81f7
+ADR0023   62eb10bf8cc2f02ed6a107950c396c5333fba85097346177438b59f7257213e2
+ADR0025   152cfbecc7a09c3c63afe7d1df11d165fef3a8592259988194715dbe677a5bb0
+ADR0026   b5c10f1890ad1b08c9b18c4c2d440bf0c2e06461939b2bea3812b3c115290feb
+ADR0027   5975e329da791dfdc155e3f354a360c5aac2a63213a137d236e6522a252c30ef
+REVIEW    135c529e42e880d1b8b4b09672c96303564aaa07568c7026a5d26b6b50336d69
+```
+
+The ADR-internal, related-ADR, and repository-wide verdicts were all `PASS`.
+The integrated verdict was `PASS`; no P0 through P3 finding remained. This
+established `READY_FOR_OWNER_DECISION`, not owner acceptance by itself.
+
+## Owner acceptance receipt
+
+On 2026-08-31, after the final three-scope `PASS`, the Operator explicitly
+clarified that “コミット” meant “アクセプトします” and accepted the exact
+four-ADR decision set identified by the pre-transition digests above.
+
+This receipt accepts the technical decision bytes at those digests. The
+subsequent status, cross-reference, and receipt edits record that decision and
+therefore have different file digests; they do not alter the accepted technical
+content. Acceptance satisfies the shared ADR-decision prerequisite only. It
+does not authorize implementation, normative-document conversion, repository
+migration, branch synchronization, release, deployment, or any real repository
+conversion. Each such action requires separate authority and its applicable
+review and readback gates.
