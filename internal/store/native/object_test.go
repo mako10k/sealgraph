@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -15,6 +16,87 @@ func TestObjectIDUsesGitBlobEnvelopeSHA256(t *testing.T) {
 	const expected = "8aec4e4876f854f688d0ebfc8f37598f38e5fd6903cccc850ca36591175aeb60"
 	if id.Hex != expected {
 		t.Fatalf("ObjectID(hello) = %s, want %s", id.Hex, expected)
+	}
+}
+
+func TestWriteBlobCreatesHardenedEntriesAndDoesNotChmodExactReuse(t *testing.T) {
+	repositoryDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repositoryDir, "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	objects := NewObjectStore(repositoryDir)
+	payload := []byte("mode contract")
+	id, err := objects.WriteBlob(context.Background(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fanoutInfo, err := os.Stat(filepath.Dir(objects.PathForTesting(id)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fanoutInfo.Mode().Perm(); got != 0o755 {
+		t.Fatalf("new fanout mode = %04o, want 0755", got)
+	}
+	objectInfo, err := os.Stat(objects.PathForTesting(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := objectInfo.Mode().Perm(); got != 0o444 {
+		t.Fatalf("new object mode = %04o, want 0444", got)
+	}
+
+	if err := os.Chmod(objects.PathForTesting(id), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reused, err := objects.WriteBlob(context.Background(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reused.Equal(id) {
+		t.Fatalf("reused ID = %s, want %s", reused, id)
+	}
+	reusedInfo, err := os.Stat(objects.PathForTesting(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reusedInfo.Mode().Perm(); got != 0o644 {
+		t.Fatalf("exact Blob reuse changed mode to %04o, want preserved 0644", got)
+	}
+}
+
+func TestConcurrentWriteBlobPublishesOneExactIdentity(t *testing.T) {
+	repositoryDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repositoryDir, "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	objects := NewObjectStore(repositoryDir)
+	want := ObjectID([]byte("concurrent exact Blob"))
+	const writers = 16
+	results := make(chan struct {
+		id  string
+		err error
+	}, writers)
+	var ready sync.WaitGroup
+	ready.Add(writers)
+	start := make(chan struct{})
+	for range writers {
+		go func() {
+			ready.Done()
+			<-start
+			id, err := objects.WriteBlob(context.Background(), []byte("concurrent exact Blob"))
+			results <- struct {
+				id  string
+				err error
+			}{id: id.String(), err: err}
+		}()
+	}
+	ready.Wait()
+	close(start)
+	for range writers {
+		result := <-results
+		if result.err != nil || result.id != want.String() {
+			t.Fatalf("concurrent WriteBlob = %s, %v; want %s", result.id, result.err, want)
+		}
 	}
 }
 
