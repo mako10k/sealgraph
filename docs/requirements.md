@@ -1,8 +1,8 @@
 # Sealgraph requirements
 
-Status: normative format-4 contract accepted by ADR 0011. The checked-in Go
-runtime implements the canonical/candidate, selector, explicit load, active
-revision/Cause graph, history, impact, REF manifest, scoped-tag, and move core.
+Status: normative format-5 contract. Accepted ADRs 0023, 0025, 0026, and 0027
+replace the incompatible format-4 Seal, revision, migration, and CLI contracts.
+The checked-in runtime creates format 5 only and fails closed on format 4.
 
 ## 1. Purpose
 
@@ -13,9 +13,9 @@ It MUST make it possible to answer:
 1. What content was sealed?
 2. Which exact upstream seal generations were used as its basis?
 3. What attachments were part of that sealed state?
-4. From which exact parent revision was it derived?
-5. Which semantic flags and direct provenance relations were sealed?
-6. Which current REF heads became stale because their revision or Cause
+4. Which observers asserted that a target supersedes which exact revisions?
+5. Which semantic flags and observer-local provenance claims were sealed?
+6. Which current REF heads became stale because their observed revision or Cause
    provenance is no longer at an active revision leaf?
 7. Through which dependency paths did that impact propagate?
 
@@ -42,35 +42,32 @@ or rewrite a Seal, Link, HEAD, or tag target.
 
 ### 2.2 Blob
 
-Content and attachments are stored/read as immutable content-addressed blobs.
+Content, attachments, Material, Provenance, and Seal values are stored/read as
+immutable content-addressed Blobs.
 
 Standalone operation MUST NOT require a working file corresponding to a REF.
 
 ### 2.3 Seal
 
-A seal is an immutable snapshot of generated material, exact direct Cause
-provenance, and one optional revision parent. It may be published as one REF's
-HEAD, but the REF name is not part of the Seal.
+A Seal is an immutable typed Blob containing exactly one Material BlobID and
+one Provenance BlobID. It may be published as one REF's HEAD, but REF names are
+not part of Material, Provenance, or Seal identity.
 
 A seal MUST commit to:
 
-- schema/format version,
-- parent revision seal identity or explicit absence,
-- content identity,
-- attachment identities plus stable attachment metadata,
-- dependency links,
-- root/draft state.
+- Material identity, which commits to content BlobID and named attachment
+  BlobIDs plus stable metadata; and
+- Provenance identity, which commits to root/draft and complete Cause Links.
 
 A core seal MUST NOT persist who, when, or why the seal operation happened.
 Seal-level `actor`, `created_at`, event `message`, and equivalent operation
 metadata are outside material/provenance identity. When needed, such a claim is
 ordinary separately sealed content linked to its exact subject generation.
 
-The required `parent_revision` is `null` for an initial revision and otherwise
-one exact full SealID. It means only that the new Seal is a revision derived
-from that parent. It MUST NOT imply replacement, invalidation, preference,
-truth, trust, approval, or same-REF ownership. One parent MAY have multiple
-children, and siblings are equally valid revision tips.
+Format 5 has no intrinsic parent field. Revision evidence exists only inside a
+Cause Link made by one immutable observer. A target MAY have multiple asserted
+previous revisions and multiple observers; branching is valid. An assertion
+MUST NOT imply preference, truth, trust, approval, or same-REF ownership.
 
 A Seal contains no current or historical REF name. It MAY be reused as the
 HEAD, parent, Link target, or tag target in any explicitly valid scope without
@@ -82,27 +79,32 @@ There MUST NOT be a `seal --all` or equivalent batch-approval operation in the c
 
 ### 2.4 Link
 
-A link is a provenance edge from one seal to an exact upstream seal generation.
+A Link is a whole observer-local provenance record from one Seal to one exact
+target Seal generation.
 
 Links form an N:M directed acyclic graph across seals.
 
 A persisted link MUST contain a concrete target seal identity.
 
-Native format 4 has one domain-independent Cause edge and no persisted link
-kind. A link MAY carry an edge-specific message explaining why that exact
-upstream generation is a dependency. The link message is part of the seal
-identity. It describes the dependency relation and does not assert an actor,
-authority, trusted time, or seal-operation event.
+A format-5 Cause Link contains exactly `target_seal`, the sorted duplicate-free
+`previous_revision_seal_of_target_seal` array, and the sorted duplicate-free
+`messages` array. The previous array is an assertion about that target made by
+the containing observer. Link messages are identity-bearing but do not assert
+actor, authority, trusted time, or a seal-operation event.
 
-`--depend-on UPSTREAM` is command shorthand that resolves the current HEAD at operation time. The persisted seal MUST NOT contain a dynamic HEAD pointer.
+`--target TARGET`, `--previous PREVIOUS`, and related selector inputs resolve
+to exact full SealIDs before Candidate persistence. Dynamic HEAD pointers and
+selector spelling MUST NOT be persisted.
 
 The CLI MUST also support explicit historical generation selection.
 
-Format 4 selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
-`REF@TOKEN`. A hexadecimal Seal token is 4 through 64 lower-case hex
+Selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
+`REF@TOKEN`. A repository-wide `SEAL_TOKEN` is 4 through 64 lower-case hex
 characters, resolves uniquely across the native ODB, and must decode as a
-canonical Seal. `REF@hex` additionally asserts that the selected Seal is the
-REF's current HEAD or a `parent_revision` ancestor of it. `REF@non-hex`
+canonical format-5 Seal. `REF@hex` instead resolves uniquely within the REF's
+current HEAD plus observed structural revision closure; unrelated loose objects
+do not participate in that scoped prefix match.
+`REF@non-hex`
 resolves an immutable tag in that REF's UI namespace. Only the resolved full
 SealID is persisted.
 
@@ -137,18 +139,20 @@ A draft may intentionally depend on a non-HEAD upstream seal.
 
 Draft MUST remain visible in status/show/log output.
 
-## 3. Revision DAG and stale propagation
+## 3. Observed revision graph and stale propagation
 
-Seals and Links are immutable. Publishing a new revision moves exactly one REF
-HEAD and never changes an older downstream Link.
+Seals and Links are immutable. Publishing moves exactly one REF HEAD and never
+changes an older Link. The observation set is the fixed point starting from
+all current REF heads and following both Cause targets and every previous
+revision asserted by those Links. Every included assertion retains its exact
+observer Seal and Provenance identity.
 
-For one coherent current-head observation, the active revision DAG is the
-deduplicated set of current REF HEAD SealIDs plus every Seal reached through
-`parent_revision` ancestry. An object-store-only child, tag-only Seal,
-Cause-only Seal, or failed-publication dangling object is not active merely
-because its bytes exist.
+The structural revision graph is the union of included target-to-previous
+assertions. Its union with Cause edges MUST be acyclic and contain no self
+edge. Revision activity starts from current heads and follows structural
+revision edges only. Cause reachability does not itself make a Seal active.
 
-An active Seal is `STALE_REVISION` when it has an active strict descendant. A
+An active Seal is `STALE_REVISION` when it has an active structural child. A
 current REF that points to such a non-leaf has self-stale state. Sibling leaves
 do not make one another stale. A Seal outside the active revision DAG is
 historical or detached, not current-clean.
@@ -157,7 +161,8 @@ A current Seal is `STALE_DIRECT` when an exact direct Cause Link target is not
 an active current revision leaf, including an active non-leaf or a
 historical/detached target. It is `STALE_TRANSITIVE` when no direct target is
 stale but a deeper Link-only Cause target is not an active current leaf.
-Parent edges decide revision leafness and MUST NOT be traversed as Cause edges.
+Revision assertions decide revision leafness and MUST NOT be traversed as
+Cause edges.
 
 Staleness MUST be derived from canonical Seals and one coherent complete REF
 head observation. It MUST NOT be authoritative persisted state or depend on
@@ -170,14 +175,11 @@ Link-only Cause closure. Unselected descendant tips and candidates do not
 affect frontier membership. These results are factual observations, not
 approval, mandatory work, seal admissibility, reservation, or a batch plan.
 
-A disposable derived cache MAY accelerate stale queries when bound to the
-repository/schema version and complete sorted REF/head snapshot. Missing,
-invalid, or mismatched cache state triggers canonical full scan and atomic
-refresh; canonical corruption fails closed. A missing cache or routine
-REF/head snapshot mismatch is a normal cache miss and MUST NOT warn. Invalid,
-unsafe, or unreadable cache state and cache refresh failure MAY warn without
-invalidating an otherwise validated result. `--scan` MUST bypass cache reads.
-Cache state is not canonical and is not committed to an outer Git repository.
+A disposable cache MAY accelerate graph queries only when it is semantically
+equivalent to a canonical scan and bound to the complete observation. Missing,
+invalid, unsafe, or mismatched cache state never weakens validation. `--scan`
+MUST produce the same answer while bypassing cache reads. Cache state is not
+canonical and is not committed to an outer Git repository.
 
 ## 4. Seal admissibility
 
@@ -196,15 +198,14 @@ Draft is distinct from stale and MUST NOT be propagated, relinked, or resealed
 automatically. To depend on provisional provenance, the operator explicitly
 keeps the dependent candidate draft.
 
-Revision-parent admissibility is separate from Cause admissibility. An active
-non-leaf, detached historical, or draft Seal MAY be selected explicitly as a
-revision parent. A parent does not satisfy the required Cause of a non-root
-Seal and parent draft state does not automatically propagate. There is no
-generic ignore-validation escape hatch.
+Revision evidence is part of each Cause record, not a separate Candidate or
+Seal parent. A previous revision may be active, detached, historical, or
+draft, but the target selected as the normal non-draft Cause must satisfy the
+normal active-leaf rule. There is no generic ignore-validation escape hatch.
 
-## 5. Format-4 attachment compatibility
+## 5. Attachment preservation
 
-Format-4 Seals and candidates may contain zero or more named attachments.
+Format-5 Material and Candidates may contain zero or more named attachments.
 
 Attachment bytes are immutable blobs.
 
@@ -213,11 +214,11 @@ A seal MUST commit to each attachment's blob identity and stable semantic metada
 Renaming an attachment changes the seal state even if the attachment bytes are unchanged.
 
 An attachment is contained evidence/artifact data. A link is an external
-provenance relation. The two remain semantically distinct in format 4 and MUST
+provenance relation. The two remain semantically distinct and MUST
 NOT be silently converted into one another.
 
 As accepted by ADR 0021, the product MUST NOT add attachment mutation commands
-for format 4. It MUST continue to decode, validate, inspect, compare, preserve,
+for format 5. It MUST continue to decode, validate, inspect, compare, preserve,
 dump/load, and include existing attachments in canonical identity. New related
 material should use primary content, an independently sealed content result
 plus an exact Link, or explicit manifest content according to its semantics.
@@ -229,51 +230,52 @@ repository or machine must verify.
 
 ## 6. Working candidate
 
-`add`, `derive`, `link`, and `unlink` edit the next candidate state for one
-destination REF. Format-4 attachment mutation is intentionally absent.
+`add`, `link`, and `unlink` edit the next Candidate state for one destination
+REF. Attachment mutation commands are intentionally absent.
 
 `add` MAY specify dependencies atomically with content creation/update:
 
 ```sh
-sealgraph add DESIGN-001 \
-  --content '...' \
-  --depend-on REQ-001 \
-  --depend-on POLICY-001@<seal-id>
+sealgraph add DESIGN-001 --content '...' --non-root \
+  --target REQ-001 --no-previous
 ```
 
 `link` remains necessary for relinking without content changes.
 
 Working candidate state is not a seal and is not authoritative history.
 
-Format-4 candidates keep revision topology and publication coordination
-separate:
+Format-5 Candidates are parentless. `expected_ref_head` is publication CAS
+state only and never supplies graph meaning. A Candidate stores content BlobID,
+attachments, root/draft, and complete Cause Link records.
 
-- `parent_revision` is the hash-committed parent of the next Seal;
-- `expected_ref_head` is mutable expected-old state for destination REF CAS.
+A new root requires `--root --clear-cause-links`. A new non-root requires
+`--non-root` and one complete target group containing exactly one of at least
+one `--previous` or `--no-previous`. Existing edits preserve omitted root mode
+and omitted Cause group. `--root --clear-cause-links` atomically changes the
+mode and clears Links; `--non-root` must leave at least one Link.
 
-An ordinary update of an existing REF records its observed current HEAD in both
-fields. `derive NEW_REF --from SOURCE` creates a same-material candidate for an
-absent destination, copies content, attachments, direct Cause Links/messages,
-root, and draft, and sets `parent_revision` to SOURCE.
-`add NEW_REF --parent SOURCE --content ...` creates new material with no
-inheritance. Both require destination REF and candidate absence and record
-`expected_ref_head = null`.
+`link` creates or replaces the complete record for one exact target. `unlink`
+removes exactly one target record. Neither operation unions omitted values,
+associates positional arguments, changes another target, or creates a Seal.
+Multiple targets require separate reviewed Candidate mutations. `derive` and
+`add --parent` are absent.
 
 Candidate inspection MUST remain distinct from immutable `REF@TOKEN`
 selection. The standalone CLI MUST allow one candidate to be shown, compared
-with its recorded `parent_revision`, and explicitly discarded. Current REF and
-`expected_ref_head` relation is reported separately. Candidate inspection and
-diff MUST NOT automatically rebase, relink, repair, or seal it.
+with its explicit publication baseline (`expected_ref_head`), and explicitly
+discarded. The current REF relation is reported separately. Candidate
+inspection and comparison MUST NOT automatically rebase, relink, repair, or
+seal it.
 
 Discard removes only one exact candidate state. It MUST NOT move a REF, delete
 immutable objects, recurse through hierarchical REFs, or report a missing or
 unsafe target as successful. Explicit discard MUST remain possible when the
 candidate representation is corrupt.
 
-`unlink` removes exactly one dependency edge identified by its resolved exact
-target SealID. A bare REF is current-HEAD lookup shorthand and therefore does
-not match an older stored target after that REF advances. It MUST NOT change
-content, root/draft state, another dependency, or create a seal.
+An authoring mutation MUST resolve every selector against one coherent
+repository observation, validate the complete prospective combined graph, and
+revalidate before Candidate persistence. Failure MUST leave the prior exact
+Candidate bytes unchanged.
 
 Standalone mutations MUST use repository-wide writer coordination. Cooperative
 writers execute serially. A seal publishes at the successful expected-old CAS
@@ -294,7 +296,9 @@ The product is expected to provide:
 - `stale`
 - `fsck`
 
-`compare` MUST be capable of representing content, attachment, link, and material metadata differences.
+`compare` requires exactly two explicit selectors and MUST represent Material,
+Provenance, content, attachment, root/draft, and complete Cause-record
+differences without inferring a predecessor.
 
 `status` MUST distinguish at least candidate modifications/unsealed state,
 draft, self-stale revision, and direct/transitive Cause staleness.
@@ -304,12 +308,23 @@ one valid logical REF plus LF per selected current head in bytewise lexical
 order, with no header or status fields, and emits zero bytes for an empty set.
 Candidate inspection remains outside this command.
 
-`impact` accepts every Seal-resolving selector. By default it emits one
-deterministic shortest Link-edge path per distinct impacted current-head Seal;
-equal lengths use the bytewise lexical full-SealID sequence. Explicit
-`--all-paths` is bounded by positive `--max-paths N`, default 100 per impacted
-Seal, with an explicit truncation marker. Presentation limits MUST NOT limit
-membership derivation, integrity validation, or snapshot revalidation.
+`impact` accepts every Seal-resolving selector. Revision proof uses either all
+observed assertions or the explicit repeatable `--asserted-by` observer set.
+Each result carries the Cause path, matched revision, exact revision edges,
+supporting assertion sources, and scope-relative target observations. Default
+output emits one deterministic first-match path per impacted head; explicit
+`--all-paths` is bounded by positive `--max-paths N`, default 100 per head.
+Presentation limits MUST NOT limit membership, validation, or revalidation.
+
+`log` traverses branching Cause-scoped revision assertions and reports each
+reachable Seal once by minimum depth unless bounded complete paths are
+explicitly requested. `linklog` compares exact Cause records across each
+structural revision edge and never infers a repoint.
+
+Successful machine output uses `show/v2`, `candidate-show/v2`,
+`candidate-compare/v2`, `status/v3`, `stale/v2`, `graph/v2`, `impact/v2`,
+`log/v2`, `linklog/v2`, `compare/v2`, and `fsck/v2`. A changed meaning MUST
+NOT be emitted under a format-4 schema identifier.
 
 Default human inspection MUST NOT emit arbitrary content or metadata bytes
 directly. It MUST use bounded, unambiguous escaping. Exact content extraction
@@ -430,30 +445,52 @@ Repository docs/tests MUST NOT include real credentials.
 
 Integration with secdat is optional and explicit; core operation does not depend on secdat.
 
-## 13. Explicit experimental migration boundary
+## 13. Explicit format-4 migration boundary
 
-The final format-3 binary before the runtime transition provides:
+Ordinary format-5 operations MUST reject an existing exact format-4 config
+before mutation with stable code `FORMAT4_REQUIRES_MIGRATION`. They MUST name
+the isolated extract/load sequence and MUST NOT provide a dual reader,
+in-place rewrite, lazy upgrade, or legacy-parent fallback.
+
+The format-5 binary provides one migration-only read-only format-4 extractor:
 
 ```sh
-sealgraph dump --format logical-v1
+sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json
 ```
 
-The command emits one deterministic canonical
-`sealgraph/logical-dump/v1` document and MUST NOT change repository or Git
-state. Current REF heads and immutable tag targets root the exported parent and
-Cause closure. Referenced content/attachment bytes are included exactly;
-valid loose objects outside that logical graph are reported by identity and
-not copied.
+Ordinary format-5 operations still reject format 4. The format-5 runtime imports
+only that isolated document into an absent target:
 
-Any candidate entry, corrupt object, invalid REF/tag attribution, invalid
-Seal/graph, or changed final observation MUST reject the dump without
-plausible stdout. Candidate state is neither omitted nor translated.
+```sh
+sealgraph load --format universal-blob-v1 < repository.dump.json
+```
 
-The format-4 load MUST use only an absent `.sealgraph` target, complete
-staging validation, atomic no-replace publication, and an explicit complete
-old-to-new SealID receipt. It MUST NOT merge, replace, repair, or silently drop
-tags. Every logical tag record is rewritten through the same complete SealID
-mapping and published inside its REF manifest.
+The canonical document schema is `sealgraph/universal-blob-migration/v1`.
+It contains exact referenced object bytes, canonical format-4 Seal payloads,
+complete REF/tag mappings, semantic projection records, excluded object IDs,
+and the constant excluded-state categories. The importer MUST verify old
+payload bytes and old IDs using a migration-only format-4 codec with no live
+repository interface.
+
+Projection creates Material, Provenance, and Seal Blobs. Old global parent
+meaning is materialized only in actual observer Cause Links. Unobserved parent,
+collapse-dropped revision, and merged Cause records MUST be retained in the
+document and receipt and warned with exact counts. No synthetic observer,
+Cause Link, REF, tag, or fallback field may be invented.
+
+Any Candidate entry, corrupt object, invalid REF/tag, graph cycle, or changed
+extract observation MUST reject extraction. The extractor MUST expose no source
+mutation operation and MUST NOT inspect Git. Load MUST fully validate and
+project before target creation, stage a complete format-5 repository and canonical
+`sealgraph/universal-blob-load-receipt/v1`, fsync nested state, publish with an
+atomic no-replace rename, fsync the parent, and read back fsck, repository
+digest, and receipt. Pre-publication, durability-uncertain, readback-failed,
+and receipt-undelivered states MUST be distinguished and MUST NOT authorize an
+automatic retry, delete, or repair.
+
+Migration MUST NOT modify or mark the retained format-4 source. Rollback means
+explicitly selecting that retained source with its format-4 runtime, not an
+in-place downgrade.
 
 ## 14. Exact content input and explicit path manifests
 
@@ -525,7 +562,7 @@ Sealgraph MUST distinguish semantic correction from local operational
 recovery. A semantic correction creates a new immutable Seal. Recovery MAY
 restore the exact prior mutable REF-manifest state of an explicitly selected
 locally recorded operation, but MUST NOT modify or reinterpret any Seal, Link,
-`parent_revision`, content, attachment, or Seal ID, and MUST NOT create a
+revision assertion, content, attachment, or Seal ID, and MUST NOT create a
 corrective Seal implicitly.
 
 Recovery records are versioned non-canonical local metadata. Their absence,

@@ -49,6 +49,7 @@ type RefStore interface {
 type RecoveryRefStore interface {
 	RefStore
 	Snapshot(ctx context.Context, ref string) ([]byte, error)
+	ManifestTags(data []byte) ([]Tag, error)
 	PreviewUpdate(ctx context.Context, ref string, oldID, newID *domain.ObjectID) ([]byte, error)
 	PreviewTag(ctx context.Context, ref, name string, id, expectedHead domain.ObjectID) ([]byte, error)
 	ManifestTargets(data []byte) ([]domain.ObjectID, error)

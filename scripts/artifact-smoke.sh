@@ -12,14 +12,14 @@ test "$("$smoke_bin" --version)" = "sealgraph $smoke_version"
 mkdir "$smoke_tmp/repository"
 cd "$smoke_tmp/repository"
 "$smoke_bin" init >/dev/null
-"$smoke_bin" add root --root --content root >/dev/null
+"$smoke_bin" add root --root --clear-cause-links --content root >/dev/null
 root_seal=$("$smoke_bin" seal root | awk '{print $3}')
-"$smoke_bin" add dependent --content dependent --depend-on root >/dev/null
+"$smoke_bin" add dependent --content dependent --non-root --target root --no-previous >/dev/null
 "$smoke_bin" seal dependent >/dev/null
-"$smoke_bin" add root --root --content root-v2 >/dev/null
+"$smoke_bin" add root --root --clear-cause-links --content root-v2 >/dev/null
 "$smoke_bin" seal root >/dev/null
 test "$("$smoke_bin" stale --frontier --refs-only)" = "dependent"
-"$smoke_bin" fsck --format json | grep -q '"schema":"sealgraph/fsck/v1"'
+"$smoke_bin" fsck --format json | grep -q '"schema":"sealgraph/fsck/v2"'
 
 object_path=".sealgraph/objects/$(printf '%s' "$root_seal" | cut -c1-2)/$(printf '%s' "$root_seal" | cut -c3-)"
 chmod u+w "$object_path"

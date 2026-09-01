@@ -10,8 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mako10k/sealgraph/internal/canonical"
+	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	"github.com/mako10k/sealgraph/internal/domain"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 )
 
 var (
@@ -24,11 +25,11 @@ const candidateFile = ".candidate"
 type candidateStore struct{ root string }
 
 type candidateSnapshot struct {
-	Candidate domain.Candidate
+	Candidate domainv5.Candidate
 	Bytes     []byte
 }
 
-func (s candidateStore) Load(ref string) (domain.Candidate, error) {
+func (s candidateStore) Load(ref string) (domainv5.Candidate, error) {
 	snapshot, err := s.LoadSnapshot(ref)
 	return snapshot.Candidate, err
 }
@@ -58,36 +59,26 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("read candidate %s: %w", ref, err)
 	}
-	candidate, err := canonical.DecodeCandidate(data)
+	candidate, err := canonicalv5.DecodeCandidate(data)
 	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("candidate %s is corrupt: %w; recreate it explicitly with add", ref, err)
 	}
 	if candidate.REF != ref {
 		return candidateSnapshot{}, fmt.Errorf("candidate path %s contains REF %s; recreate it explicitly", ref, candidate.REF)
 	}
-	if err := domain.ValidateCandidate(candidate); err != nil {
-		return candidateSnapshot{}, fmt.Errorf("candidate %s is invalid: %w", ref, err)
-	}
 	return candidateSnapshot{Candidate: candidate, Bytes: data}, nil
 }
 
-func (s candidateStore) Save(candidate domain.Candidate) error {
-	links, err := domain.NormalizeLinks(candidate.Links)
+func (s candidateStore) SaveIfUnchanged(candidate domainv5.Candidate, expected []byte, expectedPresent bool) error {
+	normalized, err := domainv5.NormalizeCandidate(candidate)
 	if err != nil {
 		return err
 	}
-	attachments, err := domain.NormalizeAttachments(candidate.Attachments)
-	if err != nil {
-		return err
-	}
-	candidate.Links, candidate.Attachments = links, attachments
-	if err := domain.ValidateCandidate(candidate); err != nil {
-		return err
-	}
+	candidate = normalized
 	if err := s.ensureDirectory(candidate.REF); err != nil {
 		return fmt.Errorf("prepare candidate %s directory: %w", candidate.REF, err)
 	}
-	data, err := canonical.EncodeCandidate(candidate)
+	data, err := canonicalv5.EncodeCandidate(candidate)
 	if err != nil {
 		return fmt.Errorf("encode candidate %s: %w", candidate.REF, err)
 	}
@@ -107,6 +98,17 @@ func (s candidateStore) Save(candidate domain.Candidate) error {
 	}
 	if err != nil {
 		return fmt.Errorf("write candidate %s: %w", candidate.REF, err)
+	}
+	current, readErr := os.ReadFile(s.path(candidate.REF))
+	switch {
+	case expectedPresent && readErr != nil:
+		return fmt.Errorf("%w: candidate %s became unreadable before replacement: %v", ErrCandidateChanged, candidate.REF, readErr)
+	case expectedPresent && !bytes.Equal(current, expected):
+		return fmt.Errorf("%w: candidate %s no longer matches the edited version", ErrCandidateChanged, candidate.REF)
+	case !expectedPresent && readErr == nil:
+		return fmt.Errorf("%w: candidate %s appeared before publication", ErrCandidateChanged, candidate.REF)
+	case !expectedPresent && !errors.Is(readErr, os.ErrNotExist):
+		return fmt.Errorf("inspect absent candidate %s before publication: %w", candidate.REF, readErr)
 	}
 	if err := os.Rename(tempPath, s.path(candidate.REF)); err != nil {
 		return fmt.Errorf("publish candidate %s atomically: %w", candidate.REF, err)

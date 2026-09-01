@@ -13,7 +13,7 @@ import (
 )
 
 func TestRecoverInitialAndExistingSealWithoutDeletingSeals(t *testing.T) {
-	_, repo := newFormat4Repository(t)
+	_, repo := newTestRepositoryWithDir(t)
 	ctx := context.Background()
 	first := addAndSealRoot(t, repo, "root", "v1")
 	inspection := requireRecoveryStatus(t, repo, first.OperationID, "RECOVERABLE")
@@ -34,7 +34,7 @@ func TestRecoverInitialAndExistingSealWithoutDeletingSeals(t *testing.T) {
 	if err := repo.refs.Update(ctx, "root", nil, &first.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("v2"), Root: true}); err != nil {
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("v2"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
 	second, err := repo.Seal(ctx, "root")
@@ -54,7 +54,7 @@ func TestRecoverInitialAndExistingSealWithoutDeletingSeals(t *testing.T) {
 }
 
 func TestRecoverTagRestoresCompleteManifestAndMoveIsInverseRename(t *testing.T) {
-	_, repo := newFormat4Repository(t)
+	_, repo := newTestRepositoryWithDir(t)
 	ctx := context.Background()
 	sealed := addAndSealRoot(t, repo, "root", "root")
 	tagged, err := repo.CreateTag(ctx, "root", "reviewed")
@@ -90,7 +90,7 @@ func TestRecoverTagRestoresCompleteManifestAndMoveIsInverseRename(t *testing.T) 
 }
 
 func TestRecoverRejectsInterveningManifestAndCorruptLogsDoNotBlockFsck(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	ctx := context.Background()
 	first := addAndSealRoot(t, repo, "root", "v1")
 	if _, err := repo.CreateTag(ctx, "root", "later"); err != nil {
@@ -127,7 +127,7 @@ func TestRecoverRejectsInterveningManifestAndCorruptLogsDoNotBlockFsck(t *testin
 }
 
 func TestRecoveryClassifiesPreparedCrashStatesFromCurrentBytes(t *testing.T) {
-	_, repo := newFormat4Repository(t)
+	_, repo := newTestRepositoryWithDir(t)
 	ctx := context.Background()
 	sealed := addAndSealRoot(t, repo, "root", "v1")
 	committed, err := repo.recovery.Load(sealed.OperationID)
@@ -160,13 +160,13 @@ func TestRecoveryClassifiesPreparedCrashStatesFromCurrentBytes(t *testing.T) {
 }
 
 func TestDropREFIsExactBlockedAndRecoverableWithTags(t *testing.T) {
-	_, repo := newFormat4Repository(t)
+	_, repo := newTestRepositoryWithDir(t)
 	ctx := context.Background()
 	sealed := addAndSealRoot(t, repo, "root", "v1")
 	if _, err := repo.CreateTag(ctx, "root", "reviewed"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("pending"), Root: true}); err != nil {
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("pending"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.DropREF(ctx, "root"); err == nil || !strings.Contains(err.Error(), "candidate") {
@@ -195,7 +195,7 @@ func TestDropREFIsExactBlockedAndRecoverableWithTags(t *testing.T) {
 func addAndSealRoot(t *testing.T, repo *Repository, ref, content string) SealResult {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := repo.Add(ctx, AddOptions{REF: ref, Content: []byte(content), Root: true}); err != nil {
+	if _, err := repo.Add(ctx, AddOptions{REF: ref, Content: []byte(content), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := repo.Seal(ctx, ref)

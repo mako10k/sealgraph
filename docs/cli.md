@@ -1,268 +1,216 @@
 # CLI contract
 
-Status: the checked-in runtime implements the format-4 native core, load, and
-active revision/Cause graph commands, plus REF-manifest tags and atomic move.
+Status: the checked-in standalone CLI creates and opens repository format 5.
+Accepted ADRs 0023, 0025, 0026, and 0027 define the incompatible Cause-scoped
+revision, typed-Blob, migration, and machine-output boundary.
 
-## 0. CLI discovery and diagnostics
+## 0. Discovery, diagnostics, and output
 
-The standalone binary is self-describing without opening `.sealgraph` or
-inspecting Git:
+Help is repository-independent:
 
 ```sh
-sealgraph --help
 sealgraph help
-sealgraph help add
-sealgraph add --help
+sealgraph help COMMAND
+sealgraph COMMAND --help
 sealgraph help candidate show
-sealgraph candidate show --help
-sealgraph help selectors
-sealgraph help concepts
-sealgraph help usecases
 ```
 
-Root help is a compact command/topic index. Command help is the invocation
-contract: purpose, Usage, positional operands, required/optional/repeatable
-options, defaults, dependencies or conflicts, important invariants, examples,
-and related next actions. `help concepts` explains the domain model;
-`help selectors` is the exact selector grammar; and `help usecases` contains
-copyable multi-command review workflows. These views are generated from one
-runtime help registry rather than independent command-local prose.
+Help and completion MUST NOT bootstrap `.sealgraph`, open bound source files,
+inspect Git, or update cache state. Usage errors exit 2. Repository,
+integrity, concurrency, and I/O failures exit 1. Success exits 0.
 
-Human diagnostics use a stable navigation shape where applicable:
+Diagnostics distinguish `error`, `reason`, explicit next-action `hint`, and a
+help route. Failure never silently repairs, relinks, reseals, selects a REF, or
+retries an ambiguous publication.
 
-```text
-error: <failed operation>
-reason: <violated contract or invariant>
-usage: <accepted invocation shape>
-hint: <one or more explicit inspection or correction steps>
-help: sealgraph help <topic>
-```
+Inspection defaults to aligned abbreviated human output on a terminal and the
+command's versioned JSON document on a known pipe/file. `--format human|json`
+overrides detection. Machine documents use full IDs. `--raw-content` and
+`stale --refs-only` are separate exact protocols and do not mix metadata.
 
-Usage errors exit 2 before repository traversal. Operational, integrity, and
-domain-invariant failures retain their existing nonzero behavior and add only
-human navigation. Hints never select a REF, relink, reseal, repair, or invent a
-`--force` bypass. Typo suggestions are display-only and require the operator to
-review and execute a command explicitly.
+## 1. Selector grammar
 
-This slice does not introduce stable diagnostic codes or a JSON error schema.
-`--format human|json` continues to select successful command output only; it
-does not select a diagnostic format.
-When it is omitted, a terminal receives human output and a known non-terminal
-stdout receives the existing command-specific versioned JSON. Errors remain on
-stderr and successful command-specific JSON schemas are unchanged. A future
-machine diagnostic contract requires an independently versioned schema and
-compatibility decision.
-
-## 1. Common selector grammar
-
-Commands that resolve an immutable Seal use:
-
-| Selector | Meaning |
+| Form | Meaning |
 | --- | --- |
 | `REF` | exact current HEAD of REF |
-| `@SEAL_TOKEN` | repository-wide unique ODB prefix that decodes as a canonical Seal |
-| `REF@TOKEN` | Seal selected in a REF UI scope |
+| `@SEAL_TOKEN` | repository-wide unique 4-64 lower-hex native object prefix that decodes as a format-5 Seal |
+| `REF@hex` | Seal in the current HEAD's observed revision closure |
+| `REF@TAGNAME` | immutable exact tag target in that REF's manifest |
 
-Hexadecimal tokens contain 4 through 64 lower-case hex characters. `REF@hex`
-requires the Seal to equal or be a `parent_revision` ancestor of current REF
-HEAD. `REF@non-hex` resolves an immutable tag. Siblings and detached Seals use
-`@SEAL_TOKEN`. Bare Seal tokens are not accepted because a lower-hex REF is
-valid. Only full resolved SealIDs are persisted or emitted as identity
-receipts.
+There is no `@latest`. Bare lower-hex may be a REF and is not an object
+selector. Authoring persists only resolved full SealIDs, never selector
+spelling or dynamic HEAD references.
 
-## 2. Standalone mutation
+All selectors used by one graph-dependent operation resolve against one
+coherent REF-manifest observation. Prefix and graph inventories are validated
+before output or Candidate replacement, then revalidated.
+
+## 2. Initialization and migration
 
 ### `sealgraph init`
 
-Always initializes standalone `.sealgraph` and never inspects, detects,
-mentions, or configures Git.
+```sh
+sealgraph init
+```
 
-For an existing format-4 repository with valid canonical `config`, `objects`,
-and `refs`, explicit `init` may recreate missing empty runtime `index` and
-`locks` directories. It never creates, changes, deletes, migrates, or repairs a
-canonical object or REF. Read commands do not bootstrap implicitly.
+An absent target creates exactly:
 
-Successful output distinguishes all outcomes without exposing the checkout
-path: `INITIALIZED standalone repository runtime=index,locks`,
-`BOOTSTRAPPED_RUNTIME index,locks` (only labels actually created), or
-`ALREADY_COMPLETE`.
+```text
+repository_format = 5
+object_format = sha256
+ref_format = manifest-v1
+```
+
+It creates canonical `objects` and `refs/seals` plus empty runtime `index` and
+`locks`. It never detects or inspects Git. A complete format-5 repository is
+idempotent; missing safe runtime directories may be bootstrapped explicitly.
+
+An exact format-4 config fails before mutation with
+`FORMAT4_REQUIRES_MIGRATION` and this sequence:
+
+```sh
+# Run with the format-5 binary in the retained format-4 source repository.
+sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json
+
+# Run with the format-5 CLI in a directory where .sealgraph is absent.
+sealgraph load --format universal-blob-v1 < repository.dump.json
+```
+
+### `sealgraph migrate extract`
+
+`migrate extract` is the only format-5 command that opens format 4. It is
+read-only, has no source mutation operation, and is dispatched outside the
+ordinary format-5 repository runtime. There is no general dual reader,
+in-place migration, automatic source cleanup, or legacy-parent fallback.
+
+Both `--source-format 4` and `--format universal-blob-v1` are required exactly
+once. No positional source path, output path, repair, ignore, compatibility, or
+Git option is accepted. The source is exactly the current directory's
+`.sealgraph`.
+
+The extractor validates the exact format-4 config, complete physical loose
+object inventory, every REF manifest and scoped tag, the complete rooted
+parent/Cause closure, referenced content and attachment Blobs, and absence of
+Candidate state. It constructs output only from the first complete source
+capture and requires an equal second capture immediately before delivery.
+Successful stdout is exactly one canonical
+`sealgraph/universal-blob-migration/v1` document plus LF. Semantic-change
+warnings are emitted only after successful document delivery.
+
+### `sealgraph load`
+
+```sh
+sealgraph load --format universal-blob-v1 < repository.dump.json
+```
+
+The format option is required exactly once and no positional argument is
+accepted. Load verifies exact canonical document bytes, embedded format-4
+payloads and IDs, extractor semantic classifications, and the complete
+projected Cause/revision graph before target creation.
+
+Load then stages a format-5 repository and
+`sealgraph/universal-blob-load-receipt/v1`, validates it with fsck and the
+repository digest, synchronizes nested state, atomically publishes only to an
+absent target, synchronizes the parent directory, and reads back repository and
+receipt. It never merges, replaces, repairs, or opens the source repository.
+
+Successful stdout is the exact canonical receipt. Nonzero semantic-loss counts
+are also warned on stderr:
+
+```text
+SEMANTIC_CHANGE_UNOBSERVED_PARENT_DROPPED count=N
+SEMANTIC_CHANGE_COLLAPSED_REVISION_DROPPED count=N
+SEMANTIC_CHANGE_MERGED_CAUSE_LINKS count=N
+```
+
+Pre-publication failure, published durability uncertainty, published readback
+failure, and published receipt-undelivered failure are distinct. A
+post-publication failure MUST NOT be answered by retrying load or deleting the
+target automatically.
+
+### `sealgraph load-receipt`
+
+```sh
+sealgraph load-receipt --source-document-sha256 HEX
+```
+
+This read-only recovery command is the only retryable path after
+`LOAD_PUBLISHED_RECEIPT_UNDELIVERED`. It requires the one matching regular
+receipt file, validates its exact canonical bytes, validates the complete
+format-5 repository, and requires the current repository digest to equal the
+receipt before emitting those exact bytes and their final LF. Missing,
+mismatched, noncanonical, or stale receipts fail without partial stdout. It
+does not create, repair, migrate, or republish repository state.
+
+## 3. Candidate authoring
+
+Format 5 uses one-target whole-record Cause operations:
+
+```text
+CAUSE_GROUP := --target TARGET
+               (--previous PREVIOUS [--previous PREVIOUS ...] | --no-previous)
+               [-m MESSAGE ...]
+ROOT_MODE   := --root --clear-cause-links | --non-root
+```
+
+`--target` occurs exactly once when present. `--previous` and `-m` are
+repeatable. `--previous` and `--no-previous` are mutually exclusive. There is
+no positional association, multi-target invocation, implicit parent assertion,
+`--depend-on` alias, `derive`, or `add --parent`.
 
 ### `sealgraph add`
 
-Creates or updates one destination REF's candidate:
-
 ```sh
-sealgraph add ROOT-001 --root --content 'External premise'
-
-sealgraph add DESIGN-001 \
-  --content 'Design' \
-  --depend-on ROOT-001 \
-  --depend-on @<exact-historical-seal-prefix>
-
-sealgraph add revised/api \
-  --parent design/api@<ancestor-prefix> \
-  --content 'new material'
+sealgraph add REF \
+  [--content CONTENT | --content-file PATH|-] [--bind-source] [--draft] \
+  [--root --clear-cause-links | --non-root] \
+  [--target TARGET (--previous PREVIOUS ... | --no-previous) [-m MESSAGE ...]]
 ```
 
-`--depend-on REF` resolves current HEAD immediately. `--depend-on
-REF@TOKEN` and `--depend-on @SEAL_TOKEN` resolve an explicit Seal. Persisted
-Links contain only exact full target SealIDs.
+`--content` and `--content-file` conflict. A named content file is one exact
+regular non-symlink file; `-` is exact stdin. `--bind-source` applies only to a
+named valid path and publishes the local binding after Candidate publication.
 
-`--content` and `--content-file PATH_OR_DASH` are mutually exclusive. File and
-stdin inputs preserve exact bytes. Filesystem input accepts one regular
-non-symlink file; directories, devices, and symlinks fail before candidate
-state changes.
+A new root requires `--root --clear-cause-links` and forbids a target group. A
+new non-root requires `--non-root` and one complete group. An existing edit
+preserves omitted root mode and omitted Cause group. `--root
+--clear-cause-links` atomically sets root and clears all Links. `--non-root`
+must leave at least one Link.
 
-When both options are absent, `add` reads the REF's bound local source. Only
-when REF and candidate are both absent may it use the exact REF spelling as a
-portable relative path. An existing REF/candidate without a binding fails; it
-never silently falls back to a coincidentally named file. It never cleans,
-searches, expands, walks, or inspects Git.
+Without explicit content, add reads the exact local source binding, or uses
+REF-as-path only for an entirely new REF/Candidate. It preserves omitted
+semantic state. Add writes content and Candidate only; it never seals.
 
-`--bind-source` records the named file selected by `--content-file PATH` or the
-initial REF-as-path shorthand. It is invalid with `--content` and
-`--content-file -`, uses expected-absent/same-binding semantics, and never
-retargets.
-
-For a REF already bound to another path, `--content-file PATH` fails even
-without `--bind-source`; use `source rebind` or `source unbind` first. This
-prevents a later contentless add from silently returning to a different source.
+Examples:
 
 ```sh
-sealgraph add docs/requirements.md --root
-sealgraph add docs/requirements.md --root --bind-source
-sealgraph add requirements/main --content-file docs/requirements.md --bind-source
+sealgraph add premise --root --clear-cause-links --content 'External premise'
+
+sealgraph add design/api --content-file design.md --non-root \
+  --target requirements/api --no-previous
+
+sealgraph add design/api --target requirements/api \
+  --previous @0123 -m 'reviewed revision relationship'
 ```
 
-The candidate publishes before a requested new binding. An interrupted command
-may therefore leave the candidate updated and binding absent, but never a new
-binding for an uncompleted candidate. File replacement or mutation during
-reading is `CHANGED_DURING_READ` and emits no plausible candidate result.
-
-### `sealgraph manifest`
+### `sealgraph link` and `unlink`
 
 ```sh
-sealgraph manifest --source SOURCE \
-  --file docs/requirements.md \
-  --file docs/architecture.md
+sealgraph link REF --target TARGET \
+  (--previous PREVIOUS ... | --no-previous) [-m MESSAGE ...]
+
+sealgraph unlink REF --target TARGET
 ```
 
-This read-only command emits one canonical `sealgraph/path-manifest/v1` JSON
-document plus LF. `SOURCE` is required exact caller input and is never inferred
-from Git or the environment. Each `--file PATH` uses the same explicit
-working-directory-relative slash path as both the read source and the semantic
-manifest path. Entries are sorted bytewise, exact file bytes use SHA-256, and
-the aggregate is SHA-256 over the exact canonical JSON `entries` array.
+`link` creates or replaces the complete record for the resolved target and
+preserves all other Candidate fields and Cause Links. It never unions an old
+message or previous array. `unlink` removes exactly that target record. A bare
+target REF resolves its current HEAD and therefore does not match a stored
+historical target after the REF advances.
 
-Paths are valid UTF-8 portable relative paths with no empty, `.`, `..`,
-backslash, control, or DEL component. Duplicate, missing, directory, symlink
-in any component, FIFO, socket, and device inputs reject the complete output.
-There is no glob expansion, recursive walk, normalization, Git discovery, path
-mapping, object write, candidate mutation, Link, or seal.
-
-The fixed `claim` value is `path-digest-only`: named files are not stored as
-attachments merely because their paths and digests appear. The resulting bytes
-may be reviewed and then supplied explicitly to `add --content-file -`.
-
-An explicit-content `add` updates content and sets root/draft from that
-invocation. A contentless `add REF` is content-only refresh: it preserves the
-candidate or HEAD root, draft, Links, attachments, parent, and publication
-expectation except for fields named by explicit mutation options. Existing
-dependencies are retained unless one or more `--depend-on` arguments replace
-the set. Changing root never edits Links implicitly.
-
-`add NEW_REF --parent SOURCE` is only for an absent destination REF and absent
-candidate. It resolves an exact revision parent, inherits no material, records
-`expected_ref_head = null`, and fails publication if the destination appears.
-An existing REF update records observed current HEAD as both
-`parent_revision` and `expected_ref_head`; alternate-parent override is rejected
-by the current format-4 CLI.
-
-### `sealgraph source`
-
-```sh
-sealgraph source bind REF --file PATH
-sealgraph source show REF [--format human|json]
-sealgraph source list [--format human|json]
-sealgraph source compare REF [--format human|json]
-sealgraph source rebind REF --from OLD_PATH --file NEW_PATH
-sealgraph source unbind REF --from PATH
-```
-
-These commands manage one portable relative regular-file path in non-canonical
-local state. Bind is create-only/same-state idempotent. Rebind validates the
-new source and exact old path before atomic replacement. Unbind requires the
-exact old path. Show/list inspect binding records without opening source files;
-an empty list succeeds and uses REF byte order. JSON uses
-`sealgraph/source/v1`.
-
-Source binding does not import, watch, or seal. `source compare` is the one
-operation in this group that opens the selected bound workfile; show/list and
-binding mutations inspect or validate only the state required by their
-contracts. Mutation receipts say
-`candidate=UNCHANGED`; `add REF` is the explicit refresh. A binding at either
-endpoint blocks REF-only `mv`; inspect, unbind, move, and bind explicitly.
-There is no restore-last, binding reflog, automatic backup/import, or deletion
-staging command.
-
-### `sealgraph derive`
-
-Creates a same-material child candidate without publishing it:
-
-```sh
-sealgraph derive preserved/api --from @<source-seal-prefix>
-```
-
-Destination REF and candidate must be absent. `derive` copies exactly content,
-attachments/metadata, direct Cause Links/messages, root, and draft. It sets the
-source Seal as `parent_revision` and copies no source parent, REF names, tags,
-stale/cache, event, or candidate metadata. `expected_ref_head` is null.
-
-Source resolution and complete parent validation finish before one candidate
-file is written. Missing, corrupt, ambiguous, scope-mismatched, and destination
-conflicts leave no partial candidate.
-
-### `sealgraph link`
-
-Changes dependencies without replacing content:
-
-```sh
-sealgraph link DESIGN-001 --depend-on REQ-001
-sealgraph link DESIGN-001 --depend-on @<seal-prefix> \
-  -m 'Requirement basis used by this design'
-```
-
-Format 4 has one domain-independent Cause edge and no link kind. `-m MESSAGE`
-is optional exact-edge rationale and participates in candidate/Seal identity.
-It is not actor, time, approval, or Seal-operation metadata. Duplicate exact
-target SealIDs are errors.
-
-### `sealgraph unlink`
-
-Removes exactly one resolved target from one candidate:
-
-```sh
-sealgraph unlink DESIGN --upstream REQ
-sealgraph unlink DESIGN --upstream @<old-target-seal-prefix>
-```
-
-A bare REF resolves its current HEAD and therefore does not match an older
-stored target after the REF advances. Candidate inspection prints the exact
-selector required. Missing or ambiguous target edges are errors. Unlink never
-changes content, attachments, root/draft, another Link, REF HEAD, or a Seal.
-
-### Intentionally absent attachment mutation
-
-`sealgraph attach` and `sealgraph detach` are not planned for format 4. As
-accepted by ADR 0021, attachment-bearing repositories remain readable,
-inspectable, comparable, validatable, and loadable, but new workflows use
-primary content, independently sealed related content plus exact Links, or
-explicit manifest content. Existing attachments are never silently flattened,
-deleted, or converted to Links.
-
-Machine-local workfile selection remains `source bind` or `add --bind-source`.
-Binding is not canonical provenance and cannot replace an exact portable
-content or Link identity.
+Retargeting is explicit and normally takes two reviewed mutations: add/replace
+the new complete target record, then unlink the old exact target. Neither step
+may leave an invalid root-with-Cause or non-root-without-Cause Candidate.
 
 ### `sealgraph candidate`
 
@@ -272,401 +220,146 @@ sealgraph candidate compare REF [--format human|json]
 sealgraph candidate discard REF
 ```
 
-`candidate show` validates material, exact Cause targets, `parent_revision`,
-and publication expectation. It displays `PARENT_REVISION`,
-`EXPECTED_REF_HEAD`, current destination HEAD, and their relations separately.
+Show reports the parentless Candidate, prospective Material/Provenance/Seal
+IDs, current REF head, and `EXPECTED_ABSENT`, `EXPECTED_CURRENT`,
+`HEAD_ADVANCED`, `HEAD_MISSING`, or `UNEXPECTED_HEAD` state.
 
-`candidate compare` compares content, attachments, exact Links/messages,
-root/draft, and `parent_revision` with the immutable parent when present.
-Current HEAD versus `expected_ref_head` is separate publication state.
-
-Candidate machine output uses `sealgraph/candidate-show/v1` and
-`sealgraph/candidate-compare/v1`. Redirected candidate inspection therefore
-defaults to JSON. Explicit `--raw-content` remains exact bytes only and takes
-precedence over destination detection; it conflicts only with an explicitly
-requested JSON format.
-
-`candidate discard` removes only the exact validated candidate file under the
-writer guard. It is itself the explicit confirmation and has no prompt,
-`--yes`, or `--force`. It does not move a REF, delete an object, recurse, repair,
-or report a missing/unsafe target as success. Corrupt candidates remain
-explicitly discardable.
+Compare uses only `candidate.expected_ref_head` as the immutable publication
+baseline. It does not infer a revision predecessor. Discard removes exactly
+one Candidate, including a corrupt Candidate through the explicit bounded
+discard path; it removes no REF, Blob, source binding, or descendant state.
 
 ### `sealgraph seal REF`
 
-Creates exactly one immutable Seal and attempts to advance exactly one REF.
-There is no batch form.
+Seal publishes at most one new Seal for exactly one REF. Under the repository
+writer guard it reloads the exact Candidate version, validates content,
+attachments, typed prospective IDs, combined graph, current observation, CAS
+expectation, and normal Cause closure. A normal non-draft Candidate requires
+every reachable Cause to be a non-draft active revision leaf. Draft preserves
+intentional historical/provisional provenance visibly.
 
-Seal has no message, actor, or timestamp option. Such claims are ordinary
-separately sealed content with explicit Cause Links when required.
+Publication writes immutable Material, Provenance, and Seal Blobs, revalidates
+the observation, CAS-updates one REF, and removes only the unchanged Candidate
+version. There is no batch, force, automatic relink, or automatic stale repair.
 
-A root has no Cause Links. Every non-root, including draft, has at least one.
-A normal non-draft publication requires every direct and reachable Cause target
-to be a non-draft active revision leaf in one coherent current-head
-observation. Draft may preserve active, historical, detached, draft, or
-non-draft exact Causes. Parent admissibility is separate; parent never replaces
-the Cause requirement. There is no generic validation bypass.
+## 4. Local source and explicit manifests
 
-All native mutations hold one repository-wide writer guard. Before successful
-REF publication, `seal` durably prepares one local recovery record. The
-non-terminal success receipt is
-`SEALED REF FULL_SEAL_ID operation=OPERATION_ID`. Terminal output uses aligned
-labels and a 12-character Seal prefix while retaining the full recovery
-operation ID. Candidate cleanup removes only the exact version sealed; a newer
-candidate is retained and reported. Dangling immutable objects after failed
-CAS are reported, not deleted.
+```sh
+sealgraph source bind REF --file PATH
+sealgraph source rebind REF --from OLD_PATH --file NEW_PATH
+sealgraph source unbind REF --from PATH
+sealgraph source show REF
+sealgraph source list
+sealgraph source compare REF
 
-### `sealgraph tag`
+sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
+```
+
+Source binding is non-canonical local input configuration. Bind is
+create-only/idempotent for the same path; rebind and unbind require exact
+observed old paths. Inspection does not open source files. Compare opens only
+the selected safe file and compares it with Candidate content, otherwise HEAD
+content. None of these commands seals or reads Git.
+
+Manifest reads only explicitly named portable relative regular files, sorts
+them, and emits deterministic `sealgraph/path-manifest/v1` content. It does not
+open `.sealgraph`, infer Git identity, recurse, expand globs, add, or seal.
+
+## 5. REF and tag mutation
 
 ```sh
 sealgraph tag REF
 sealgraph tag REF TAGNAME
 sealgraph tag REF@SEAL_OR_TAG TAGNAME
-```
-
-The one-argument form lists the REF's tags in bytewise TAGNAME order. Its
-non-terminal narrow output is:
-
-```text
-TAG REF "TAGNAME" FULL_SEAL_ID
-```
-
-An empty namespace emits zero bytes and succeeds. Names use quoted escaped
-presentation; the manifest retains the exact raw UTF-8 TAGNAME.
-
-The two-argument forms create one immutable binding. Bare REF tags its current
-HEAD. A hexadecimal scoped token must select the current HEAD or one of its
-`parent_revision` ancestors; an existing tag may select its exact historical
-target. An unscoped `@SEAL_TOKEN` is rejected because it provides no REF UI
-scope. Repeating the same binding is idempotent. Retarget, delete, force, and
-automatic tag creation do not exist. Non-terminal creation success is:
-
-```text
-TAGGED REF "TAGNAME" FULL_SEAL_ID operation=OPERATION_ID
-```
-
-### `sealgraph mv`
-
-```sh
 sealgraph mv OLD_REF NEW_REF
+sealgraph ref drop REF
 ```
 
-Moves exactly one REF manifest, including its HEAD and complete tag namespace,
-to an absent destination with one atomic no-replace rename. Both names must be
-valid and different. Exact candidate state at either name blocks the command;
-the operator seals or discards it explicitly. `mv` never recursively moves a
-prefix REF, rewrites a candidate, creates an old-name alias, modifies a Seal or
-Link, or infers hierarchy from slash spelling. Non-terminal success is:
+Tags are immutable REF-scoped aliases stored in the REF manifest. Same binding
+is idempotent; retarget, delete, force, and unscoped creation are absent.
 
-```text
-MOVED OLD_REF NEW_REF FULL_HEAD_ID tags=N operation=OPERATION_ID
-```
+`mv` moves one complete manifest, including tags, to an absent destination by
+no-replace rename. Candidates or source bindings at either name block it. It
+does not move a workfile or Candidate, retain an alias, or rewrite a Seal.
 
-### `sealgraph ref drop REF`
+`ref drop` removes one manifest only after Candidate and binding absence and
+creates a local recovery record. It never deletes immutable Blobs or workfiles.
 
-Removes exactly one complete current REF manifest, including its tag namespace,
-from the active namespace. A candidate or local source binding at the exact REF
-blocks the operation. It never deletes a workfile, candidate, binding, Seal,
-content object, Link, or downstream Seal and has no recursive, prefix, batch,
-or force form. Non-terminal success includes the recoverable receipt:
-
-```text
-REF_DROPPED ref=REF head=FULL_HEAD_ID tags=N operation=OPERATION_ID
-```
-
-## 3. Immutable inspection
+## 6. Immutable and graph inspection
 
 ```sh
-sealgraph show SELECTOR [--raw-content]
-sealgraph compare SELECTOR [SELECTOR]
-sealgraph log REF
-sealgraph linklog REF
-sealgraph graph
-sealgraph fsck
+sealgraph show SELECTOR [--raw-content] [--format human|json]
+sealgraph compare FROM_SELECTOR TO_SELECTOR [--format human|json]
+sealgraph status [REF] [--format human|json]
+sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]
+sealgraph graph [--format human|json]
+sealgraph impact [--asserted-by OBSERVER_SELECTOR ...] \
+  [--all-paths] [--max-paths N] SELECTOR [--format human|json]
+sealgraph log [--all-paths] [--max-paths N] REF [--format human|json]
+sealgraph linklog [--upstream TARGET_SELECTOR] REF [--format human|json]
+sealgraph fsck [--format human|json]
 ```
 
-`show` displays exact SealID, parent revision, content, attachments, Links and
-messages, root, and draft. REF names are display annotations resolved from the
-current observation, never immutable owner fields.
+`compare` requires exactly two explicit immutable selections and contains no
+inferred revision field. Status separates Candidate/HEAD, source/baseline,
+draft, self-stale, direct Cause stale, and transitive Cause stale.
 
-`log REF` resolves current HEAD then follows exact `parent_revision` IDs newest
-first. Parent cycles or unreadable/noncanonical Seals fail. It does not compare
-embedded names or act as a Git reflog.
+The observed graph starts at every current head and reaches the fixed point
+through Cause targets and their observer-scoped previous assertions. Revision
+activity follows revision edges only. Graph output retains every assertion
+source. `stale --frontier` is the upstream-first exact-Cause review frontier;
+it is navigation, not a batch plan. `--scan` is semantically identical to a
+cache bypass; the current format-5 runtime persists no graph cache.
 
-`compare REF` compares current HEAD with its parent and fails for an initial Seal.
-Two explicit selectors compare any two canonical Seals. A mode claiming one
-revision line must validate parent ancestry rather than REF ownership.
+Impact revision proof uses all observed assertions by default. Repeatable
+`--asserted-by` restricts proof edges and scoped observations to exactly those
+resolved observer Seals. Default output contains one first-match Cause path per
+impacted head. `--all-paths` uses a positive `--max-paths` bound (default 100)
+without changing membership or validation.
 
-`source compare REF` safely reads one bound regular workfile and compares its
-prospective native blob identity with candidate content when present, otherwise
-with current HEAD content. Binding-only state reports baseline `NONE`. It does
-not write the workfile bytes into object storage or mutate candidate state.
+Log reports each structurally reachable revision once by minimum depth.
+`--all-paths` reports bounded complete leaf-terminated paths. Linklog compares
+complete Cause records across every structural revision edge; `--upstream`
+filters only the final changed-target records and never changes edge evidence.
 
-Git-shaped `diff`, `diff --cached`, `diff --staged`, and `diff --draft` are
-diagnostic routes, not aliases. They explain the missing Git state assumption
-and navigate to `compare`, `candidate compare`, or `source compare` for an
-explicit retry. The same non-mutating navigation applies to Git-shaped `rm`,
-worktree-wide `add`, checkout, reset, restore, and clean attempts.
+Fsck validates physical loose objects, typed roles, content and attachment
+closure, exact manifests and tags, combined graph, active inventory, and final
+observation without repair.
 
-`linklog REF` compares exact target SealID sets between adjacent revisions. It
-reports add, remove, ancestry-based repoint, and Link-message change. Ambiguous
-N:M matching stays explicit add/remove.
+Format-5 JSON schemas are:
 
-Human output never writes arbitrary content/metadata bytes directly.
-Content preview is at most 256 input bytes with bytewise ASCII escaping.
-Printable ASCII is literal except quote/backslash; LF/CR/TAB use
-`\n`/`\r`/`\t`, and other bytes use lower-case `\xhh`.
+| Command | Schema |
+| --- | --- |
+| show | `sealgraph/show/v2` |
+| candidate show | `sealgraph/candidate-show/v2` |
+| candidate compare | `sealgraph/candidate-compare/v2` |
+| status | `sealgraph/status/v3` |
+| stale | `sealgraph/stale/v2` |
+| graph | `sealgraph/graph/v2` |
+| impact | `sealgraph/impact/v2` |
+| log | `sealgraph/log/v2` |
+| linklog | `sealgraph/linklog/v2` |
+| compare | `sealgraph/compare/v2` |
+| fsck | `sealgraph/fsck/v2` |
 
-`--raw-content` makes stdout exact content bytes only, with no metadata or
-added LF. The complete object validates before output.
+Exact member order and shared record shapes are normative in ADR 0027.
 
-Read commands do not create runtime directories, append logs, repair, relink,
-reseal, move a REF, or persist their derived output.
-
-## 4. Status and stale
+## 7. Local operational recovery
 
 ```sh
-sealgraph status [REF]
-sealgraph stale [--frontier] [--refs-only] [--scan]
+sealgraph recover show [OPERATION_ID] [--format human|json]
+sealgraph recover OPERATION_ID [--format human|json]
 ```
 
-Status can report orthogonal facts:
+Recovery requires one exact 32-lower-hex local operation ID. It restores only
+the exact prior REF-manifest state when current state still equals the recorded
+after-state. It never changes a typed Blob, interprets semantic intent, selects
+the latest record, or performs reset/reflog/undo semantics.
 
-- `SEALED_STATE_CLEAN`
-- `UNSEALED`
-- `DRAFT`
-- `STALE_SELF`
-- `STALE_DIRECT`
-- `STALE_TRANSITIVE`
-Status displays separate `CANDIDATE_TO_HEAD` and `WORKFILE_TO_<BASELINE>` axes.
-The workfile baseline is candidate when present, otherwise HEAD, otherwise
-NONE. Relations name that baseline, such as `WORKFILE_MATCHES_CANDIDATE` and
-`WORKFILE_DIFFERS_FROM_HEAD`; missing and unsafe inputs are `SOURCE_MISSING`
-and `SOURCE_UNREADABLE`. Binding-only REFs participate in status. These local
-observations do not change Seal admissibility or stage deletion.
+## 8. Git sidecar
 
-Successful status JSON uses `sealgraph/status/v2`.
-
-`STALE_SELF` means current HEAD is an active non-leaf revision.
-`STALE_DIRECT` means an exact direct Cause target is not an active current leaf,
-whether it is an active non-leaf or historical/detached.
-`STALE_TRANSITIVE` means a deeper Link-only Cause target is not an active
-current leaf while all direct targets are active current leaves. Parent edges
-determine leafness but are not traversed as Cause edges.
-
-`stale` selects current REFs having at least one stale fact and never reads
-candidate state. `--frontier` keeps a stale REF only when no other stale current
-head Seal appears strictly earlier in its exact Link-only Cause closure.
-Unselected descendant tips, parent edges, and candidates do not affect
-frontier membership.
-
-`--refs-only` emits exactly one valid REF plus LF per selected current path in
-bytewise order, no header/ID/label/quoting/`CLEAN`, and zero bytes for an empty
-set. Empty and non-empty success exit 0.
-
-`--scan` bypasses cache reads, performs canonical current-head-rooted scan, and
-refreshes disposable cache when possible without changing stdout. A missing
-cache or REF-head snapshot mismatch is a normal cache miss and does not warn.
-Invalid/unsafe cache state or cache write failure may warn; canonical
-corruption fails. Cache is never repair truth.
-
-Every multi-REF mode captures all current REF heads, derives and buffers, then
-revalidates the complete set. Change or unreadability fails nonzero with empty
-stdout. Success is an observation, not a reservation.
-
-## 5. Impact
-
-```sh
-sealgraph impact [--all-paths] [--max-paths N] SELECTOR
-```
-
-Every selector resolves to exact source Seal `h`. Impact reports distinct
-current downstream Seals whose Cause paths first reach `h` or one of its
-`parent_revision` ancestors. `h` itself is excluded as a downstream result.
-Multiple current REF aliases at one downstream Seal share one computation and
-are displayed sorted.
-
-Default output includes one deterministic shortest Link-edge path per impacted
-Seal. Distance is Link count; equal lengths choose the bytewise lexical full
-SealID sequence.
-
-`--all-paths` emits distinct simple paths ordered by edge count then SealID
-sequence. `--max-paths N` is valid only with `--all-paths`, requires a positive
-integer, defaults to 100, and applies per downstream Seal. Another path emits an
-explicit truncation marker and still exits 0.
-
-Path limits never reduce impact membership, hide an impacted Seal, skip full
-reachable graph validation, or weaken current-head snapshot revalidation.
-
-## 6. Historical Cause selection
-
-Historical, detached, and sibling exact Cause selection is first-class, not
-corruption:
-
-```sh
-sealgraph link DESIGN --depend-on @<older-seal-prefix>
-```
-
-A draft candidate may preserve it. Normal publication enforces active-leaf
-Cause closure. No `--force` suppresses provenance validation.
-
-An older result can be preserved by deriving a same-material sibling child,
-explicitly relinking one downstream candidate to it, and sealing that one REF.
-The old downstream Seal remains immutable and stale; no pin flag, automatic
-target choice, or recursive repair is introduced.
-
-## 7. Format-3 logical dump and format-4 load
-
-The final format-3 binary at commit `5b24d47` exposes one migration export:
-
-```sh
-sealgraph dump --format logical-v1
-```
-
-`--format logical-v1` is required exactly once. The command accepts no
-positional operand, output path, repair, ignore, or compatibility option. On
-success stdout is exactly one compact canonical
-`sealgraph/logical-dump/v1` JSON document followed by LF, and stderr is empty.
-
-All object, Seal, REF, tag, candidate, graph, and final-observation checks
-complete before stdout emission. A candidate of any validity blocks the dump.
-The command does not acquire the mutation guard, create runtime files, repair
-state, or inspect Git. Output-sink failure is nonzero; consumers accept a dump
-only with exit zero and complete canonical parsing.
-
-The checked-in format-4 runtime consumes that document with:
-
-```sh
-sealgraph load --format logical-v1 < repository.dump.json
-```
-
-The target `.sealgraph` must be absent. Load stages and validates a complete
-format-4 repository, rewrites all
-parent/Link/REF/tag targets through a complete old-to-new mapping, and uses one
-atomic no-replace directory publication. It never merges with or replaces an
-existing repository. Non-empty tags are rewritten to full format-4 SealIDs and
-published inside their REF manifests; none are dropped or privately deferred.
-
-A platform without atomic no-replace directory publication rejects load before
-target publication; it does not weaken the boundary to check-then-rename.
-
-Successful stdout is the canonical compact
-`sealgraph/logical-load-receipt/v1` document plus LF. It includes the exact
-source dump SHA-256, every old-to-new mapping, every many-to-one collapse,
-rewritten REF and tag records, and published format `4`. A prior
-`.sealgraph-load-*` staging path is reported for explicit inspection and is
-never adopted or deleted automatically.
-
-## 8. Git plugin
-
-Git integration is invoked explicitly as:
-
-```sh
-git sealgraph <command>
-```
-
-and implemented by `git-sealgraph`. It uses the same native `.sealgraph`
-format. Initial capability contracts, with final names separately gated, are:
-
-- prospective staged-tree validation;
-- immutable commit-tree validation/inspection;
-- merge conflict evidence from stages 1/2/3 plus validated
-  BASE/OURS/THEIRS complete trees;
-- opt-in validation-only hook dispatch.
-
-A hook command validates what Git will commit, including unchanged base paths,
-not a different worktree. It never self-installs, overwrites an existing hook,
-stages, seals, advances a REF, relinks, repairs, commits, pushes, or treats
-success as approval.
-
-Merge assistance may show exact BASE/OURS/THEIRS target SealIDs, revision
-ancestry, and Cause differences. Different bytes at one immutable native object
-path are corruption. Divergent REF/tag targets remain explicit. Selecting a
-resolution does not create a Seal or imply review.
-
-Git blob/tree/commit/tag material import is not in the initial sidecar.
-
-## 9. Exit and machine output
-
-- `0`: successful command, including empty factual result or documented path
-  truncation;
-- `1`: reserved domain/status condition where explicitly documented;
-- `2`: CLI usage error before repository traversal;
-- other nonzero: operational, integrity, snapshot, or unsupported-format
-  failure.
-
-Structured machine-readable outputs must be versioned before external use.
-`stale --refs-only` is the intentionally narrow stable line exception.
-
-`fsck [--format human|json]` performs a complete read-only inventory of loose
-objects, REF manifests/tags, canonical Seals, material references, and both
-parent and Cause DAGs. Success JSON uses `sealgraph/fsck/v1`. Historical or
-detached Seals and unreferenced valid blobs are reported separately and do not
-fail the command. Corruption, missing references, unsafe paths, or cycles fail
-nonzero; `fsck` never repairs, removes, repacks, caches, or changes modes.
-
-The standalone runtime has explicit local source binding and add-time import,
-but no filesystem watch or automatic add/seal surface. `manifest` remains an
-explicit path/digest claim builder only. Attachment fields are
-read, preserved by load, and inspected, but beta does not expose `attach` or
-`detach` mutation commands.
-
-`show`, `candidate show`, `candidate compare`, `status`, `stale`, `graph`,
-`impact`, `log`, `linklog`, and `compare` accept `--format human|json` in any
-argument position. Source and recovery commands documented with `--format`
-follow the same selection rule. With no format option, stdout to a terminal is
-human and stdout to a known non-terminal destination is JSON. JSON uses a
-command-specific versioned schema; source comparison uses
-`sealgraph/source-compare/v1`. Raw content and the REF-only line protocol
-override automatic selection and cannot be combined with an explicitly
-requested JSON format. JSON contains full ObjectID strings and arrays of
-ObjectIDs for paths, not presentation strings.
-
-Human inspection aligns scalar labels and collection columns, shows Seal and
-object identities as 12-character prefixes, indents Cause children and impact
-path hops, and clips long escaped values to the detected terminal width. Full
-identities remain available in JSON. Human wording and field order are
-presentation, not a machine protocol; `--format human` explicitly preserves
-human output when redirecting it.
-
-Successful mutation commands without JSON also use aligned labels and
-12-character hash prefixes on a terminal. When their stdout is non-terminal,
-the documented narrow receipts remain unchanged and contain full identities.
-Recovery operation IDs are not hashes and remain complete in both views.
-
-Human output uses `SEALED_STATE`, `STRUCTURAL_IMPACT`, and
-`REVISION_CAUSE_GRAPH` headings. Status v2 separates candidate/HEAD state from
-working-file/baseline state and does not use bare `CLEAN` as a combined result. A REF
-is a movable logical identity, impact
-is structural rather than stale-only, root is a provenance boundary rather
-than trust, and Seal/link history is not Git commit/reflog history. Standalone
-commands do not discover or inspect Git.
-
-## 10. Explicit local recovery
-
-The initial explicit local-recovery surface is:
-
-```sh
-sealgraph recover show
-sealgraph recover show OPERATION_ID
-sealgraph recover OPERATION_ID
-```
-
-Inspection distinguishes prepared-not-applied, recoverable, intervened,
-already-recovered, and corrupt local-record state. Recovery requires one exact
-full operation ID and verifies every complete logged post-operation manifest
-before mutation. Human and `sealgraph/recover/v1` JSON output are buffered and
-never report partial success.
-
-Successful non-idempotent `seal`, `tag`, `mv`, and `ref drop` output includes the exact
-`operation=OPERATION_ID` receipt. `recover show` lists every readable local
-record plus isolated `CORRUPT` entries. `recover show OPERATION_ID` inspects one
-exact record. `recover OPERATION_ID` restores the exact complete prior manifest
-state only when current state still equals the recorded after-state. Bash
-completion may enumerate full local operation IDs but never selects one
-implicitly.
-
-There is no `recover last`, `recover REF`, ID-prefix selection, reset, reflog,
-checkout, undo/redo, object deletion, or implicit corrective Seal. `link` and
-`unlink` are candidate edits; recovery applies only if their candidate was
-published by a subsequently selected `seal` operation.
+`git sealgraph ...` is a separate unreleased surface implemented by the
+`git-sealgraph` executable. Standalone `sealgraph` never detects `.git`.
+Any future sidecar uses the same format-5 `.sealgraph` bytes, offers read-only
+Git views where approved, and never turns Git commit/merge success into a Seal,
+automatic relink, or approval.

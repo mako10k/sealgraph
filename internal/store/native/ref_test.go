@@ -61,6 +61,14 @@ func TestRefManifestIsCanonicalAndMoveIsAtomicNoReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	manifestInfo, err := os.Lstat(refs.manifestPath("design"))
+	if err != nil || manifestInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("manifest mode=%v err=%v", manifestInfo, err)
+	}
+	directoryInfo, err := os.Lstat(refs.refDirectory("design"))
+	if err != nil || directoryInfo.Mode().Perm() != 0o755 {
+		t.Fatalf("REF directory mode=%v err=%v", directoryInfo, err)
+	}
 	want := `{"schema":"sealgraph/ref/v1","head":"` + one.String() + `","tags":[]}`
 	if string(data) != want {
 		t.Fatalf("manifest = %s, want %s", data, want)

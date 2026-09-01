@@ -1,5 +1,6 @@
-// Package repository coordinates standalone format-4 domain semantics,
-// object storage, REF publication, candidates, and explicit migration load.
+// Package repository coordinates the standalone format-5 runtime. Format-4
+// repositories are rejected at the config boundary and are never interpreted
+// by ordinary runtime readers.
 package repository
 
 import (
@@ -7,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
-	"github.com/mako10k/sealgraph/internal/canonical"
+	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	"github.com/mako10k/sealgraph/internal/domain"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/recovery"
 	"github.com/mako10k/sealgraph/internal/store"
 	"github.com/mako10k/sealgraph/internal/store/native"
@@ -32,7 +33,7 @@ type Repository struct {
 func OpenStandalone(workDir string) (*Repository, error) {
 	dir := filepath.Join(workDir, ".sealgraph")
 	if err := validateLayout(dir); err != nil {
-		return nil, fmt.Errorf("open standalone repository %s: %w; run 'sealgraph init' in this directory or repair it explicitly", dir, err)
+		return nil, fmt.Errorf("open standalone repository %s: %w; run 'sealgraph init' only for an absent format-5 repository", dir, err)
 	}
 	return newRepository(dir), nil
 }
@@ -40,41 +41,35 @@ func OpenStandalone(workDir string) (*Repository, error) {
 func newRepository(dir string) *Repository {
 	candidates := candidateStore{root: filepath.Join(dir, "index")}
 	return &Repository{
-		dir:        dir,
-		workDir:    filepath.Dir(dir),
-		objects:    native.NewObjectStore(dir),
-		refs:       native.NewRefStore(dir),
-		tags:       native.NewTagStore(dir),
-		candidates: candidates,
-		sources:    sourceStore{candidates: candidates},
-		recovery:   recovery.NewStore(dir),
-		writer:     newWriterGuard(filepath.Join(dir, "locks")),
+		dir: dir, workDir: filepath.Dir(dir), objects: native.NewObjectStore(dir),
+		refs: native.NewRefStore(dir), tags: native.NewTagStore(dir), candidates: candidates,
+		sources: sourceStore{candidates: candidates}, recovery: recovery.NewStore(dir),
+		writer: newWriterGuard(filepath.Join(dir, "locks")),
 	}
 }
 
-type Dependency struct {
-	Selector string
-	Message  string
+// CauseInput is one complete format-5 Cause Link authoring record. Selectors
+// are resolved before Candidate persistence; an empty Previous slice is the
+// explicit --no-previous assertion.
+type CauseInput struct {
+	Target   string
+	Previous []string
+	Messages []string
 }
 
 type AddOptions struct {
-	REF          string
-	Content      []byte
-	Dependencies []Dependency
-	Parent       string
-	Root         bool
-	Draft        bool
+	REF             string
+	Content         []byte
+	Cause           *CauseInput
+	Root            bool
+	RootSet         bool
+	ClearCauseLinks bool
+	Draft           bool
+	DraftSet        bool
 }
 
-type CompletionNames struct {
-	REFs        []string
-	Candidates  []string
-	Sources     []string
-	RecoveryIDs []string
-}
+type CompletionNames struct{ REFs, Candidates, Sources, RecoveryIDs []string }
 
-// CompletionNames returns names from repository metadata only. It never opens
-// a bound workfile, writes cache state, or bootstraps a repository.
 func (r *Repository) CompletionNames(ctx context.Context) (CompletionNames, error) {
 	refs, err := r.refs.List(ctx)
 	if err != nil {
@@ -92,210 +87,230 @@ func (r *Repository) CompletionNames(ctx context.Context) (CompletionNames, erro
 	for _, binding := range bindings {
 		sources = append(sources, binding.REF)
 	}
-	recoveryEntries, err := r.recovery.List()
+	entries, err := r.recovery.List()
 	if err != nil {
 		return CompletionNames{}, err
 	}
-	recoveryIDs := make([]string, 0, len(recoveryEntries))
-	for _, entry := range recoveryEntries {
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
 		if entry.Record != nil {
-			recoveryIDs = append(recoveryIDs, entry.ID)
+			ids = append(ids, entry.ID)
 		}
 	}
-	return CompletionNames{REFs: refs, Candidates: candidates, Sources: sources, RecoveryIDs: recoveryIDs}, nil
+	return CompletionNames{REFs: refs, Candidates: candidates, Sources: sources, RecoveryIDs: ids}, nil
 }
 
-func (r *Repository) Add(ctx context.Context, options AddOptions) (domain.Candidate, error) {
-	return withMutation(ctx, r.writer, "add candidate", func() (domain.Candidate, error) {
-		return r.addLocked(ctx, options, false, true, true)
-	})
+func (r *Repository) Add(ctx context.Context, options AddOptions) (domainv5.Candidate, error) {
+	return withMutation(ctx, r.writer, "add candidate", func() (domainv5.Candidate, error) { return r.addLocked(ctx, options) })
 }
 
-func (r *Repository) addLocked(ctx context.Context, options AddOptions, preserve bool, rootSet, draftSet bool) (domain.Candidate, error) {
+func (r *Repository) addLocked(ctx context.Context, options AddOptions) (domainv5.Candidate, error) {
 	if err := domain.ValidateREF(options.REF); err != nil {
-		return domain.Candidate{}, err
+		return domainv5.Candidate{}, err
 	}
-	candidate, err := r.candidateForAdd(ctx, options.REF, options.Parent)
+	observation, graph, err := r.buildObservation(ctx, "add Candidate")
 	if err != nil {
-		return domain.Candidate{}, err
+		return domainv5.Candidate{}, err
 	}
-	var links []domain.Link
-	if options.Dependencies != nil {
-		links, err = r.resolveDependencies(ctx, options.Dependencies)
-		if err != nil {
-			return domain.Candidate{}, err
-		}
-	}
-	contentID, err := r.objects.WriteBlob(ctx, options.Content)
+	edit, err := r.candidateForObservedEdit(ctx, options.REF, observation, graph)
 	if err != nil {
-		return domain.Candidate{}, fmt.Errorf("store content for %s: %w", options.REF, err)
+		return domainv5.Candidate{}, err
 	}
-	candidate.Content = domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: contentID}
-	if !preserve || rootSet {
-		candidate.Root = options.Root
+	candidate, err := r.applyAddOptions(ctx, edit, options, &observation, graph)
+	if err != nil {
+		return domainv5.Candidate{}, err
 	}
-	if !preserve || draftSet {
+	if err := r.validateCandidateMutation(ctx, candidate, observation); err != nil {
+		return domainv5.Candidate{}, err
+	}
+	written, err := r.objects.WriteBlob(ctx, options.Content)
+	if err != nil || !written.Equal(candidate.Content) {
+		return domainv5.Candidate{}, fmt.Errorf("store content for %s: id=%s err=%w", options.REF, written, err)
+	}
+	if err := r.accountForObservedObjectWrite(ctx, &observation, written, "add Candidate publication"); err != nil {
+		return domainv5.Candidate{}, err
+	}
+	if err := r.revalidateHeads(ctx, observation, "add Candidate publication"); err != nil {
+		return domainv5.Candidate{}, err
+	}
+	if err := r.candidates.SaveIfUnchanged(candidate, edit.Bytes, edit.Exists); err != nil {
+		return domainv5.Candidate{}, fmt.Errorf("save candidate %s: %w", options.REF, err)
+	}
+	return r.candidates.Load(options.REF)
+}
+
+func (r *Repository) applyAddOptions(ctx context.Context, edit candidateEdit, options AddOptions, observation *headObservation, graph *observedGraph) (domainv5.Candidate, error) {
+	if edit.Initial && !options.RootSet && !options.Root {
+		return domainv5.Candidate{}, fmt.Errorf("new Candidate %s requires explicit --root --clear-cause-links or --non-root with one complete --target group", options.REF)
+	}
+	candidate := edit.Candidate
+	candidate.Content = domain.ComputeNativeBlobID(options.Content)
+	if options.DraftSet {
 		candidate.Draft = options.Draft
 	}
-	if options.Dependencies != nil {
-		candidate.Links = links
+	if options.RootSet || options.Root {
+		candidate.Root = options.Root
 	}
-	if err := r.candidates.Save(candidate); err != nil {
-		return domain.Candidate{}, fmt.Errorf("save candidate %s: %w", options.REF, err)
+	if options.Root && !options.ClearCauseLinks {
+		return domainv5.Candidate{}, errors.New("--root requires --clear-cause-links so the root transition is explicit and atomic")
+	}
+	if options.ClearCauseLinks {
+		candidate.CauseLinks = []domainv5.CauseLink{}
+	}
+	if options.Cause != nil {
+		if candidate.Root {
+			return domainv5.Candidate{}, errors.New("a root Candidate cannot contain a Cause Link")
+		}
+		link, err := r.resolveCauseInputObserved(ctx, *options.Cause, observation, graph)
+		if err != nil {
+			return domainv5.Candidate{}, err
+		}
+		candidate.CauseLinks = replaceCauseLink(candidate.CauseLinks, link)
 	}
 	return candidate, nil
 }
 
-func (r *Repository) candidateForAdd(ctx context.Context, ref, parentSelector string) (domain.Candidate, error) {
-	if parentSelector == "" {
-		return r.candidateForEdit(ctx, ref)
-	}
-	if err := r.requireAbsentDestination(ctx, ref); err != nil {
-		return domain.Candidate{}, err
-	}
-	parent, err := r.ResolveSelector(ctx, parentSelector)
-	if err != nil {
-		return domain.Candidate{}, fmt.Errorf("resolve explicit parent %q: %w", parentSelector, err)
-	}
-	if err := r.validateRevisionChain(ctx, parent.ID); err != nil {
-		return domain.Candidate{}, fmt.Errorf("validate explicit parent %s: %w", parent.ID, err)
-	}
-	parentID := parent.ID
-	return domain.Candidate{
-		Schema: domain.CandidateSchema, REF: ref, ParentRevision: &parentID,
-		Attachments: []domain.Attachment{}, Links: []domain.Link{},
-	}, nil
+type candidateEdit struct {
+	Candidate domainv5.Candidate
+	Bytes     []byte
+	Exists    bool
+	Initial   bool
 }
 
-func (r *Repository) Derive(ctx context.Context, ref, sourceSelector string) (domain.Candidate, error) {
-	return withMutation(ctx, r.writer, "derive candidate", func() (domain.Candidate, error) {
-		if err := domain.ValidateREF(ref); err != nil {
-			return domain.Candidate{}, err
-		}
-		if err := r.requireAbsentDestination(ctx, ref); err != nil {
-			return domain.Candidate{}, err
-		}
-		source, err := r.ResolveSelector(ctx, sourceSelector)
-		if err != nil {
-			return domain.Candidate{}, fmt.Errorf("resolve derive source %q: %w", sourceSelector, err)
-		}
-		if err := r.validateRevisionChain(ctx, source.ID); err != nil {
-			return domain.Candidate{}, fmt.Errorf("validate derive source %s: %w", source.ID, err)
-		}
-		if err := r.validateSealMaterial(ctx, source.ID, source.Payload); err != nil {
-			return domain.Candidate{}, err
-		}
-		parent := source.ID
-		candidate := domain.Candidate{
-			Schema: domain.CandidateSchema, REF: ref, ParentRevision: &parent,
-			Content: source.Payload.Content, Attachments: append([]domain.Attachment(nil), source.Payload.Attachments...),
-			Links: append([]domain.Link(nil), source.Payload.Links...), Root: source.Payload.Root, Draft: source.Payload.Draft,
-		}
-		if err := r.candidates.Save(candidate); err != nil {
-			return domain.Candidate{}, fmt.Errorf("save derived candidate %s: %w", ref, err)
-		}
-		return candidate, nil
-	})
+func (r *Repository) candidateForObservedEdit(ctx context.Context, ref string, observation headObservation, graph *observedGraph) (candidateEdit, error) {
+	if err := domain.ValidateREF(ref); err != nil {
+		return candidateEdit{}, err
+	}
+	if snapshot, err := r.candidates.LoadSnapshot(ref); err == nil {
+		return candidateEdit{Candidate: snapshot.Candidate, Bytes: snapshot.Bytes, Exists: true}, nil
+	} else if !errors.Is(err, ErrCandidateNotFound) {
+		return candidateEdit{}, err
+	}
+	head, ok := observation.heads[ref]
+	if !ok {
+		return candidateEdit{Candidate: domainv5.Candidate{Schema: domainv5.CandidateSchema, REF: ref, Attachments: []domainv5.Attachment{}, CauseLinks: []domainv5.CauseLink{}}, Initial: true}, nil
+	}
+	resolved, ok := graph.nodes[head.String()]
+	if !ok {
+		return candidateEdit{}, fmt.Errorf("load observed current Seal for %s: %s is absent from graph", ref, head)
+	}
+	expected := head
+	return candidateEdit{Candidate: domainv5.Candidate{
+		Schema: domainv5.CandidateSchema, REF: ref, ExpectedREFHead: &expected,
+		Content: resolved.Material.Content, Attachments: append([]domainv5.Attachment(nil), resolved.Material.Attachments...),
+		Root: resolved.Provenance.Root, Draft: resolved.Provenance.Draft,
+		CauseLinks: cloneCauseLinks(resolved.Provenance.CauseLinks),
+	}}, nil
 }
 
 func (r *Repository) requireAbsentDestination(ctx context.Context, ref string) error {
 	if _, err := r.candidates.LoadSnapshot(ref); err == nil {
-		return fmt.Errorf("destination candidate %s already exists; discard it explicitly or choose another REF", ref)
+		return fmt.Errorf("destination Candidate %s already exists", ref)
 	} else if !errors.Is(err, ErrCandidateNotFound) {
-		return fmt.Errorf("destination candidate %s is not safely absent: %w", ref, err)
-	}
-	if head, err := r.refs.Resolve(ctx, ref); err == nil {
-		return fmt.Errorf("destination REF %s already exists at %s; explicit parent creation requires an absent destination", ref, head)
-	} else if !errors.Is(err, store.ErrRefNotFound) {
-		return fmt.Errorf("destination REF %s is not safely absent: %w", ref, err)
-	}
-	return nil
-}
-
-func (r *Repository) validateSealMaterial(ctx context.Context, id domain.ObjectID, payload domain.SealPayload) error {
-	if _, err := r.readRepositoryBlob(ctx, payload.Content, fmt.Sprintf("content for seal %s", id)); err != nil {
 		return err
 	}
-	for _, attachment := range payload.Attachments {
-		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("attachment %q for seal %s", attachment.Name, id)); err != nil {
-			return err
-		}
+	if head, err := r.refs.Resolve(ctx, ref); err == nil {
+		return fmt.Errorf("destination REF %s already exists at %s", ref, head)
+	} else if !errors.Is(err, store.ErrRefNotFound) {
+		return err
 	}
 	return nil
 }
 
-func (r *Repository) Link(ctx context.Context, ref string, dependencies []Dependency) (domain.Candidate, error) {
-	return withMutation(ctx, r.writer, "link candidate", func() (domain.Candidate, error) {
-		if len(dependencies) == 0 {
-			return domain.Candidate{}, errors.New("at least one --depend-on selector is required")
-		}
-		candidate, err := r.candidateForEdit(ctx, ref)
+func (r *Repository) resolveCauseInputObserved(ctx context.Context, input CauseInput, observation *headObservation, graph *observedGraph) (domainv5.CauseLink, error) {
+	if input.Target == "" {
+		return domainv5.CauseLink{}, errors.New("Cause Link target is empty")
+	}
+	target, err := r.resolveSelectorObserved(ctx, input.Target, observation, graph)
+	if err != nil {
+		return domainv5.CauseLink{}, fmt.Errorf("resolve Cause target %q: %w", input.Target, err)
+	}
+	previous := make([]domain.ObjectID, 0, len(input.Previous))
+	for _, selector := range input.Previous {
+		resolved, err := r.resolveSelectorObserved(ctx, selector, observation, graph)
 		if err != nil {
-			return domain.Candidate{}, err
+			return domainv5.CauseLink{}, fmt.Errorf("resolve previous revision %q: %w", selector, err)
 		}
-		if candidate.Content.ID.Hex == "" {
-			return domain.Candidate{}, fmt.Errorf("REF %s has no content candidate; run 'sealgraph add %s --content ...' first", ref, ref)
+		previous = append(previous, resolved.ID)
+	}
+	provenance := domainv5.Provenance{Schema: domainv5.ProvenanceSchema, CauseLinks: []domainv5.CauseLink{{
+		TargetSeal: target.ID, PreviousRevisionSealOfTargetSeal: previous, Messages: append([]string(nil), input.Messages...),
+	}}}
+	normalized, err := domainv5.NormalizeProvenance(provenance)
+	if err != nil {
+		return domainv5.CauseLink{}, fmt.Errorf("validate Cause Link for %s: %w", target.ID, err)
+	}
+	return normalized.CauseLinks[0], nil
+}
+
+func replaceCauseLink(links []domainv5.CauseLink, replacement domainv5.CauseLink) []domainv5.CauseLink {
+	result := make([]domainv5.CauseLink, 0, len(links)+1)
+	for _, link := range links {
+		if !link.TargetSeal.Equal(replacement.TargetSeal) {
+			result = append(result, link)
 		}
-		links, err := r.resolveDependencies(ctx, dependencies)
+	}
+	return append(result, replacement)
+}
+
+func cloneCauseLinks(links []domainv5.CauseLink) []domainv5.CauseLink {
+	result := make([]domainv5.CauseLink, len(links))
+	for i, link := range links {
+		result[i] = domainv5.CauseLink{TargetSeal: link.TargetSeal,
+			PreviousRevisionSealOfTargetSeal: append([]domain.ObjectID(nil), link.PreviousRevisionSealOfTargetSeal...),
+			Messages:                         append([]string(nil), link.Messages...)}
+	}
+	return result
+}
+
+func (r *Repository) Link(ctx context.Context, ref string, input CauseInput) (domainv5.Candidate, error) {
+	return withMutation(ctx, r.writer, "link candidate", func() (domainv5.Candidate, error) {
+		observation, graph, err := r.buildObservation(ctx, "link Candidate")
 		if err != nil {
-			return domain.Candidate{}, err
+			return domainv5.Candidate{}, err
 		}
-		candidate.Links = append(candidate.Links, links...)
-		candidate.Links, err = domain.NormalizeLinks(candidate.Links)
+		edit, err := r.candidateForObservedEdit(ctx, ref, observation, graph)
 		if err != nil {
-			return domain.Candidate{}, fmt.Errorf("update candidate %s Cause links: %w; unlink the exact old target before adding it again", ref, err)
+			return domainv5.Candidate{}, err
 		}
-		if err := r.candidates.Save(candidate); err != nil {
-			return domain.Candidate{}, fmt.Errorf("save candidate %s: %w", ref, err)
+		candidate := edit.Candidate
+		if candidate.Content.Hex == "" {
+			return domainv5.Candidate{}, fmt.Errorf("REF %s has no content Candidate; run 'sealgraph add' first", ref)
 		}
-		return candidate, nil
+		if candidate.Root {
+			return domainv5.Candidate{}, fmt.Errorf("Candidate %s is root; use add --non-root with one complete --target group", ref)
+		}
+		link, err := r.resolveCauseInputObserved(ctx, input, &observation, graph)
+		if err != nil {
+			return domainv5.Candidate{}, err
+		}
+		candidate.CauseLinks = replaceCauseLink(candidate.CauseLinks, link)
+		if err := r.validateCandidateMutation(ctx, candidate, observation); err != nil {
+			return domainv5.Candidate{}, err
+		}
+		if err := r.candidates.SaveIfUnchanged(candidate, edit.Bytes, edit.Exists); err != nil {
+			return domainv5.Candidate{}, fmt.Errorf("save Candidate %s: %w", ref, err)
+		}
+		return r.candidates.Load(ref)
 	})
 }
 
-func (r *Repository) candidateForEdit(ctx context.Context, ref string) (domain.Candidate, error) {
-	if err := domain.ValidateREF(ref); err != nil {
-		return domain.Candidate{}, err
-	}
-	if candidate, err := r.candidates.Load(ref); err == nil {
-		return candidate, nil
-	} else if !errors.Is(err, ErrCandidateNotFound) {
-		return domain.Candidate{}, err
-	}
-	head, err := r.refs.Resolve(ctx, ref)
-	if errors.Is(err, store.ErrRefNotFound) {
-		return domain.Candidate{Schema: domain.CandidateSchema, REF: ref, Attachments: []domain.Attachment{}, Links: []domain.Link{}}, nil
-	}
+func (r *Repository) validateCandidateMutation(ctx context.Context, candidate domainv5.Candidate, observation headObservation) error {
+	prospective, err := prospectiveSeal(candidate)
 	if err != nil {
-		return domain.Candidate{}, err
+		return fmt.Errorf("prospective Candidate is invalid: %w", err)
 	}
-	seal, err := r.LoadSeal(ctx, head)
-	if err != nil {
-		return domain.Candidate{}, fmt.Errorf("load current seal for %s: %w", ref, err)
+	heads := cloneHeads(observation.heads)
+	heads[candidate.REF] = prospective.ID
+	if _, err := r.buildObservedGraph(ctx, heads, map[string]domainv5.ResolvedSeal{prospective.ID.String(): prospective}); err != nil {
+		return fmt.Errorf("prospective Candidate graph is invalid: %w", err)
 	}
-	parent, expected := head, head
-	return domain.Candidate{
-		Schema: domain.CandidateSchema, REF: ref,
-		ParentRevision: &parent, ExpectedREFHead: &expected,
-		Content: seal.Content, Attachments: append([]domain.Attachment(nil), seal.Attachments...),
-		Links: append([]domain.Link(nil), seal.Links...), Root: seal.Root, Draft: seal.Draft,
-	}, nil
-}
-
-func (r *Repository) resolveDependencies(ctx context.Context, dependencies []Dependency) ([]domain.Link, error) {
-	links := make([]domain.Link, 0, len(dependencies))
-	for _, dependency := range dependencies {
-		resolved, err := r.ResolveSelector(ctx, dependency.Selector)
-		if err != nil {
-			return nil, fmt.Errorf("resolve dependency %q: %w", dependency.Selector, err)
-		}
-		links = append(links, domain.Link{TargetSeal: resolved.ID, Message: dependency.Message})
-	}
-	return domain.NormalizeLinks(links)
+	return r.revalidateHeads(ctx, observation, "Candidate graph validation")
 }
 
 type SealResult struct {
 	ID          domain.ObjectID
-	Payload     domain.SealPayload
+	Resolved    domainv5.ResolvedSeal
 	OperationID string
 }
 
@@ -307,32 +322,44 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		snapshot, err := r.candidates.LoadSnapshot(ref)
 		if err != nil {
 			if errors.Is(err, ErrCandidateNotFound) {
-				return SealResult{}, fmt.Errorf("REF %s has no working candidate; run 'sealgraph add' or 'sealgraph link' first", ref)
+				return SealResult{}, fmt.Errorf("REF %s has no working Candidate; run 'sealgraph add' or 'sealgraph link' first", ref)
 			}
 			return SealResult{}, err
 		}
 		candidate := snapshot.Candidate
-		admission, err := r.validateSealCandidate(ctx, candidate)
+		observation, err := r.validateSealCandidate(ctx, candidate)
 		if err != nil {
 			return SealResult{}, err
 		}
-		payload := domain.SealPayload{
-			Schema: domain.SealSchema, ParentRevision: candidate.ParentRevision,
-			Content: candidate.Content, Attachments: candidate.Attachments, Links: candidate.Links,
-			Root: candidate.Root, Draft: candidate.Draft,
-		}
-		encoded, err := canonical.EncodeSeal(payload)
+		material := domainv5.Material{Schema: domainv5.MaterialSchema, Content: candidate.Content, Attachments: candidate.Attachments}
+		materialBytes, err := canonicalv5.EncodeMaterial(material)
 		if err != nil {
-			return SealResult{}, fmt.Errorf("canonicalize seal for %s: %w", ref, err)
+			return SealResult{}, fmt.Errorf("canonicalize Material for %s: %w", ref, err)
 		}
-		sealID, err := r.objects.WriteBlob(ctx, encoded)
+		materialID, err := r.objects.WriteBlob(ctx, materialBytes)
 		if err != nil {
-			return SealResult{}, fmt.Errorf("store immutable seal for %s: %w", ref, err)
+			return SealResult{}, fmt.Errorf("store immutable Material for %s: %w", ref, err)
 		}
-		if admission != nil {
-			if err := r.revalidateHeads(ctx, *admission, "seal admission"); err != nil {
-				return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
-			}
+		provenance := domainv5.Provenance{Schema: domainv5.ProvenanceSchema, Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks}
+		provenanceBytes, err := canonicalv5.EncodeProvenance(provenance)
+		if err != nil {
+			return SealResult{}, fmt.Errorf("canonicalize Provenance for %s: %w", ref, err)
+		}
+		provenanceID, err := r.objects.WriteBlob(ctx, provenanceBytes)
+		if err != nil {
+			return SealResult{}, fmt.Errorf("store immutable Provenance for %s: %w", ref, err)
+		}
+		seal := domainv5.Seal{Schema: domainv5.SealSchema, Material: materialID, Provenance: provenanceID}
+		sealBytes, err := canonicalv5.EncodeSeal(seal)
+		if err != nil {
+			return SealResult{}, fmt.Errorf("canonicalize Seal for %s: %w", ref, err)
+		}
+		sealID, err := r.objects.WriteBlob(ctx, sealBytes)
+		if err != nil {
+			return SealResult{}, fmt.Errorf("store immutable Seal for %s: %w", ref, err)
+		}
+		if err := r.revalidateHeads(ctx, observation, "seal admission"); err != nil {
+			return SealResult{}, fmt.Errorf("Seal Blob %s was written but REF %s was not advanced: %w", sealID, ref, err)
 		}
 		recoveryRefs, err := r.recoveryRefs()
 		if err != nil {
@@ -346,60 +373,56 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		if err != nil {
 			return SealResult{}, err
 		}
-		recoveryRecord, err := r.prepareRecovery("seal", []recovery.Transition{{REF: ref, Before: before, After: after}})
+		record, err := r.prepareRecovery("seal", []recovery.Transition{{REF: ref, Before: before, After: after}})
 		if err != nil {
-			return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced because recovery preparation failed: %w", sealID, ref, err)
+			return SealResult{}, fmt.Errorf("Seal Blob %s was written but REF %s was not advanced because recovery preparation failed: %w", sealID, ref, err)
 		}
 		if err := r.refs.Update(ctx, ref, candidate.ExpectedREFHead, &sealID); err != nil {
-			return SealResult{}, fmt.Errorf("seal object %s was written but REF %s was not advanced: %w", sealID, ref, err)
+			return SealResult{}, fmt.Errorf("Seal Blob %s was written but REF %s was not advanced: %w", sealID, ref, err)
 		}
-		payload, _ = domain.NormalizeSeal(payload)
-		result := SealResult{ID: sealID, Payload: payload, OperationID: recoveryRecord.ID}
-		if err := r.commitRecovery(recoveryRecord); err != nil {
-			return result, fmt.Errorf("REF %s was published at seal %s but recovery record %s could not be marked COMMITTED: %w; inspect the REF and recovery record before retrying", ref, sealID, recoveryRecord.ID, err)
+		content, err := r.readRepositoryBlobID(ctx, candidate.Content, fmt.Sprintf("published content for %s", ref))
+		if err != nil {
+			return SealResult{ID: sealID, OperationID: record.ID}, fmt.Errorf("REF %s was published at Seal %s but published content readback failed: %w", ref, sealID, err)
+		}
+		resolved := domainv5.ResolvedSeal{ID: sealID, Seal: seal, Material: material, Provenance: provenance, ContentBytes: len(content)}
+		result := SealResult{ID: sealID, Resolved: resolved, OperationID: record.ID}
+		if err := r.commitRecovery(record); err != nil {
+			return result, fmt.Errorf("REF %s was published at Seal %s but recovery record %s could not be marked COMMITTED: %w", ref, sealID, record.ID, err)
 		}
 		if err := r.candidates.RemoveIfUnchanged(ref, snapshot.Bytes); err != nil {
-			return result, fmt.Errorf("REF %s was published at seal %s, but its candidate was retained because cleanup could not prove it was unchanged: %w; inspect the candidate explicitly", ref, sealID, err)
+			return result, fmt.Errorf("REF %s was published at Seal %s, but its Candidate was retained: %w", ref, sealID, err)
 		}
 		return result, nil
 	})
 }
 
-func (r *Repository) validateSealCandidate(ctx context.Context, candidate domain.Candidate) (*headObservation, error) {
-	if err := r.validatePublicationExpectation(ctx, candidate); err != nil {
-		return nil, err
+func (r *Repository) validateSealCandidate(ctx context.Context, candidate domainv5.Candidate) (headObservation, error) {
+	prospective, err := prospectiveSeal(candidate)
+	if err != nil {
+		return headObservation{}, fmt.Errorf("derive prospective Seal for %s: %w", candidate.REF, err)
 	}
-	if _, err := r.readRepositoryBlob(ctx, candidate.Content, fmt.Sprintf("candidate content for %s", candidate.REF)); err != nil {
-		return nil, err
+	if candidate.ExpectedREFHead != nil && candidate.ExpectedREFHead.Equal(prospective.ID) {
+		return headObservation{}, fmt.Errorf("SEAL_ID_UNCHANGED: Candidate %s resolves to its current HEAD %s; inspect or discard the unchanged Candidate", candidate.REF, prospective.ID)
+	}
+	if err := r.validatePublicationExpectation(ctx, candidate); err != nil {
+		return headObservation{}, err
+	}
+	if _, err := r.readRepositoryBlobID(ctx, candidate.Content, fmt.Sprintf("Candidate content for %s", candidate.REF)); err != nil {
+		return headObservation{}, err
 	}
 	for _, attachment := range candidate.Attachments {
-		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("candidate attachment %q for %s", attachment.Name, candidate.REF)); err != nil {
-			return nil, err
+		if _, err := r.readRepositoryBlobID(ctx, attachment.Blob, fmt.Sprintf("Candidate attachment %q for %s", attachment.Name, candidate.REF)); err != nil {
+			return headObservation{}, err
 		}
 	}
-	if candidate.ParentRevision != nil {
-		if err := r.validateRevisionChain(ctx, *candidate.ParentRevision); err != nil {
-			return nil, fmt.Errorf("candidate parent revision %s is invalid: %w", candidate.ParentRevision, err)
-		}
-	}
-	if err := r.validateCauseClosure(ctx, candidate.Links, !candidate.Draft); err != nil {
-		return nil, err
-	}
-	if candidate.Draft || candidate.Root {
-		return nil, nil
-	}
-	observed, err := r.requireActiveLeafClosure(ctx, candidate.Links)
-	if err != nil {
-		return nil, err
-	}
-	return &observed, nil
+	return r.validateProspectiveCandidate(ctx, candidate)
 }
 
-func (r *Repository) validatePublicationExpectation(ctx context.Context, candidate domain.Candidate) error {
+func (r *Repository) validatePublicationExpectation(ctx context.Context, candidate domainv5.Candidate) error {
 	current, err := r.refs.Resolve(ctx, candidate.REF)
 	if candidate.ExpectedREFHead == nil {
 		if err == nil {
-			return fmt.Errorf("REF %s appeared at %s after candidate creation; recreate the candidate before sealing", candidate.REF, current)
+			return fmt.Errorf("REF %s appeared at %s after Candidate creation; recreate the Candidate before sealing", candidate.REF, current)
 		}
 		if !errors.Is(err, store.ErrRefNotFound) {
 			return err
@@ -407,81 +430,49 @@ func (r *Repository) validatePublicationExpectation(ctx context.Context, candida
 		return nil
 	}
 	if err != nil || !current.Equal(*candidate.ExpectedREFHead) {
-		return fmt.Errorf("REF %s HEAD changed after candidate creation; recreate the candidate from the current head before sealing", candidate.REF)
-	}
-	if candidate.ParentRevision == nil || !candidate.ParentRevision.Equal(*candidate.ExpectedREFHead) {
-		return fmt.Errorf("existing REF %s candidate must use expected head %s as its parent revision; alternate-parent override is not available in this slice", candidate.REF, candidate.ExpectedREFHead)
+		return fmt.Errorf("REF %s HEAD changed after Candidate creation; recreate the Candidate from the current head before sealing", candidate.REF)
 	}
 	return nil
 }
 
-func (r *Repository) validateRevisionChain(ctx context.Context, head domain.ObjectID) error {
-	seen := make(map[string]struct{})
-	current := &head
-	for current != nil {
-		if _, exists := seen[current.String()]; exists {
-			return fmt.Errorf("revision parent cycle reaches %s", current)
-		}
-		seen[current.String()] = struct{}{}
-		payload, err := r.LoadSeal(ctx, *current)
-		if err != nil {
-			return err
-		}
-		current = payload.ParentRevision
-	}
-	return nil
-}
-
-func (r *Repository) validateCauseClosure(ctx context.Context, links []domain.Link, requireNonDraft bool) error {
-	state := make(map[string]uint8)
-	var visit func(domain.ObjectID) error
-	visit = func(id domain.ObjectID) error {
-		switch state[id.String()] {
-		case 1:
-			return fmt.Errorf("Cause cycle reaches seal %s", id)
-		case 2:
-			return nil
-		}
-		state[id.String()] = 1
-		payload, err := r.LoadSeal(ctx, id)
-		if err != nil {
-			return fmt.Errorf("Cause target %s is unreadable: %w", id, err)
-		}
-		if requireNonDraft && payload.Draft {
-			return fmt.Errorf("normal seal requires a non-draft Cause closure, but %s is draft; keep the candidate draft or select a non-draft Cause explicitly", id)
-		}
-		if err := r.validateRevisionChain(ctx, id); err != nil {
-			return fmt.Errorf("Cause target %s has invalid revision ancestry: %w", id, err)
-		}
-		for _, link := range payload.Links {
-			if err := visit(link.TargetSeal); err != nil {
-				return err
-			}
-		}
-		state[id.String()] = 2
-		return nil
-	}
-	for _, link := range links {
-		if err := visit(link.TargetSeal); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domain.SealPayload, error) {
-	object, err := r.objects.ReadObject(ctx, id)
+func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5.ResolvedSeal, error) {
+	sealObject, err := r.objects.ReadObject(ctx, id)
 	if err != nil {
-		return domain.SealPayload{}, err
+		return domainv5.ResolvedSeal{}, err
 	}
-	if object.Type != domain.BlobType {
-		return domain.SealPayload{}, fmt.Errorf("seal object %s has type %s, expected blob", id, object.Type)
+	if sealObject.Type != domain.BlobType {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("Seal object %s has type %s, expected blob", id, sealObject.Type)
 	}
-	payload, err := canonical.DecodeSeal(object.Data)
+	seal, err := canonicalv5.DecodeSeal(sealObject.Data)
 	if err != nil {
-		return domain.SealPayload{}, fmt.Errorf("object %s is not a valid canonical seal: %w", id, err)
+		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s is not a canonical format-5 Seal Blob: %w", id, err)
 	}
-	return payload, nil
+	materialObject, err := r.objects.ReadObject(ctx, seal.Material)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("read Material %s for Seal %s: %w", seal.Material, id, err)
+	}
+	material, err := canonicalv5.DecodeMaterial(materialObject.Data)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s named as Material by Seal %s is invalid: %w", seal.Material, id, err)
+	}
+	provenanceObject, err := r.objects.ReadObject(ctx, seal.Provenance)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("read Provenance %s for Seal %s: %w", seal.Provenance, id, err)
+	}
+	provenance, err := canonicalv5.DecodeProvenance(provenanceObject.Data)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s named as Provenance by Seal %s is invalid: %w", seal.Provenance, id, err)
+	}
+	content, err := r.readRepositoryBlobID(ctx, material.Content, fmt.Sprintf("content for Seal %s", id))
+	if err != nil {
+		return domainv5.ResolvedSeal{}, err
+	}
+	for _, attachment := range material.Attachments {
+		if _, err := r.readRepositoryBlobID(ctx, attachment.Blob, fmt.Sprintf("attachment %q for Seal %s", attachment.Name, id)); err != nil {
+			return domainv5.ResolvedSeal{}, err
+		}
+	}
+	return domainv5.ResolvedSeal{ID: id, Seal: seal, Material: material, Provenance: provenance, ContentBytes: len(content)}, nil
 }
 
 type SelectorKind uint8
@@ -533,10 +524,25 @@ func ParseSelector(text string) (Selector, error) {
 type ResolvedSelector struct {
 	Selector Selector
 	ID       domain.ObjectID
-	Payload  domain.SealPayload
+	Resolved domainv5.ResolvedSeal
 }
 
 func (r *Repository) ResolveSelector(ctx context.Context, text string) (ResolvedSelector, error) {
+	observation, graph, err := r.buildObservation(ctx, "selector")
+	if err != nil {
+		return ResolvedSelector{}, err
+	}
+	resolved, err := r.resolveSelectorObserved(ctx, text, &observation, graph)
+	if err != nil {
+		return ResolvedSelector{}, err
+	}
+	if err := r.revalidateHeads(ctx, observation, "selector"); err != nil {
+		return ResolvedSelector{}, err
+	}
+	return resolved, nil
+}
+
+func (r *Repository) resolveSelectorObserved(ctx context.Context, text string, observation *headObservation, graph *observedGraph) (ResolvedSelector, error) {
 	selector, err := ParseSelector(text)
 	if err != nil {
 		return ResolvedSelector{}, err
@@ -544,96 +550,87 @@ func (r *Repository) ResolveSelector(ctx context.Context, text string) (Resolved
 	var id domain.ObjectID
 	switch selector.Kind {
 	case SelectorCurrentREF:
-		id, err = r.refs.Resolve(ctx, selector.REF)
-	case SelectorGlobalSeal, SelectorScopedSeal:
-		id, err = r.objects.ResolvePrefix(ctx, selector.Token)
+		var ok bool
+		id, ok = observation.heads[selector.REF]
+		if !ok {
+			err = fmt.Errorf("REF not found: %s", selector.REF)
+		}
+	case SelectorGlobalSeal:
+		if err = r.ensureObjectInventory(ctx, observation, "selector resolution"); err == nil {
+			id, err = resolveObservedObjectPrefix(selector.Token, observation.objectIDs)
+		}
+	case SelectorScopedSeal:
+		head, ok := observation.heads[selector.REF]
+		if !ok {
+			err = fmt.Errorf("REF not found: %s", selector.REF)
+		} else {
+			id, err = resolveScopedSealPrefix(graph, head, selector.Token)
+		}
 	case SelectorScopedTag:
-		id, err = r.tags.Resolve(ctx, selector.REF, selector.Token)
+		refTags, ok := observation.tags[selector.REF]
+		if !ok {
+			err = fmt.Errorf("REF not found: %s", selector.REF)
+		} else if id, ok = refTags[selector.Token]; !ok {
+			err = fmt.Errorf("%w: %s@%s", store.ErrTagNotFound, selector.REF, selector.Token)
+		}
 	}
 	if err != nil {
 		return ResolvedSelector{}, fmt.Errorf("resolve selector %q: %w", text, err)
 	}
-	payload, err := r.LoadSeal(ctx, id)
+	resolved, err := r.LoadSeal(ctx, id)
 	if err != nil {
-		return ResolvedSelector{}, fmt.Errorf("selector %q resolved object %s that is not a canonical format-4 Seal: %w", text, id, err)
+		return ResolvedSelector{}, fmt.Errorf("selector %q resolved object %s that is not a canonical format-5 Seal: %w", text, id, err)
 	}
 	if selector.Kind == SelectorScopedSeal {
-		head, err := r.refs.Resolve(ctx, selector.REF)
-		if err != nil {
-			return ResolvedSelector{}, fmt.Errorf("resolve selector scope %s HEAD: %w", selector.REF, err)
-		}
-		if err := r.requireAncestor(ctx, head, id); err != nil {
-			return ResolvedSelector{}, fmt.Errorf("selector %q is outside the current parent ancestry: %w; use @%s for an unscoped sibling or detached Seal", text, err, id)
+		head, ok := observation.heads[selector.REF]
+		if !ok || !graph.revisionReachable(head, id) {
+			return ResolvedSelector{}, fmt.Errorf("selector %q is outside the observed revision closure of REF %s", text, selector.REF)
 		}
 	}
-	return ResolvedSelector{Selector: selector, ID: id, Payload: payload}, nil
+	return ResolvedSelector{Selector: selector, ID: id, Resolved: resolved}, nil
 }
 
-func (r *Repository) requireAncestor(ctx context.Context, head, selected domain.ObjectID) error {
-	seen := make(map[string]struct{})
-	current := head
-	for {
-		if current.Equal(selected) {
-			return nil
+func resolveScopedSealPrefix(graph *observedGraph, head domain.ObjectID, prefix string) (domain.ObjectID, error) {
+	match := ""
+	for text := range graph.nodes {
+		id := domain.ObjectID{Hex: text}
+		if !strings.HasPrefix(text, prefix) || !graph.revisionReachable(head, id) {
+			continue
 		}
-		if _, exists := seen[current.String()]; exists {
-			return fmt.Errorf("revision parent cycle reaches %s", current)
+		if match != "" && match != text {
+			return domain.ObjectID{}, fmt.Errorf("ambiguous Seal prefix %q in observed revision closure; use more hexadecimal characters", prefix)
 		}
-		seen[current.String()] = struct{}{}
-		payload, err := r.LoadSeal(ctx, current)
-		if err != nil {
-			return err
-		}
-		if payload.ParentRevision == nil {
-			return fmt.Errorf("seal %s is not an ancestor of %s", selected, head)
-		}
-		current = *payload.ParentRevision
+		match = text
 	}
+	if match == "" {
+		return domain.ObjectID{}, fmt.Errorf("Seal prefix %s is absent from the observed revision closure", prefix)
+	}
+	return domain.ObjectID{Hex: match}, nil
 }
 
 type ShowResult struct {
-	ID       domain.ObjectID
-	Payload  domain.SealPayload
+	Resolved domainv5.ResolvedSeal
 	Content  []byte
 	REFNames []string
+	Revision domainv5.RevisionObservation
 }
 
 func (r *Repository) Show(ctx context.Context, selector string) (ShowResult, error) {
-	resolved, err := r.ResolveSelector(ctx, selector)
+	observation, graph, err := r.buildObservation(ctx, "show")
 	if err != nil {
 		return ShowResult{}, err
 	}
-	content, err := r.readRepositoryBlob(ctx, resolved.Payload.Content, fmt.Sprintf("content %s for seal %s", resolved.Payload.Content.ID, resolved.ID))
+	selected, err := r.resolveSelectorObserved(ctx, selector, &observation, graph)
 	if err != nil {
 		return ShowResult{}, err
 	}
-	for _, attachment := range resolved.Payload.Attachments {
-		if _, err := r.readRepositoryBlob(ctx, attachment.Blob, fmt.Sprintf("attachment %q for seal %s", attachment.Name, resolved.ID)); err != nil {
-			return ShowResult{}, err
-		}
-	}
-	aliases, err := r.refsPointingTo(ctx, resolved.ID)
+	content, err := r.readRepositoryBlobID(ctx, selected.Resolved.Material.Content, fmt.Sprintf("content for Seal %s", selected.ID))
 	if err != nil {
 		return ShowResult{}, err
 	}
-	return ShowResult{ID: resolved.ID, Payload: resolved.Payload, Content: content, REFNames: aliases}, nil
-}
-
-func (r *Repository) refsPointingTo(ctx context.Context, id domain.ObjectID) ([]string, error) {
-	names, err := r.refs.List(ctx)
-	if err != nil {
-		return nil, err
+	aliases := graph.refsFor(selected.ID)
+	if err := r.revalidateHeads(ctx, observation, "show"); err != nil {
+		return ShowResult{}, err
 	}
-	var aliases []string
-	for _, name := range names {
-		head, err := r.refs.Resolve(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		if head.Equal(id) {
-			aliases = append(aliases, name)
-		}
-	}
-	sort.Strings(aliases)
-	return aliases, nil
+	return ShowResult{Resolved: selected.Resolved, Content: content, REFNames: aliases, Revision: graph.revisionObservation(selected.ID)}, nil
 }

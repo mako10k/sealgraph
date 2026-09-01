@@ -8,8 +8,7 @@ import (
 	"sort"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/graph"
-	"github.com/mako10k/sealgraph/internal/revision"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/store/native"
 	"github.com/mako10k/sealgraph/internal/workfile"
 )
@@ -25,14 +24,10 @@ type RefStatus struct {
 	Source          *SourceStatus
 }
 
-type SourceStatus struct {
-	Path     string
-	Baseline string
-	Relation string
-}
+type SourceStatus struct{ Path, Baseline, Relation string }
 
 func (status RefStatus) Labels() []string {
-	var labels []string
+	labels := []string{}
 	if status.Unsealed {
 		labels = append(labels, "UNSEALED")
 	}
@@ -42,10 +37,10 @@ func (status RefStatus) Labels() []string {
 	if status.StaleSelf {
 		labels = append(labels, "STALE_SELF")
 	}
-	if len(status.StaleDirect) != 0 {
+	if len(status.StaleDirect) > 0 {
 		labels = append(labels, "STALE_DIRECT")
 	}
-	if len(status.StaleTransitive) != 0 {
+	if len(status.StaleTransitive) > 0 {
 		labels = append(labels, "STALE_TRANSITIVE")
 	}
 	if len(labels) == 0 {
@@ -55,7 +50,7 @@ func (status RefStatus) Labels() []string {
 }
 
 func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, error) {
-	observation, revisions, analysis, err := r.analyzeCurrent(ctx, "status", false, false)
+	observation, graph, err := r.buildObservation(ctx, "status")
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +72,7 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 	}
 	result := make([]RefStatus, 0, len(names))
 	for _, ref := range names {
-		status, err := r.statusForREF(ctx, ref, observation, revisions, analysis)
+		status, err := r.statusForREF(ref, observation, graph)
 		if err != nil {
 			return nil, err
 		}
@@ -91,21 +86,17 @@ func (r *Repository) Status(ctx context.Context, onlyREF string) ([]RefStatus, e
 
 func statusNames(refs, candidates, sources []string, onlyREF string) ([]string, error) {
 	all := make(map[string]bool, len(refs)+len(candidates)+len(sources))
-	for _, ref := range refs {
-		all[ref] = true
-	}
-	for _, ref := range candidates {
-		all[ref] = true
-	}
-	for _, ref := range sources {
-		all[ref] = true
+	for _, values := range [][]string{refs, candidates, sources} {
+		for _, ref := range values {
+			all[ref] = true
+		}
 	}
 	if onlyREF != "" {
 		if err := domain.ValidateREF(onlyREF); err != nil {
 			return nil, err
 		}
 		if !all[onlyREF] {
-			return nil, fmt.Errorf("REF %s has no head, candidate, or local source binding", onlyREF)
+			return nil, fmt.Errorf("REF %s has no head, Candidate, or local source binding", onlyREF)
 		}
 		return []string{onlyREF}, nil
 	}
@@ -117,9 +108,9 @@ func statusNames(refs, candidates, sources []string, onlyREF string) ([]string, 
 	return result, nil
 }
 
-func (r *Repository) statusForREF(ctx context.Context, ref string, observation headObservation, revisions *revision.Index, analysis *graph.Analysis) (RefStatus, error) {
+func (r *Repository) statusForREF(ref string, observation headObservation, graph *observedGraph) (RefStatus, error) {
 	status := RefStatus{REF: ref}
-	var baseline *domain.ContentRef
+	var baseline *domain.ObjectID
 	if candidate, err := r.candidates.Load(ref); err == nil {
 		status.Unsealed, status.Draft = true, candidate.Draft
 		content := candidate.Content
@@ -128,26 +119,24 @@ func (r *Repository) statusForREF(ctx context.Context, ref string, observation h
 		return RefStatus{}, err
 	}
 	head, found := observation.heads[ref]
-	if !found {
-		return r.addSourceStatus(status, baseline)
+	if found {
+		value, ok := graph.nodes[head.String()]
+		if !ok {
+			return RefStatus{}, fmt.Errorf("current REF %s head %s is absent from observation", ref, head)
+		}
+		headCopy := head
+		status.Head = &headCopy
+		status.Draft = status.Draft || value.Provenance.Draft
+		if baseline == nil {
+			content := value.Material.Content
+			baseline = &content
+		}
+		status.StaleSelf, status.StaleDirect, status.StaleTransitive = graph.staleFacts(head)
 	}
-	headCopy := head
-	status.Head = &headCopy
-	node, found := revisions.Node(head)
-	if !found {
-		return RefStatus{}, fmt.Errorf("current REF %s head %s is absent from the active revision DAG", ref, head)
-	}
-	status.Draft = status.Draft || node.Payload.Draft
-	if baseline == nil {
-		content := node.Payload.Content
-		baseline = &content
-	}
-	facts := analysis.Facts(head)
-	status.StaleSelf, status.StaleDirect, status.StaleTransitive = facts.Self, facts.Direct, facts.Transitive
 	return r.addSourceStatus(status, baseline)
 }
 
-func (r *Repository) addSourceStatus(status RefStatus, baseline *domain.ContentRef) (RefStatus, error) {
+func (r *Repository) addSourceStatus(status RefStatus, baseline *domain.ObjectID) (RefStatus, error) {
 	binding, _, err := r.sources.load(status.REF)
 	if errors.Is(err, ErrSourceNotFound) {
 		return status, nil
@@ -173,7 +162,7 @@ func (r *Repository) addSourceStatus(status RefStatus, baseline *domain.ContentR
 		status.Source = source
 		return status, nil
 	}
-	if baseline != nil && native.ObjectID(data).Equal(baseline.ID) {
+	if baseline != nil && native.ObjectID(data).Equal(*baseline) {
 		source.Relation = "WORKFILE_MATCHES_" + source.Baseline
 	} else if baseline != nil {
 		source.Relation = "WORKFILE_DIFFERS_FROM_" + source.Baseline
@@ -182,82 +171,154 @@ func (r *Repository) addSourceStatus(status RefStatus, baseline *domain.ContentR
 	return status, nil
 }
 
+func (graph *observedGraph) staleFacts(head domain.ObjectID) (bool, []domain.ObjectID, [][]domain.ObjectID) {
+	self := graph.active[head.String()] && !graph.isActiveLeaf(head)
+	direct := []domain.ObjectID{}
+	for _, target := range graph.causes[head.String()] {
+		if !graph.isActiveLeaf(target) {
+			direct = append(direct, target)
+		}
+	}
+	if len(direct) > 0 {
+		return self, direct, [][]domain.ObjectID{}
+	}
+	paths := [][]domain.ObjectID{}
+	for _, target := range graph.causes[head.String()] {
+		graph.firstStalePaths(target, []domain.ObjectID{target}, &paths)
+	}
+	sortPaths(paths)
+	return self, direct, paths
+}
+
+func (graph *observedGraph) firstStalePaths(current domain.ObjectID, path []domain.ObjectID, result *[][]domain.ObjectID) {
+	if !graph.isActiveLeaf(current) {
+		*result = append(*result, append([]domain.ObjectID(nil), path...))
+		return
+	}
+	for _, next := range graph.causes[current.String()] {
+		graph.firstStalePaths(next, append(path, next), result)
+	}
+}
+
+func sortPaths(paths [][]domain.ObjectID) {
+	sort.Slice(paths, func(i, j int) bool {
+		if len(paths[i]) != len(paths[j]) {
+			return len(paths[i]) < len(paths[j])
+		}
+		return idPathKey(paths[i]) < idPathKey(paths[j])
+	})
+}
+func idPathKey(path []domain.ObjectID) string {
+	value := ""
+	for _, id := range path {
+		value += id.String() + "\x00"
+	}
+	return value
+}
+
 func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatus, string, error) {
-	observation, revisions, analysis, warning, err := r.analyzeCurrentWithWarning(ctx, "stale", true, scan)
+	observation, graph, err := r.buildObservation(ctx, "stale")
 	if err != nil {
 		return nil, "", err
 	}
-	var result []RefStatus
+	result := []RefStatus{}
 	staleHeads := make(map[string]domain.ObjectID)
 	for _, ref := range observation.names {
-		status, err := r.statusForCurrentREF(ref, observation, revisions, analysis)
-		if err != nil {
-			return nil, "", err
-		}
-		if status.StaleSelf || len(status.StaleDirect) != 0 || len(status.StaleTransitive) != 0 {
-			result = append(result, status)
-			staleHeads[ref] = *status.Head
+		head := observation.heads[ref]
+		value := graph.nodes[head.String()]
+		self, direct, transitive := graph.staleFacts(head)
+		if self || len(direct) > 0 || len(transitive) > 0 {
+			copy := head
+			result = append(result, RefStatus{REF: ref, Head: &copy, Draft: value.Provenance.Draft, StaleSelf: self, StaleDirect: direct, StaleTransitive: transitive})
+			staleHeads[ref] = head
 		}
 	}
 	if frontier {
-		result = filterFrontier(result, analysis.Frontier(staleHeads))
+		filtered := result[:0]
+		for _, status := range result {
+			if graph.isFrontier(*status.Head, staleHeads) {
+				filtered = append(filtered, status)
+			}
+		}
+		result = filtered
 	}
 	if err := r.revalidateHeads(ctx, observation, "stale"); err != nil {
 		return nil, "", err
 	}
-	return result, warning, nil
+	_ = scan // Cache bypass is semantically identical; format-5 cache is not yet persisted.
+	return result, "", nil
 }
 
-func (r *Repository) statusForCurrentREF(ref string, observation headObservation, revisions *revision.Index, analysis *graph.Analysis) (RefStatus, error) {
-	head := observation.heads[ref]
-	node, found := revisions.Node(head)
-	if !found {
-		return RefStatus{}, fmt.Errorf("current REF %s head %s is absent from active revisions", ref, head)
+func (graph *observedGraph) isFrontier(head domain.ObjectID, stale map[string]domain.ObjectID) bool {
+	targets := make(map[string]bool)
+	for _, id := range stale {
+		targets[id.String()] = true
 	}
-	facts := analysis.Facts(head)
-	headCopy := head
-	return RefStatus{
-		REF: ref, Head: &headCopy, Draft: node.Payload.Draft, StaleSelf: facts.Self,
-		StaleDirect: facts.Direct, StaleTransitive: facts.Transitive,
-	}, nil
-}
-
-func filterFrontier(statuses []RefStatus, selected map[string]bool) []RefStatus {
-	result := make([]RefStatus, 0, len(statuses))
-	for _, status := range statuses {
-		if selected[status.REF] {
-			result = append(result, status)
+	stack := append([]domain.ObjectID(nil), graph.causes[head.String()]...)
+	seen := make(map[string]bool)
+	for len(stack) > 0 {
+		id := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[id.String()] {
+			continue
 		}
+		seen[id.String()] = true
+		if targets[id.String()] {
+			return false
+		}
+		stack = append(stack, graph.causes[id.String()]...)
 	}
-	return result
+	return true
 }
 
-type GraphLink struct {
+type RevisionState string
+
+const (
+	ActiveLeaf           RevisionState = "ACTIVE_LEAF"
+	ActiveNonLeaf        RevisionState = "ACTIVE_NON_LEAF"
+	HistoricalOrDetached RevisionState = "HISTORICAL_OR_DETACHED"
+)
+
+func (graph *observedGraph) state(id domain.ObjectID) RevisionState {
+	if !graph.active[id.String()] {
+		return HistoricalOrDetached
+	}
+	if graph.isActiveLeaf(id) {
+		return ActiveLeaf
+	}
+	return ActiveNonLeaf
+}
+
+type GraphCause struct {
 	Target domain.ObjectID
-	State  revision.State
+	State  RevisionState
 }
-
 type GraphNode struct {
-	ID     domain.ObjectID
-	REFs   []string
-	Parent *domain.ObjectID
-	State  revision.State
-	Links  []GraphLink
+	Resolved domainv5.ResolvedSeal
+	REFs     []string
+	State    RevisionState
+	Revision domainv5.RevisionObservation
+	Causes   []GraphCause
 }
 
 func (r *Repository) Graph(ctx context.Context) ([]GraphNode, error) {
-	observation, revisions, _, err := r.analyzeCurrent(ctx, "graph", false, false)
+	observation, graph, err := r.buildObservation(ctx, "graph")
 	if err != nil {
 		return nil, err
 	}
-	nodes := revisions.Nodes()
-	result := make([]GraphNode, 0, len(nodes))
-	for _, node := range nodes {
-		graphNode := GraphNode{ID: node.ID, REFs: node.REFs, Parent: node.Payload.ParentRevision, State: revisions.State(node.ID)}
-		for _, link := range node.Payload.Links {
-			graphNode.Links = append(graphNode.Links, GraphLink{Target: link.TargetSeal, State: revisions.State(link.TargetSeal)})
+	ids := make([]string, 0, len(graph.nodes))
+	for id := range graph.nodes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	result := make([]GraphNode, 0, len(ids))
+	for _, text := range ids {
+		id := domain.ObjectID{Hex: text}
+		node := GraphNode{Resolved: graph.nodes[text], REFs: graph.refsFor(id), State: graph.state(id), Revision: graph.revisionObservation(id)}
+		for _, target := range graph.causes[text] {
+			node.Causes = append(node.Causes, GraphCause{Target: target, State: graph.state(target)})
 		}
-		result = append(result, graphNode)
+		result = append(result, node)
 	}
 	if err := r.revalidateHeads(ctx, observation, "graph"); err != nil {
 		return nil, err
@@ -265,97 +326,239 @@ func (r *Repository) Graph(ctx context.Context) ([]GraphNode, error) {
 	return result, nil
 }
 
-func (r *Repository) Impact(ctx context.Context, selector string, allPaths bool, maxPaths int) (domain.ObjectID, []graph.Impact, error) {
-	resolved, err := r.ResolveSelector(ctx, selector)
-	if err != nil {
-		return domain.ObjectID{}, nil, err
-	}
-	observation, _, analysis, err := r.analyzeCurrent(ctx, "impact", false, false)
-	if err != nil {
-		return domain.ObjectID{}, nil, err
-	}
-	result, err := analysis.Impact(ctx, resolved.ID, observation.revisionHeads(), graph.LoadSealFunc(r.LoadSeal), allPaths, maxPaths)
-	if err != nil {
-		return domain.ObjectID{}, nil, err
-	}
-	if err := r.revalidateHeads(ctx, observation, "impact"); err != nil {
-		return domain.ObjectID{}, nil, err
-	}
-	return resolved.ID, result, nil
+type RevisionEdge struct {
+	Target, Previous domain.ObjectID
+	Sources          []domainv5.AssertionSource
+}
+type ScopedRevisionObservation struct {
+	TargetSeal         domain.ObjectID
+	PreviousStates     []string
+	Assertions         []domainv5.AssertionSource
+	StructuralPrevious []domain.ObjectID
+}
+type RevisionProof struct {
+	SealIDs      []domain.ObjectID
+	Edges        []RevisionEdge
+	Observations []ScopedRevisionObservation
+}
+type ImpactPath struct {
+	CauseSealIDs    []domain.ObjectID
+	MatchedRevision domain.ObjectID
+	Proof           RevisionProof
+}
+type ImpactRecord struct {
+	Head      domain.ObjectID
+	REFs      []string
+	Paths     []ImpactPath
+	Truncated bool
+}
+type ImpactResult struct {
+	Source          domain.ObjectID
+	AssertionScope  string
+	ObserverSealIDs []domain.ObjectID
+	AllPaths        bool
+	MaxPaths        int
+	Impacts         []ImpactRecord
 }
 
-func (r *Repository) analyzeCurrent(ctx context.Context, operation string, cache, scan bool) (headObservation, *revision.Index, *graph.Analysis, error) {
-	observation, revisions, analysis, _, err := r.analyzeCurrentWithWarning(ctx, operation, cache, scan)
-	return observation, revisions, analysis, err
-}
-
-func (r *Repository) analyzeCurrentWithWarning(ctx context.Context, operation string, cache, scan bool) (headObservation, *revision.Index, *graph.Analysis, string, error) {
-	observation, err := r.observeHeads(ctx, operation)
+func (r *Repository) Impact(ctx context.Context, selector string, assertedBy []string, allPaths bool, maxPaths int) (ImpactResult, error) {
+	observation, graph, err := r.buildObservation(ctx, "impact")
 	if err != nil {
-		return headObservation{}, nil, nil, "", err
+		return ImpactResult{}, err
 	}
-	var revisions *revision.Index
-	var warning string
-	if cache {
-		revisions, warning, err = r.revisionIndex(ctx, observation, scan)
-	} else {
-		revisions, err = revision.Build(ctx, observation.revisionHeads(), revision.LoadSealFunc(r.LoadSeal))
-	}
+	selected, err := r.resolveSelectorObserved(ctx, selector, &observation, graph)
 	if err != nil {
-		return headObservation{}, nil, nil, "", fmt.Errorf("derive active revisions for %s: %w", operation, err)
+		return ImpactResult{}, err
 	}
-	roots := make([]domain.ObjectID, 0, len(revisions.Nodes()))
-	for _, node := range revisions.Nodes() {
-		roots = append(roots, node.ID)
-	}
-	analysis, err := graph.Build(ctx, roots, revisions, graph.LoadSealFunc(r.LoadSeal))
-	if err != nil {
-		return headObservation{}, nil, nil, "", fmt.Errorf("derive Cause graph for %s: %w", operation, err)
-	}
-	return observation, revisions, analysis, warning, nil
-}
-
-func (r *Repository) requireActiveLeafClosure(ctx context.Context, links []domain.Link) (headObservation, error) {
-	observation, revisions, analysis, err := r.analyzeCurrent(ctx, "seal admission", false, false)
-	if err != nil {
-		return headObservation{}, err
-	}
-	for _, link := range links {
-		if err := requireLinkClosureActive(link.TargetSeal, revisions, analysis); err != nil {
-			return headObservation{}, err
+	filter := make(map[string]bool)
+	observers := []domain.ObjectID{}
+	for _, raw := range assertedBy {
+		resolved, err := r.resolveSelectorObserved(ctx, raw, &observation, graph)
+		if err != nil {
+			return ImpactResult{}, fmt.Errorf("resolve assertion observer %q: %w", raw, err)
+		}
+		if _, ok := graph.nodes[resolved.ID.String()]; !ok {
+			return ImpactResult{}, fmt.Errorf("ASSERTION_OBSERVER_NOT_OBSERVED: %s", resolved.ID)
+		}
+		if !filter[resolved.ID.String()] {
+			filter[resolved.ID.String()] = true
+			observers = append(observers, resolved.ID)
 		}
 	}
-	return observation, nil
-}
-
-func requireLinkClosureActive(root domain.ObjectID, revisions *revision.Index, analysis *graph.Analysis) error {
-	stack := []domain.ObjectID{root}
-	seen := make(map[string]bool)
-	for len(stack) != 0 {
-		last := len(stack) - 1
-		id := stack[last]
-		stack = stack[:last]
-		if seen[id.String()] {
+	sort.Slice(observers, func(i, j int) bool { return observers[i].String() < observers[j].String() })
+	revisions := graph.filteredRevisions(filter)
+	sourceSet := revisionClosure(selected.ID, revisions)
+	result := ImpactResult{Source: selected.ID, AssertionScope: "ALL_OBSERVED", ObserverSealIDs: observers, AllPaths: allPaths, MaxPaths: maxPaths}
+	if len(filter) > 0 {
+		result.AssertionScope = "FILTERED"
+	}
+	uniqueHeads := make(map[string]domain.ObjectID)
+	for _, head := range observation.heads {
+		uniqueHeads[head.String()] = head
+	}
+	ids := make([]string, 0, len(uniqueHeads))
+	for id := range uniqueHeads {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, text := range ids {
+		head := uniqueHeads[text]
+		if head.Equal(selected.ID) {
 			continue
 		}
-		seen[id.String()] = true
-		if !revisions.IsCurrentLeaf(id) {
-			return fmt.Errorf("normal seal requires Cause %s to be an active current revision leaf, but it is %s; keep the candidate draft or relink explicitly", id, revisions.State(id))
+		paths := graph.impactPaths(head, sourceSet)
+		if len(paths) == 0 {
+			continue
 		}
-		payload, found := analysisPayload(analysis, id)
-		if !found {
-			return fmt.Errorf("Cause %s is absent from the validated graph", id)
+		sortPaths(paths)
+		limit := 1
+		if allPaths {
+			limit = maxPaths
+			if limit <= 0 {
+				limit = 100
+			}
 		}
-		if payload.Draft {
-			return fmt.Errorf("normal seal requires non-draft Cause %s; keep the candidate draft or select a non-draft Cause explicitly", id)
+		shown := paths
+		if len(shown) > limit {
+			shown = shown[:limit]
 		}
-		for _, link := range payload.Links {
-			stack = append(stack, link.TargetSeal)
+		record := ImpactRecord{Head: head, REFs: graph.refsFor(head), Truncated: len(paths) > len(shown)}
+		for _, path := range shown {
+			matched := path[len(path)-1]
+			proof, err := graph.revisionProof(selected.ID, matched, revisions, filter)
+			if err != nil {
+				return ImpactResult{}, err
+			}
+			record.Paths = append(record.Paths, ImpactPath{CauseSealIDs: path, MatchedRevision: matched, Proof: proof})
 		}
+		result.Impacts = append(result.Impacts, record)
 	}
-	return nil
+	if err := r.revalidateHeads(ctx, observation, "impact"); err != nil {
+		return ImpactResult{}, err
+	}
+	return result, nil
 }
 
-func analysisPayload(analysis *graph.Analysis, id domain.ObjectID) (domain.SealPayload, bool) {
-	return analysis.Payload(id)
+func (graph *observedGraph) filteredRevisions(filter map[string]bool) map[string][]domain.ObjectID {
+	if len(filter) == 0 {
+		return graph.revisions
+	}
+	result := make(map[string][]domain.ObjectID)
+	for target, sources := range graph.assertions {
+		for _, source := range sources {
+			if filter[source.ObserverSeal.String()] {
+				for _, previous := range source.CauseLink.PreviousRevisionSealOfTargetSeal {
+					result[target] = appendUniqueID(result[target], previous)
+				}
+			}
+		}
+		sort.Slice(result[target], func(i, j int) bool { return result[target][i].String() < result[target][j].String() })
+	}
+	return result
+}
+func revisionClosure(source domain.ObjectID, revisions map[string][]domain.ObjectID) map[string]bool {
+	result := make(map[string]bool)
+	stack := []domain.ObjectID{source}
+	for len(stack) > 0 {
+		id := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if result[id.String()] {
+			continue
+		}
+		result[id.String()] = true
+		stack = append(stack, revisions[id.String()]...)
+	}
+	return result
+}
+func (graph *observedGraph) impactPaths(head domain.ObjectID, sources map[string]bool) [][]domain.ObjectID {
+	result := [][]domain.ObjectID{}
+	var visit func(domain.ObjectID, []domain.ObjectID)
+	visit = func(id domain.ObjectID, path []domain.ObjectID) {
+		if len(path) > 1 && sources[id.String()] {
+			result = append(result, append([]domain.ObjectID(nil), path...))
+			return
+		}
+		for _, next := range graph.causes[id.String()] {
+			visit(next, append(path, next))
+		}
+	}
+	visit(head, []domain.ObjectID{head})
+	return result
+}
+
+func (graph *observedGraph) revisionProof(source, target domain.ObjectID, revisions map[string][]domain.ObjectID, filter map[string]bool) (RevisionProof, error) {
+	queue := [][]domain.ObjectID{{source}}
+	seen := map[string]bool{source.String(): true}
+	var path []domain.ObjectID
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		last := current[len(current)-1]
+		if last.Equal(target) {
+			path = current
+			break
+		}
+		for _, next := range revisions[last.String()] {
+			if !seen[next.String()] {
+				seen[next.String()] = true
+				queue = append(queue, append(append([]domain.ObjectID(nil), current...), next))
+			}
+		}
+	}
+	if path == nil {
+		return RevisionProof{}, fmt.Errorf("no in-scope revision proof from %s to %s", source, target)
+	}
+	proof := RevisionProof{SealIDs: path}
+	for _, id := range path {
+		proof.Observations = append(proof.Observations, graph.scopedRevisionObservation(id, filter))
+	}
+	for i := 0; i+1 < len(path); i++ {
+		sources := []domainv5.AssertionSource{}
+		for _, assertion := range graph.assertions[path[i].String()] {
+			if len(filter) > 0 && !filter[assertion.ObserverSeal.String()] {
+				continue
+			}
+			for _, previous := range assertion.CauseLink.PreviousRevisionSealOfTargetSeal {
+				if previous.Equal(path[i+1]) {
+					sources = append(sources, assertion)
+				}
+			}
+		}
+		proof.Edges = append(proof.Edges, RevisionEdge{Target: path[i], Previous: path[i+1], Sources: sources})
+	}
+	return proof, nil
+}
+
+func (graph *observedGraph) scopedRevisionObservation(id domain.ObjectID, filter map[string]bool) ScopedRevisionObservation {
+	assertions := make([]domainv5.AssertionSource, 0, len(graph.assertions[id.String()]))
+	for _, assertion := range graph.assertions[id.String()] {
+		if len(filter) == 0 || filter[assertion.ObserverSeal.String()] {
+			assertions = append(assertions, assertion)
+		}
+	}
+	states := []string{}
+	previous := []domain.ObjectID{}
+	if len(assertions) == 0 {
+		states = append(states, "ASSERTION_SCOPE_UNOBSERVED")
+	} else {
+		none, asserted := false, false
+		for _, assertion := range assertions {
+			if len(assertion.CauseLink.PreviousRevisionSealOfTargetSeal) == 0 {
+				none = true
+			} else {
+				asserted = true
+			}
+			for _, candidate := range assertion.CauseLink.PreviousRevisionSealOfTargetSeal {
+				previous = appendUniqueID(previous, candidate)
+			}
+		}
+		if none {
+			states = append(states, "ASSERTION_SCOPE_NONE_ASSERTED")
+		}
+		if asserted {
+			states = append(states, "ASSERTION_SCOPE_ASSERTED")
+		}
+	}
+	sort.Slice(previous, func(i, j int) bool { return previous[i].String() < previous[j].String() })
+	return ScopedRevisionObservation{TargetSeal: id, PreviousStates: states, Assertions: assertions, StructuralPrevious: previous}
 }

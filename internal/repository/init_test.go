@@ -32,6 +32,27 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	}
 }
 
+func TestInitCreatesExplicitFormat5Modes(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := InitStandalone(dir); err != nil {
+		t.Fatal(err)
+	}
+	configBytesOnDisk, err := os.ReadFile(filepath.Join(dir, ".sealgraph", "config"))
+	if err != nil || string(configBytesOnDisk) != configBytes {
+		t.Fatalf("config=%q err=%v", configBytesOnDisk, err)
+	}
+	for relative, expected := range map[string]os.FileMode{
+		".": 0o755, "config": 0o644, "objects": 0o755,
+		"refs": 0o755, filepath.Join("refs", "seals"): 0o755,
+		"index": 0o755, "locks": 0o755,
+	} {
+		info, err := os.Lstat(filepath.Join(dir, ".sealgraph", relative))
+		if err != nil || info.Mode().Perm() != expected {
+			t.Fatalf("%s mode=%v expected=%04o err=%v", relative, initMode(info), expected, err)
+		}
+	}
+}
+
 func TestInitDoesNotReadDotGit(t *testing.T) {
 	dir := t.TempDir()
 	// A self-referential symlink makes any attempted traversal fail with ELOOP.

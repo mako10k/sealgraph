@@ -28,7 +28,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"init": {
 		Path: "init", Summary: "Initialize or explicitly bootstrap one standalone repository.",
 		Usage:    []string{"sealgraph init"},
-		Details:  []string{"Standalone init uses only .sealgraph and never detects or inspects Git. It does not migrate or repair canonical state."},
+		Details:  []string{"New repositories use repository format 5. Standalone init uses only .sealgraph and never detects or inspects Git. Existing format-4 repositories fail before mutation with FORMAT4_REQUIRES_MIGRATION and the explicit extract/load commands."},
 		Examples: []string{"sealgraph init"}, Related: []string{"concepts", "usecases"},
 	},
 	"manifest": {
@@ -41,11 +41,11 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"add": {
 		Path: "add", Summary: "Create or update the working candidate for exactly one REF.",
-		Usage:     []string{"sealgraph add REF [--content CONTENT | --content-file PATH_OR_DASH] [--bind-source] [--parent SELECTOR] [--root] [--draft] [--depend-on SELECTOR]..."},
+		Usage:     []string{"sealgraph add REF [--content CONTENT | --content-file PATH_OR_DASH] [--bind-source] [--draft] [--root --clear-cause-links | --non-root] [--target TARGET (--previous PREVIOUS ... | --no-previous) [-m MESSAGE ...]]"},
 		Arguments: []string{"REF (required): destination logical REF; it is not a branch or checkout target."},
-		Options:   []helpOption{{"--content CONTENT", "optional exact bytes; conflicts with --content-file and --bind-source"}, {"--content-file PATH|-", "optional exact file/stdin source; named PATH may use --bind-source"}, {"--bind-source", "bind the named source after candidate publication; never retargets"}, {"--parent SELECTOR", "optional, once; exact revision parent for an absent destination only"}, {"--root", "optional flag; declare this generation a provenance boundary"}, {"--draft", "optional flag; preserve provisional or historical Cause provenance"}, {"--depend-on SELECTOR", "optional, repeatable; replaces the dependency set when present"}},
-		Details:   []string{"--content and --content-file are mutually exclusive. Without explicit content, add refreshes from a bound source while preserving semantic state. REF-as-path is initial-create-only. Existing REF/candidate without a binding fails. A root has no Cause Links. Bare REF dependencies resolve HEAD now."},
-		Examples:  []string{"sealgraph add premise --root --content 'External premise'", "sealgraph add docs/spec.md --root --bind-source", "sealgraph add design/api --content-file design.md --depend-on requirements/api", "sealgraph add revised/api --parent design/api@abcd --content 'new material'"}, Related: []string{"source", "seal", "link", "candidate show", "selectors"},
+		Options:   []helpOption{{"--content CONTENT", "optional exact bytes; conflicts with --content-file and --bind-source"}, {"--content-file PATH|-", "optional exact file/stdin source; named PATH may use --bind-source"}, {"--bind-source", "bind the named source after candidate publication; never retargets"}, {"--draft", "optional flag; preserve provisional or historical Cause provenance"}, {"--root --clear-cause-links", "declare a root and atomically remove every Cause Link"}, {"--non-root", "declare non-root; the result must contain a Cause Link"}, {"--target TARGET", "one complete Cause Link target; resolves to an exact Seal"}, {"--previous PREVIOUS", "repeatable exact previous revision asserted for TARGET"}, {"--no-previous", "assert that TARGET has no previous revision; conflicts with --previous"}, {"-m MESSAGE", "repeatable identity-bearing message for the target record"}},
+		Details:   []string{"--content and --content-file are mutually exclusive. Without explicit content, add refreshes from a bound source while preserving semantic state. A new root requires --root --clear-cause-links. A new non-root requires --non-root and one complete --target group. Existing Candidates preserve omitted root mode and omitted Cause group. All selectors in a group resolve before persistence."},
+		Examples:  []string{"sealgraph add premise --root --clear-cause-links --content 'External premise'", "sealgraph add docs/spec.md --root --clear-cause-links --bind-source", "sealgraph add design/api --content-file design.md --non-root --target requirements/api --no-previous", "sealgraph add design/api --target requirements/api --previous @abcd -m 'reviewed revision relation'"}, Related: []string{"source", "seal", "link", "candidate show", "selectors"},
 	},
 	"source": {
 		Path: "source", Summary: "Manage and compare non-canonical local REF-to-file source bindings.", Usage: []string{"sealgraph source <bind|rebind|unbind|show|list|compare> ..."},
@@ -63,22 +63,16 @@ var commandHelpRegistry = map[string]commandHelp{
 	"source show":    inspectionHelp("source show", "Show one local source binding without opening its source file.", "sealgraph source show REF [--format human|json]", nil),
 	"source list":    inspectionHelp("source list", "List local source bindings without opening source files.", "sealgraph source list [--format human|json]", nil),
 	"source compare": inspectionHelp("source compare", "Compare one bound workfile with its candidate-or-HEAD content baseline.", "sealgraph source compare REF [--format human|json]", nil),
-	"derive": {
-		Path: "derive", Summary: "Create an absent REF candidate by copying one Seal's material and using it as parent_revision.",
-		Usage: []string{"sealgraph derive NEW_REF --from SOURCE_SELECTOR"}, Arguments: []string{"NEW_REF (required): absent destination REF."},
-		Options: []helpOption{{"--from SOURCE_SELECTOR", "required exactly once; any valid Seal selector"}},
-		Details: []string{"derive does not publish, move a REF, copy tags, or infer Seal ownership."}, Examples: []string{"sealgraph derive preserved/api --from @abcd"}, Related: []string{"selectors", "candidate show", "seal"},
-	},
 	"link": {
-		Path: "link", Summary: "Add exact Cause dependencies to one working candidate without replacing content.",
-		Usage: []string{"sealgraph link REF --depend-on SELECTOR [--depend-on SELECTOR ...] [-m LINK_MESSAGE]"}, Arguments: []string{"REF (required): candidate REF."},
-		Options: []helpOption{{"--depend-on SELECTOR", "required, repeatable; resolved before candidate persistence"}, {"-m LINK_MESSAGE", "optional, once; rationale applied to each dependency in this invocation"}},
-		Details: []string{"Each Link stores one exact full upstream SealID. The message is identity-bearing edge rationale, not approval, actor, or time."}, Examples: []string{"sealgraph link design/api --depend-on requirements/api -m 'API design is based on this requirement generation'"}, Related: []string{"unlink", "candidate show", "selectors", "concepts cause"},
+		Path: "link", Summary: "Create or replace one complete Cause Link record on one Candidate.",
+		Usage: []string{"sealgraph link REF --target TARGET (--previous PREVIOUS ... | --no-previous) [-m MESSAGE ...]"}, Arguments: []string{"REF (required): candidate REF."},
+		Options: []helpOption{{"--target TARGET", "required exactly once; resolves to the record's exact target Seal"}, {"--previous PREVIOUS", "repeatable; exact previous revision asserted for TARGET"}, {"--no-previous", "assert no previous revision for TARGET; conflicts with --previous"}, {"-m MESSAGE", "repeatable identity-bearing message in this exact record"}},
+		Details: []string{"The operation replaces the whole record for that exact target and preserves every other Candidate field and Cause Link. It never unions messages or previous revisions with an existing record."}, Examples: []string{"sealgraph link design/api --target requirements/api --no-previous -m 'API design is based on this generation'", "sealgraph link design/api --target requirements/api --previous @abcd"}, Related: []string{"unlink", "candidate show", "selectors", "concepts cause"},
 	},
 	"unlink": {
 		Path: "unlink", Summary: "Remove exactly one resolved Cause target from one candidate.",
-		Usage: []string{"sealgraph unlink REF --upstream SELECTOR"}, Arguments: []string{"REF (required): candidate REF."}, Options: []helpOption{{"--upstream SELECTOR", "required exactly once; exact target to remove"}},
-		Details: []string{"A bare upstream REF resolves its current HEAD and will not match an older stored target. Inspect candidate show and use the displayed @SealID when removing a historical edge."}, Examples: []string{"sealgraph unlink design/api --upstream @abcd"}, Related: []string{"link", "candidate show", "selectors"},
+		Usage: []string{"sealgraph unlink REF --target TARGET"}, Arguments: []string{"REF (required): candidate REF."}, Options: []helpOption{{"--target TARGET", "required exactly once; exact target record to remove"}},
+		Details: []string{"A bare target REF resolves its current HEAD and will not match an older stored target. Inspect candidate show and use the displayed @SealID when removing a historical record."}, Examples: []string{"sealgraph unlink design/api --target @abcd"}, Related: []string{"link", "candidate show", "selectors"},
 	},
 	"tag": {
 		Path: "tag", Summary: "List one REF's immutable tags or create one immutable scoped tag binding.",
@@ -94,10 +88,10 @@ var commandHelpRegistry = map[string]commandHelp{
 		Path: "candidate", Summary: "Inspect, compare, or explicitly discard mutable candidate state.", Usage: []string{"sealgraph candidate <show|compare|discard> ..."}, Subcommands: []string{"show", "compare", "discard"}, Details: []string{"Candidate operations never rebase, relink, repair, or seal automatically."}, Related: []string{"candidate show", "candidate compare", "candidate discard", "seal"},
 	},
 	"candidate show": {
-		Path: "candidate show", Summary: "Inspect one candidate and its parent_revision and expected REF-head relations.", Usage: []string{"sealgraph candidate show REF [--raw-content] [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only; conflicts with explicit --format json"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Inspection validates material and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate compare", "candidate discard", "seal"},
+		Path: "candidate show", Summary: "Inspect one Candidate, its prospective typed IDs, Cause assertions, and expected REF-head relation.", Usage: []string{"sealgraph candidate show REF [--raw-content] [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF, not a Seal selector."}, Options: []helpOption{{"--raw-content", "optional; stdout becomes exact content bytes only; conflicts with explicit --format json"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Inspection validates Material, Provenance, prospective Seal, and exact Cause targets and does not mutate or bootstrap a repository."}, Examples: []string{"sealgraph candidate show design/api"}, Related: []string{"candidate compare", "candidate discard", "seal"},
 	},
 	"candidate compare": {
-		Path: "candidate compare", Summary: "Compare one candidate with its recorded parent_revision.", Usage: []string{"sealgraph candidate compare REF [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF."}, Options: []helpOption{{"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"Publication expectation is reported separately from immutable material differences."}, Examples: []string{"sealgraph candidate compare design/api"}, Related: []string{"candidate show", "compare", "seal"},
+		Path: "candidate compare", Summary: "Compare one Candidate with its explicit publication baseline.", Usage: []string{"sealgraph candidate compare REF [--format human|json]"}, Arguments: []string{"REF (required): exact candidate REF."}, Options: []helpOption{{"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}}, Details: []string{"The baseline is Candidate.expected_ref_head, not an inferred revision predecessor. Publication concurrency is reported separately from immutable material and provenance differences."}, Examples: []string{"sealgraph candidate compare design/api"}, Related: []string{"candidate show", "compare", "seal"},
 	},
 	"candidate discard": {
 		Path: "candidate discard", Summary: "Explicitly remove exactly one candidate and no canonical state.", Usage: []string{"sealgraph candidate discard REF"}, Arguments: []string{"REF (required): exact candidate REF."}, Details: []string{"This removes no Seal, object, REF, tag, or descendant candidate. There is no recursive or force form."}, Examples: []string{"sealgraph candidate discard design/api"}, Related: []string{"candidate show", "add"},
@@ -118,9 +112,9 @@ var commandHelpRegistry = map[string]commandHelp{
 		Path: "ref drop", Summary: "Remove exactly one current REF manifest with an explicit recovery receipt.", Usage: []string{"sealgraph ref drop REF"}, Arguments: []string{"REF (required): exact current logical REF; no selector, prefix, or batch form."}, Details: []string{"Candidate or source-binding state blocks the operation. The complete tag namespace leaves the active namespace with the REF. Immutable objects remain valid."}, Examples: []string{"sealgraph ref drop obsolete/spec"}, Related: []string{"recover", "candidate discard", "source unbind", "show"},
 	},
 	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with explicit --format json"}}),
-	"log":     inspectionHelp("log", "Follow parent_revision history newest-first for one current REF.", "sealgraph log REF [--format human|json]", nil),
-	"linklog": inspectionHelp("linklog", "Show Cause-Link changes across parent_revision history.", "sealgraph linklog REF [--upstream SELECTOR] [--format human|json]", []helpOption{{"--upstream SELECTOR", "optional, once; filter changes involving one resolved Seal"}}),
-	"compare": inspectionHelp("compare", "Compare immutable Seal material and provenance.", "sealgraph compare REF [--format human|json]\nsealgraph compare SELECTOR SELECTOR [--format human|json]", nil),
+	"log":     inspectionHelp("log", "Follow observed Cause-scoped revision assertions for one current REF.", "sealgraph log [--all-paths] [--max-paths N] REF [--format human|json]", []helpOption{{"--all-paths", "emit bounded complete leaf-terminated revision paths"}, {"--max-paths N", "positive bound; requires --all-paths; default 100"}}),
+	"linklog": inspectionHelp("linklog", "Show exact Cause-Link record changes across observed revision assertions.", "sealgraph linklog [--upstream TARGET_SELECTOR] REF [--format human|json]", []helpOption{{"--upstream TARGET_SELECTOR", "optional, once; retain changes for one resolved target Seal"}}),
+	"compare": inspectionHelp("compare", "Compare two explicit immutable Seal selections.", "sealgraph compare FROM_SELECTOR TO_SELECTOR [--format human|json]", nil),
 	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
@@ -128,14 +122,23 @@ var commandHelpRegistry = map[string]commandHelp{
 		Details: []string{"Stale is derived current review state. It is not structural impact, candidate state, approval, or an automatic repair plan. --scan does not repair canonical state."}, Examples: []string{"sealgraph stale --frontier", "sealgraph stale --frontier --refs-only --scan"}, Related: []string{"status", "show", "candidate compare", "concepts stale", "impact"},
 	},
 	"impact": {
-		Path: "impact", Summary: "Report current downstream Cause reachability from a selected Seal or its revision ancestors.", Usage: []string{"sealgraph impact [--all-paths] [--max-paths N] SELECTOR [--format human|json]"}, Arguments: []string{"SELECTOR (required): REF, @SEAL_TOKEN, or REF@TOKEN."},
-		Options: []helpOption{{"--all-paths", "optional; emit bounded distinct simple paths instead of one shortest path"}, {"--max-paths N", "optional, once; positive per-downstream limit, requires --all-paths; default 100"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Path: "impact", Summary: "Report downstream Cause reachability through an explicit revision-assertion scope.", Usage: []string{"sealgraph impact [--asserted-by OBSERVER_SELECTOR ...] [--all-paths] [--max-paths N] SELECTOR [--format human|json]"}, Arguments: []string{"SELECTOR (required): REF, @SEAL_TOKEN, or REF@TOKEN."},
+		Options: []helpOption{{"--asserted-by OBSERVER_SELECTOR", "optional, repeatable; restrict revision proof edges to these observer Seals"}, {"--all-paths", "optional; emit bounded distinct first-match Cause paths"}, {"--max-paths N", "optional, once; positive per-downstream limit, requires --all-paths; default 100"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
 		Details: []string{"Path truncation never removes impact membership, skips graph validation, or weakens snapshot revalidation. STRUCTURAL_IMPACT is not a stale-only result."}, Examples: []string{"sealgraph impact requirements/api", "sealgraph impact --all-paths --max-paths 20 requirements/api"}, Related: []string{"selectors", "stale", "graph", "concepts structural-impact"},
 	},
-	"graph": inspectionHelp("graph", "Inspect the active revision DAG and exact Cause edges.", "sealgraph graph [--format human|json]", nil),
+	"graph": inspectionHelp("graph", "Inspect observed Cause and Cause-scoped revision edges.", "sealgraph graph [--format human|json]", nil),
 	"fsck":  inspectionHelp("fsck", "Validate the complete standalone object, REF/tag, material, revision, and Cause inventory without repair.", "sealgraph fsck [--format human|json]", nil),
+	"migrate": {
+		Path: "migrate", Summary: "Run an explicitly isolated one-way repository migration step.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1"}, Subcommands: []string{"extract"}, Details: []string{"Migration commands are outside ordinary format-5 repository operations. They never enable a general dual reader or in-place rewrite."}, Related: []string{"migrate extract", "load"},
+	},
+	"migrate extract": {
+		Path: "migrate extract", Summary: "Read one retained format-4 source and emit a canonical migration document.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Arguments: []string{"No positional arguments; the source is exactly .sealgraph below the current directory."}, Options: []helpOption{{"--source-format 4", "required exactly once; no other source format is accepted"}, {"--format universal-blob-v1", "required exactly once; no other document format is accepted"}}, Details: []string{"This is the only format-5 command that opens format 4. It has no source mutation operation, never inspects Git, rejects every Candidate or corrupt/unrecognized canonical entry, validates two equal complete source captures, and writes the document only after both captures agree."}, Examples: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Related: []string{"load", "init", "fsck"},
+	},
 	"load": {
-		Path: "load", Summary: "Atomically load one canonical logical-v1 migration document into an absent target.", Usage: []string{"sealgraph load --format logical-v1 < repository.dump.json"}, Arguments: []string{"No positional arguments; stdin is the exact canonical document."}, Options: []helpOption{{"--format logical-v1", "required exactly once; no other value is accepted"}}, Details: []string{"load never merges, replaces, repairs, or directly opens a format-3 repository."}, Examples: []string{"sealgraph load --format logical-v1 < repository.dump.json"}, Related: []string{"init", "fsck"},
+		Path: "load", Summary: "Atomically import one canonical format-4 migration document into an absent format-5 target.", Usage: []string{"sealgraph load --format universal-blob-v1 < repository.dump.json"}, Arguments: []string{"No positional arguments; stdin is the exact canonical document emitted by migrate extract."}, Options: []helpOption{{"--format universal-blob-v1", "required exactly once; no other value is accepted"}}, Details: []string{"First extract in the retained format-4 repository with `sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json`. Load consumes only that document; it never opens format 4, merges, replaces, or repairs an existing target. If receipt stdout delivery alone fails after publication, recover it with load-receipt; never retry load."}, Examples: []string{"sealgraph load --format universal-blob-v1 < repository.dump.json"}, Related: []string{"migrate extract", "load-receipt", "init", "fsck"},
+	},
+	"load-receipt": {
+		Path: "load-receipt", Summary: "Recover one durable migration receipt without modifying repository state.", Usage: []string{"sealgraph load-receipt --source-document-sha256 HEX"}, Arguments: []string{"No positional arguments."}, Options: []helpOption{{"--source-document-sha256 HEX", "required exactly once; 64 lower-case hexadecimal source-document digest"}}, Details: []string{"The command requires the matching regular receipt, validates its exact canonical bytes, runs complete format-5 fsck, and requires the current repository digest to match the receipt before emitting its exact bytes. It never creates, repairs, or republishes state."}, Examples: []string{"sealgraph load-receipt --source-document-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}, Related: []string{"load", "fsck"},
 	},
 }
 
@@ -215,8 +218,8 @@ Forms:
 
 Rules:
   A hexadecimal token is 4 through 64 lower-case hex characters.
-  REF@hex requires the selected Seal to be current HEAD or a parent_revision
-  ancestor of that HEAD. Use @SEAL_TOKEN for a sibling or detached Seal.
+  REF@hex requires the selected Seal to be current HEAD or reachable through
+  observed Cause-scoped revision assertions. Use @SEAL_TOKEN for another Seal.
   REF@non-hex resolves an immutable tag in that REF's namespace.
   A bare hexadecimal Seal token is not accepted because it can be a valid REF.
   There is no @latest shortcut. Bare REF is the explicit current-HEAD form.
@@ -227,7 +230,7 @@ Examples:
   sealgraph show requirements/api
   sealgraph show @1a2b
   sealgraph show requirements/api@reviewed/1.0
-  sealgraph link design/api --depend-on @1a2b
+  sealgraph link design/api --target @1a2b --no-previous
 
 Related:
   sealgraph help concepts ref
@@ -237,18 +240,18 @@ Related:
 }
 
 var conceptHelp = map[string]string{
-	"ref":               "REF is a movable logical lookup/publication name, not immutable Seal identity, a branch, or a checkout target. Each REF has at most one current HEAD.",
-	"seal":              "Seal is an immutable snapshot of exact material, direct Cause SealIDs, optional parent_revision, root, and draft. REF names, tags, actor, and time are not Seal bytes.",
-	"parent-revision":   "parent_revision is one exact derivation parent. It does not mean replacement, preference, ownership, approval, or Cause dependency.",
-	"cause":             "A Cause Link records one exact upstream Seal generation. It is distinct from parent_revision and persists a full SealID, never a dynamic REF HEAD.",
-	"root":              "root is an explicit provenance boundary for one generation. It does not mean true, trusted, or approved.",
-	"draft":             "draft is explicit provisional sealing. It may preserve historical or non-leaf Causes, remains observable, and does not propagate automatically.",
-	"candidate":         "candidate is mutable unsealed state for one destination REF. It is not history or approval and is inspected, changed, discarded, or sealed explicitly.",
-	"tag":               "tag is an immutable REF-scoped alias to one exact Seal. It is external to Seal bytes and is not a branch, dynamic Link, or approval claim.",
-	"selector":          "selector resolves one immutable Seal using REF, @SEAL_TOKEN, or REF@TOKEN. Run `sealgraph help selectors` for the exact grammar.",
-	"stale":             "stale is derived from immutable Seals plus current REF heads. Revision self-stale and direct/transitive Cause stale are review facts, not persisted state or automatic work.",
-	"structural-impact": "STRUCTURAL_IMPACT is downstream Cause reachability from a selected generation or its revision ancestors. It is broader than current stale state.",
-	"history":           "Revision history follows parent_revision. Cause history compares exact Links across revisions. Neither is Git commit or reflog history.",
+	"ref":                "REF is a movable logical lookup/publication name, not immutable Seal identity, a branch, or a checkout target. Each REF has at most one current HEAD.",
+	"seal":               "Seal is an immutable typed Blob naming one exact Material and one exact Provenance. REF names, tags, actor, and time are not Seal bytes.",
+	"revision-assertion": "A Cause Link may assert zero or more previous revisions of its exact target. The assertion belongs to that observer Link; there is no intrinsic parent on a Seal.",
+	"cause":              "A Cause Link records one exact target Seal, its observer-local previous-revision assertion array, and messages. It persists full SealIDs, never dynamic REF HEAD pointers.",
+	"root":               "root is an explicit provenance boundary for one generation. It does not mean true, trusted, or approved.",
+	"draft":              "draft is explicit provisional sealing. It may preserve historical or non-leaf Causes, remains observable, and does not propagate automatically.",
+	"candidate":          "candidate is mutable unsealed state for one destination REF. It is not history or approval and is inspected, changed, discarded, or sealed explicitly.",
+	"tag":                "tag is an immutable REF-scoped alias to one exact Seal. It is external to Seal bytes and is not a branch, dynamic Link, or approval claim.",
+	"selector":           "selector resolves one immutable Seal using REF, @SEAL_TOKEN, or REF@TOKEN. Run `sealgraph help selectors` for the exact grammar.",
+	"stale":              "stale is derived from immutable Seals plus current REF heads. Revision self-stale and direct/transitive Cause stale are review facts, not persisted state or automatic work.",
+	"structural-impact":  "STRUCTURAL_IMPACT is downstream Cause reachability from a selected generation or its revision ancestors. It is broader than current stale state.",
+	"history":            "Revision history follows the union of observed Cause-scoped assertions and can branch. Cause history compares exact whole Link records across those structural edges. Neither is Git commit or reflog history.",
 }
 
 func printConceptsHelp(w io.Writer, topic string) bool {
@@ -261,7 +264,7 @@ func printConceptsHelp(w io.Writer, topic string) bool {
 		return true
 	}
 	fmt.Fprint(w, "concepts — SealGraph domain semantics\n\n")
-	order := []string{"ref", "seal", "parent-revision", "cause", "root", "draft", "candidate", "tag", "selector", "stale", "structural-impact", "history"}
+	order := []string{"ref", "seal", "revision-assertion", "cause", "root", "draft", "candidate", "tag", "selector", "stale", "structural-impact", "history"}
 	for _, name := range order {
 		fmt.Fprintf(w, "%s:\n  %s\n\n", name, conceptHelp[name])
 	}
@@ -273,15 +276,17 @@ func printUseCasesHelp(w io.Writer) {
 	fmt.Fprint(w, `usecases — explicit provenance workflows
 
 Create the first root:
-  sealgraph add premise --root --content 'External premise'
+  sealgraph add premise --root --clear-cause-links --content 'External premise'
   sealgraph seal premise
 
 Seal content based on an upstream HEAD:
-  sealgraph add design/api --content-file design.md --depend-on requirements/api
+  sealgraph add design/api --content-file design.md --non-root \
+    --target requirements/api --no-previous
   sealgraph seal design/api
 
-Add dependency rationale:
-  sealgraph link design/api --depend-on requirements/api -m 'API design is based on this requirement generation'
+Replace one complete Cause record with revision evidence and rationale:
+  sealgraph link design/api --target requirements/api \
+    --previous @1a2b -m 'API design reviewed this revision relation'
 
 Review a candidate explicitly:
   sealgraph candidate show design/api
@@ -302,7 +307,7 @@ Inspect structural impact:
 Select a historical generation explicitly:
   sealgraph show requirements/api@reviewed/1.0
   sealgraph show @1a2b
-  sealgraph link design/api --depend-on @1a2b
+  sealgraph link design/api --target @1a2b --no-previous
 
 These are review/navigation examples, not automatic repair procedures. Relink,
 draft selection, and each one-REF seal remain explicit operator decisions.

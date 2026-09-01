@@ -5,6 +5,9 @@
 - Decision Owner: Operator
 - Accepted: 2026-08-31 by explicit Operator acceptance of the exact reviewed
   candidate
+- Accepted Amendment: 2026-09-01 by explicit Operator acceptance of moving the
+  format-4 source extractor into the format-5 binary as an isolated migration
+  command
 - Acceptance Record:
   [`cause-scoped-revision-decision-review-2026-08-28.md`](../process/cause-scoped-revision-decision-review-2026-08-28.md#owner-acceptance-receipt)
 - Related Claims: C-MG-001 through C-MG-010
@@ -42,13 +45,13 @@ not accept a format-4 schema. The runtime has no dual repository reader, mixed
 graph, lazy upgrade, legacy-parent fallback, or in-place rewrite.
 
 Opening a format-4 `.sealgraph` with the format-5 runtime fails before mutation
-with a stable `FORMAT4_REQUIRES_MIGRATION` error and names the explicit export
+with a stable `FORMAT4_REQUIRES_MIGRATION` error and names the explicit extract
 and load boundary. It must not partially validate format 4 and continue.
 
-The final format-4 release exposes the read-only exporter:
+The format-5 binary exposes one migration-only read-only format-4 extractor:
 
 ```sh
-sealgraph dump --format universal-blob-v1
+sealgraph migrate extract --source-format 4 --format universal-blob-v1
 ```
 
 The format-5 runtime exposes the importer:
@@ -57,7 +60,10 @@ The format-5 runtime exposes the importer:
 sealgraph load --format universal-blob-v1 < repository.dump.json
 ```
 
-The importer parses only the migration document. Inside that isolated command,
+The extractor is dispatched outside ordinary repository operations. It is the
+only format-5 command allowed to open format-4 repository state and cannot
+return a live repository handle to ordinary runtime code. The importer parses
+only the migration document. Inside that isolated command,
 a migration-only format-4 payload verifier decodes each exported
 `payload_base64`, validates it against the exact format-4 canonical Seal rules,
 re-encodes it byte-for-byte, and verifies its old SealID. That verifier has no
@@ -70,7 +76,7 @@ not a permanent runtime semantic branch.
 
 ### Export admission and observation
 
-The exporter is read-only and accepts no positional repository, repair,
+The extractor is read-only and accepts no positional repository, repair,
 ignore, compatibility, or Git option. It operates on the explicitly opened
 standalone format-4 repository and never inspects an outer Git repository.
 
@@ -87,7 +93,7 @@ Before producing output it validates:
 - complete absence of candidate state, including corrupt or unrecognized
   candidate entries.
 
-The exporter implements that equal-capture observation as an explicit
+The extractor implements that equal-capture observation as an explicit
 double-capture transaction. The first capture `S_0` consists of:
 
 ```text
@@ -117,7 +123,7 @@ validation errors, never followed. Candidate admission requires
 `candidate_namespace_map` to be empty. Source-binding `.track` entries are not
 Candidate entries and remain in the explicit excluded-state category.
 
-From `S_0`, the exporter validates every physical object envelope, derives the
+From `S_0`, the extractor validates every physical object envelope, derives the
 complete rooted graph and semantic projection, inventories excluded objects,
 and buffers the entire migration document and warning set. Immediately before
 emitting either warnings or stdout it captures `S_1` using the same path, entry
@@ -245,7 +251,7 @@ Thus dependencies always precede dependents and the ready-set full SealID is
 the only tie break. No topological layer, map iteration, filesystem order, or
 host sort stability affects the result.
 
-The semantic projection is computed by the final format-4 exporter using the
+The semantic projection is computed by the isolated format-4 extractor using the
 projection below and is recomputed byte-for-byte by the importer. Equal
 complete migration observations—including canonical state and the excluded
 loose-object inventory—produce equal bytes.
@@ -366,7 +372,7 @@ complete collapse group remains auditable, but the format-5 Link contains no
 self-previous assertion. This is the operator-selected policy for revision
 meaning lost through identity collapse.
 
-When a count is nonzero, both exporter and importer emit the corresponding
+When a count is nonzero, both extractor and importer emit the corresponding
 human-visible stderr warning:
 
 ```text
@@ -629,7 +635,7 @@ Migration does not delete, rename, edit, or mark the format-4 source. Rollback
 means selecting the separately retained source repository with a format-4
 runtime; it is not an in-place downgrade of the format-5 repository.
 
-The exporter opens source config, manifests, objects, and Candidate-namespace
+The extractor opens source config, manifests, objects, and Candidate-namespace
 entries read-only and has no source mutation capability. Its `S_0`/`S_1`
 equality check proves that both complete admitted source captures have the same
 recorded value and binds output to that value; it does not prove continuous
@@ -670,8 +676,9 @@ Format 5 cannot replace format 4 until fixed fixtures prove at least:
   after rename, and idempotent `load-receipt` recovery; and
 - full object-inventory plus REF/tag repository-digest readback.
 
-The release must identify the exact last format-4 exporter and first format-5
-importer artifacts. Green runtime tests do not waive explicit owner acceptance
+The release must identify the exact first format-5 artifact containing both the
+isolated format-4 extractor and format-5 importer. Green runtime tests do not
+waive explicit owner acceptance
 of ADRs 0023, 0025, 0026, and 0027.
 
 This establishes C-MG-010: removing compatibility is gated by a proven and
@@ -687,7 +694,7 @@ With this ADR accepted:
 - ADR 0013's REF/tag inventory and atomic manifest semantics remain and are
   rewritten through the complete mapping.
 - ADR 0016's fail-closed, mode-neutral integrity intent remains; its format-4
-  parent closure is validated by the exporter and then replaced, not retained
+  parent closure is validated by the extractor and then replaced, not retained
   at runtime.
 - ADR 0018 recovery state remains local and is explicitly excluded.
 - ADR 0019 and ADR 0024 local source bindings are excluded and recreated
@@ -756,7 +763,7 @@ Rejected because migration identity is bound to the exact complete value seen
 at both captures, not to an otherwise unrepresented transition history between
 equal endpoints. A continuous guarantee would require one new coordination
 authority honored by every format-4 writer and external filesystem actor. The
-exporter instead fails every detected capture mismatch and makes the
+extractor instead fails every detected capture mismatch and makes the
 change-and-restore limit explicit.
 
 ## Consequences
@@ -805,11 +812,11 @@ Neutral:
 
 | Action | Accepted ADR gate | Claim | Evidence required before completion |
 | --- | --- | --- | --- |
-| A-MG-001 implement final format-4 exporter | ADRs 0023, 0025, 0026, and 0027 | C-MG-002, C-MG-003, C-MG-005, C-MG-006, C-MG-009 | exact double-capture maps, read-only source capability, candidate/source-structure rejection, fixed artifact bytes/digest, canonical zero-pad-bit Base64 encoding and re-encoding fixtures, alternate-number-spelling rejection, Kahn order, exact object format, tag reservation, constant exclusions including recovery journal, classification warnings, source pre/post equality, explicit change-and-restore observational-boundary fixture, and no-output failure fixtures |
+| A-MG-001 implement isolated format-4 extractor in the format-5 binary | ADRs 0023, 0025, 0026, and 0027 | C-MG-001 through C-MG-003, C-MG-005, C-MG-006, C-MG-009 | command dispatch outside ordinary repository open; exact double-capture maps; read-only source capability with no mutation entrypoint; candidate/source-structure rejection; fixed artifact bytes/digest; canonical zero-pad-bit Base64 encoding and re-encoding fixtures; alternate-number-spelling rejection; Kahn order; exact object format; tag reservation; constant exclusions including recovery journal; classification warnings; source pre/post equality; explicit change-and-restore observational-boundary fixture; no-output failure fixtures; and proof that every other format-5 operation continues to reject format 4 |
 | A-MG-002 implement deterministic projector | ADRs 0023, 0025, 0026, and 0027 | C-MG-004 through C-MG-006 | complete old/new ID, materialized, unobserved, collapsed, merged-message, and remaining-cycle fixtures |
 | A-MG-003 implement isolated format-5 load | ADRs 0023, 0025, 0026, and 0027 | C-MG-001, C-MG-003 through C-MG-007, C-MG-009 | migration-only format-4 decode/re-encode and old-ID verification with no source repository interface; malformed/noncanonical document, alternate-number-spelling, nonzero-pad-bit Base64, and Base64 re-encoding mismatch rejection; projection and warning recomputation; destination-only path-scope, operational final-mode verification, file-sync, bottom-up-directory-sync, no-replace, parent-sync, durability-uncertain, target-exists, and staging fault tests |
 | A-MG-004 implement receipt/readback/recovery | ADRs 0023, 0025, 0026, and 0027 | C-MG-007 through C-MG-009 | fixed mode-neutral receipt/repository digest bytes, alternate-number-spelling rejection, full-object and stable-writable-mode readback, durability-uncertain/readback/stdout failure separation, and idempotent load-receipt tests |
-| A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026, and 0027 | C-MG-010 | exact exporter/importer artifact IDs, public-schema fixtures, normative-document synchronization, and independent fixture reproduction |
+| A-MG-005 gate format-5 release | ADRs 0023, 0025, 0026, and 0027 | C-MG-010 | exact single format-5 extractor/importer artifact ID, public-schema fixtures, normative-document synchronization, and independent fixture reproduction |
 
 Acceptance of this ADR does not by itself authorize implementation or repository
 conversion. Migration of tracked dogfood requires a separately reviewed exact
@@ -875,7 +882,7 @@ These corrections do not authorize migration.
 
 The primary correction review then separated the original load invocation's
 final-mode readback from later mode-neutral `load-receipt` recovery and added a
-concrete nonzero-pad-bit example plus exporter/importer fixtures.
+concrete nonzero-pad-bit example plus extractor/importer fixtures.
 
 The next three-scope review of exact ADR 0026 digest
 `f5abdcc783991356a95b0180a7f55a1a94eb428370294693954daf1d5f6439c2`
@@ -883,7 +890,7 @@ confirmed the durable RV-28 provenance correction but found that `S_0`/`S_1`
 equality was described as proof that no intermediate source change occurred.
 This candidate defines equal endpoint observations as the complete portable
 boundary, explicitly excludes change-and-restore detection and continuous
-immutability, and requires that boundary as an exporter fixture. It remains
+immutability, and requires that boundary as an extractor fixture. It remains
 Proposed.
 
 The final exact-candidate review and owner acceptance are recorded in the

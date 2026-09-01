@@ -30,7 +30,12 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 		case "--file", "--content-file":
 			return "file", nil
 		case "--format":
+			if prior[0] == "load" || prior[0] == "migrate" {
+				return "plain", []string{"universal-blob-v1"}
+			}
 			return "plain", []string{"human", "json"}
+		case "--source-format":
+			return "plain", []string{"4"}
 		}
 	}
 	if len(prior) == 0 {

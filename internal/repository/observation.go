@@ -1,40 +1,23 @@
 package repository
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/revision"
 )
 
 type headObservation struct {
-	names []string
-	heads map[string]domain.ObjectID
-}
-
-func (observation headObservation) revisionHeads() []revision.Head {
-	result := make([]revision.Head, 0, len(observation.names))
-	for _, ref := range observation.names {
-		result = append(result, revision.Head{REF: ref, Seal: observation.heads[ref]})
-	}
-	return result
-}
-
-func (observation headObservation) digest() string {
-	hash := sha256.New()
-	hash.Write([]byte("sealgraph/ref-head-observation/v1\x00format=4\x00"))
-	for _, ref := range observation.names {
-		hash.Write([]byte(ref))
-		hash.Write([]byte{0})
-		hash.Write([]byte(observation.heads[ref].String()))
-		hash.Write([]byte{'\n'})
-	}
-	return fmt.Sprintf("%x", hash.Sum(nil))
+	names                   []string
+	heads                   map[string]domain.ObjectID
+	manifests               map[string][]byte
+	tags                    map[string]map[string]domain.ObjectID
+	objectIDs               []string
+	objectInventoryCaptured bool
 }
 
 func (r *Repository) observeHeads(ctx context.Context, operation string) (headObservation, error) {
@@ -43,13 +26,36 @@ func (r *Repository) observeHeads(ctx context.Context, operation string) (headOb
 		return headObservation{}, fmt.Errorf("list current REFs for %s observation: %w", operation, err)
 	}
 	sort.Strings(names)
-	observation := headObservation{names: append([]string(nil), names...), heads: make(map[string]domain.ObjectID, len(names))}
+	recoveryRefs, err := r.recoveryRefs()
+	if err != nil {
+		return headObservation{}, err
+	}
+	observation := headObservation{
+		names: append([]string(nil), names...), heads: make(map[string]domain.ObjectID, len(names)),
+		manifests: make(map[string][]byte, len(names)), tags: make(map[string]map[string]domain.ObjectID, len(names)),
+	}
 	for _, ref := range names {
-		head, err := r.refs.Resolve(ctx, ref)
+		manifest, err := recoveryRefs.Snapshot(ctx, ref)
 		if err != nil {
-			return headObservation{}, fmt.Errorf("read current REF %s for %s observation: %w", ref, operation, err)
+			return headObservation{}, fmt.Errorf("capture current REF %s manifest for %s observation: %w", ref, operation, err)
 		}
-		observation.heads[ref] = head
+		observation.manifests[ref] = manifest
+		targets, err := recoveryRefs.ManifestTargets(manifest)
+		if err != nil {
+			return headObservation{}, fmt.Errorf("decode captured REF %s head for %s observation: %w", ref, operation, err)
+		}
+		if len(targets) == 0 {
+			return headObservation{}, fmt.Errorf("captured REF %s manifest has no head", ref)
+		}
+		observation.heads[ref] = targets[0]
+		manifestTags, err := recoveryRefs.ManifestTags(manifest)
+		if err != nil {
+			return headObservation{}, fmt.Errorf("decode captured REF %s tags for %s observation: %w", ref, operation, err)
+		}
+		observation.tags[ref] = make(map[string]domain.ObjectID, len(manifestTags))
+		for _, tag := range manifestTags {
+			observation.tags[ref][tag.Name] = tag.Seal
+		}
 	}
 	return observation, nil
 }
@@ -63,13 +69,91 @@ func (r *Repository) revalidateHeads(ctx context.Context, observation headObserv
 	if !equalStrings(names, observation.names) {
 		return fmt.Errorf("REF heads changed while deriving %s; rerun the command", operation)
 	}
+	recoveryRefs, err := r.recoveryRefs()
+	if err != nil {
+		return err
+	}
 	for _, ref := range names {
 		head, err := r.refs.Resolve(ctx, ref)
-		if err != nil || !head.Equal(observation.heads[ref]) {
+		manifest, manifestErr := recoveryRefs.Snapshot(ctx, ref)
+		if err != nil || manifestErr != nil || !head.Equal(observation.heads[ref]) || !bytes.Equal(manifest, observation.manifests[ref]) {
 			return fmt.Errorf("REF %s changed or became unreadable while deriving %s; rerun the command", ref, operation)
 		}
 	}
+	if observation.objectInventoryCaptured {
+		ids, err := r.captureObjectInventory(ctx, operation)
+		if err != nil || !equalStrings(ids, observation.objectIDs) {
+			return fmt.Errorf("loose-object inventory changed or became unreadable while deriving %s; rerun the command", operation)
+		}
+	}
 	return nil
+}
+
+func (r *Repository) ensureObjectInventory(ctx context.Context, observation *headObservation, operation string) error {
+	if observation.objectInventoryCaptured {
+		return nil
+	}
+	ids, err := r.captureObjectInventory(ctx, operation)
+	if err != nil {
+		return err
+	}
+	observation.objectIDs = ids
+	observation.objectInventoryCaptured = true
+	return nil
+}
+
+func (r *Repository) accountForObservedObjectWrite(ctx context.Context, observation *headObservation, id domain.ObjectID, operation string) error {
+	if !observation.objectInventoryCaptured {
+		return nil
+	}
+	expected := append([]string(nil), observation.objectIDs...)
+	found := false
+	for _, existing := range expected {
+		if existing == id.String() {
+			found = true
+			break
+		}
+	}
+	if !found {
+		expected = append(expected, id.String())
+		sort.Strings(expected)
+	}
+	current, err := r.captureObjectInventory(ctx, operation)
+	if err != nil || !equalStrings(current, expected) {
+		return fmt.Errorf("loose-object inventory changed unexpectedly while deriving %s; rerun the command", operation)
+	}
+	observation.objectIDs = current
+	return nil
+}
+
+func (r *Repository) captureObjectInventory(ctx context.Context, operation string) ([]string, error) {
+	objects, err := r.objects.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("capture loose-object inventory for %s: %w", operation, err)
+	}
+	ids := make([]string, len(objects))
+	for i, object := range objects {
+		ids[i] = object.ID.String()
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+func resolveObservedObjectPrefix(prefix string, ids []string) (domain.ObjectID, error) {
+	var match string
+	for _, id := range ids {
+		if !strings.HasPrefix(id, prefix) {
+			continue
+		}
+		if match != "" && match != id {
+			return domain.ObjectID{}, fmt.Errorf("ambiguous object prefix %q; use more hexadecimal characters", prefix)
+		}
+		match = id
+	}
+	if match == "" {
+		return domain.ObjectID{}, fmt.Errorf("object not found: prefix %s", prefix)
+	}
+	return domain.ObjectID{Hex: match}, nil
 }
 
 func equalStrings(left, right []string) bool {

@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/mako10k/sealgraph/internal/domain"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/store"
 	"github.com/mako10k/sealgraph/internal/workfile"
 )
@@ -33,16 +34,16 @@ type LocalSourceAddOptions struct {
 	Path              string
 	BindSource        bool
 	PreserveSemantics bool
-	Dependencies      []Dependency
-	Parent            string
+	Cause             *CauseInput
 	Root              bool
 	RootSet           bool
+	ClearCauseLinks   bool
 	Draft             bool
 	DraftSet          bool
 }
 
 type LocalSourceAddResult struct {
-	Candidate     domain.Candidate
+	Candidate     domainv5.Candidate
 	SourceMode    string
 	SourcePath    string
 	SourceBinding string
@@ -290,17 +291,19 @@ func (r *Repository) SourceCompare(ctx context.Context, ref string) (SourceCompa
 			return SourceCompareResult{}, err
 		}
 		result.Baseline = "CANDIDATE"
-		result.BaselineContent = &inspection.Candidate.Content
+		content := domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: inspection.Candidate.Content}
+		result.BaselineContent = &content
 	} else if head, err := r.refs.Resolve(ctx, ref); err == nil {
 		payload, err := r.LoadSeal(ctx, head)
 		if err != nil {
 			return SourceCompareResult{}, err
 		}
-		if _, err := r.readRepositoryBlob(ctx, payload.Content, fmt.Sprintf("HEAD content for %s", ref)); err != nil {
+		if _, err := r.readRepositoryBlobID(ctx, payload.Material.Content, fmt.Sprintf("HEAD content for %s", ref)); err != nil {
 			return SourceCompareResult{}, err
 		}
 		result.Baseline = "HEAD"
-		result.BaselineContent = &payload.Content
+		content := domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: payload.Material.Content}
+		result.BaselineContent = &content
 	} else if !errors.Is(err, store.ErrRefNotFound) {
 		return SourceCompareResult{}, fmt.Errorf("resolve current HEAD for source comparison %s: %w", ref, err)
 	}
@@ -396,9 +399,10 @@ func (r *Repository) AddLocalSource(ctx context.Context, options LocalSourceAddO
 			return LocalSourceAddResult{}, err
 		}
 		candidate, err := r.addLocked(ctx, AddOptions{
-			REF: options.REF, Content: content, Dependencies: options.Dependencies,
-			Parent: options.Parent, Root: options.Root, Draft: options.Draft,
-		}, options.PreserveSemantics, options.RootSet, options.DraftSet)
+			REF: options.REF, Content: content, Cause: options.Cause,
+			Root: options.Root, RootSet: options.RootSet, ClearCauseLinks: options.ClearCauseLinks,
+			Draft: options.Draft, DraftSet: options.DraftSet,
+		})
 		if err != nil {
 			return LocalSourceAddResult{}, err
 		}

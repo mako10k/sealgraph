@@ -2,15 +2,21 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 
+	"github.com/mako10k/sealgraph/internal/canonical"
 	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/migration"
+	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
 func decodeCLIJSON(t *testing.T, output string) map[string]any {
@@ -20,6 +26,21 @@ func decodeCLIJSON(t *testing.T, output string) map[string]any {
 		t.Fatalf("decode JSON %q: %v", output, err)
 	}
 	return value
+}
+
+func TestInspectionJSONUsesCanonicalLiteralUnicodeSeparators(t *testing.T) {
+	value := struct {
+		Schema  string `json:"schema"`
+		Message string `json:"message"`
+	}{Schema: "test/v1", Message: "before\u2028middle\u2029after\\u2028<&>"}
+	var stdout, stderr bytes.Buffer
+	if code := writeInspectionJSON(&stdout, &stderr, "test", value); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	want := "{\"schema\":\"test/v1\",\"message\":\"before\u2028middle\u2029after\\\\u2028<&>\"}\n"
+	if stdout.String() != want {
+		t.Fatalf("inspection JSON bytes=%q, want %q", stdout.Bytes(), []byte(want))
+	}
 }
 
 func TestCLIInitReportsAllThreeOutcomesWithoutPaths(t *testing.T) {
@@ -62,17 +83,17 @@ func TestCLIHelpHierarchyIsRepositoryIndependent(t *testing.T) {
 	}{
 		{[]string{"--help"}, []string{"Commands:", "Topics:", "sealgraph help candidate show"}},
 		{[]string{"help"}, []string{"Commands:", "Navigation explains explicit next actions"}},
-		{[]string{"help", "add"}, []string{"sealgraph add REF", "--depend-on SELECTOR", "repeatable", "mutually exclusive"}},
+		{[]string{"help", "add"}, []string{"sealgraph add REF", "--target TARGET", "--previous PREVIOUS", "mutually exclusive"}},
 		{[]string{"add", "--help"}, []string{"sealgraph add REF", "--content-file PATH|-"}},
 		{[]string{"help", "candidate"}, []string{"Subcommands:", "show", "compare", "discard"}},
 		{[]string{"help", "candidate", "show"}, []string{"sealgraph candidate show REF", "--raw-content"}},
-		{[]string{"candidate", "show", "--help"}, []string{"expected REF-head relations", "sealgraph candidate show REF"}},
+		{[]string{"candidate", "show", "--help"}, []string{"expected REF-head relation", "sealgraph candidate show REF"}},
 		{[]string{"help", "source"}, []string{"Subcommands:", "bind", "rebind", "unbind", "show", "list", "not Git tracked state"}},
 		{[]string{"source", "show", "--help"}, []string{"without opening its source file", "sealgraph source show REF"}},
 		{[]string{"help", "source", "rebind"}, []string{"--from OLD_PATH", "--file NEW_PATH", "Atomically replace"}},
 		{[]string{"help", "ref", "drop"}, []string{"sealgraph ref drop REF", "complete tag namespace", "Immutable objects remain valid"}},
 		{[]string{"help", "selectors"}, []string{"@SEAL_TOKEN", "4 through 64 lower-case hex", "There is no @latest", "full 64-character SealID"}},
-		{[]string{"help", "concepts"}, []string{"parent_revision", "CLEAN means", "never searches for Git"}},
+		{[]string{"help", "concepts"}, []string{"no intrinsic parent", "CLEAN means", "never searches for Git"}},
 		{[]string{"help", "concepts", "root"}, []string{"not mean true, trusted, or approved"}},
 		{[]string{"help", "usecases"}, []string{"Create the first root", "Review stale provenance upstream-first", "not automatic repair procedures"}},
 		{[]string{"help", "impact"}, []string{"--max-paths N", "requires --all-paths", "default 100", "never removes impact membership"}},
@@ -122,6 +143,8 @@ func TestCLIUsageAndUnknownNavigation(t *testing.T) {
 		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
 		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
 		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
+		{[]string{"add", "spec", "--content", "x", "--non-root=false", "--target", "@abcd", "--no-previous"}, []string{"--non-root=false is invalid", "help: sealgraph help add"}},
+		{[]string{"link", "spec", "--target", "@abcd", "--no-previous=false"}, []string{"--no-previous=false is invalid", "help: sealgraph help link"}},
 	}
 	assertCLIUsageDiagnostics(t, tests)
 }
@@ -164,7 +187,7 @@ func TestLocalSourceErrorsProvideExplicitNextActions(t *testing.T) {
 
 func TestCLIDomainInvariantFailureNavigatesWithoutMutation(t *testing.T) {
 	fixture := newCLIRevisionFixture(t)
-	mustRunCLI(t, fixture.dir, "add", "middle", "--content", "review", "--depend-on", "@"+fixture.root1, "--depend-on", "root")
+	mustRunCLI(t, fixture.dir, "add", "middle", "--content", "review", "--target", "@"+fixture.root1, "--no-previous")
 	candidatePath := filepath.Join(fixture.dir, ".sealgraph", "index", "middle", ".candidate")
 	before, err := os.ReadFile(candidatePath)
 	if err != nil {
@@ -194,12 +217,12 @@ func TestCLIHelpUseCaseInvocationsAreAcceptedByTheRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "premise", "--root", "--content", "External premise")
+	mustRunCLI(t, dir, "add", "premise", "--root", "--clear-cause-links", "--content", "External premise")
 	mustSealCLI(t, dir, "premise")
-	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--content", "API requirement")
+	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--clear-cause-links", "--content", "API requirement")
 	requirementID := mustSealCLI(t, dir, "requirements/api")
 	mustRunCLI(t, dir, "tag", "requirements/api", "reviewed/1.0")
-	mustRunCLI(t, dir, "add", "design/api", "--content-file", "design.md", "--depend-on", "requirements/api")
+	mustRunCLI(t, dir, "add", "design/api", "--content-file", "design.md", "--non-root", "--target", "requirements/api", "--no-previous")
 	mustRunCLI(t, dir, "candidate", "show", "design/api")
 	mustRunCLI(t, dir, "candidate", "compare", "design/api")
 	mustSealCLI(t, dir, "design/api")
@@ -207,7 +230,7 @@ func TestCLIHelpUseCaseInvocationsAreAcceptedByTheRuntime(t *testing.T) {
 	mustRunCLI(t, dir, "show", "@"+requirementID[:12])
 	mustRunCLI(t, dir, "impact", "requirements/api")
 	mustRunCLI(t, dir, "impact", "--all-paths", "--max-paths", "20", "requirements/api")
-	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--content", "API requirement v2")
+	mustRunCLI(t, dir, "add", "requirements/api", "--root", "--clear-cause-links", "--content", "API requirement v2")
 	mustSealCLI(t, dir, "requirements/api")
 	mustRunCLI(t, dir, "stale", "--frontier")
 	mustRunCLI(t, dir, "status", "design/api")
@@ -219,14 +242,14 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 		name, schema string
 		args         []string
 	}{
-		{"show", "sealgraph/show/v1", []string{"show", "root", "--format", "json"}},
-		{"status", "sealgraph/status/v2", []string{"status", "--format=json"}},
-		{"stale", "sealgraph/stale/v1", []string{"stale", "--format", "json", "--frontier"}},
-		{"graph", "sealgraph/graph/v1", []string{"graph", "--format", "json"}},
-		{"impact", "sealgraph/impact/v1", []string{"impact", "@" + fixture.root2, "--format", "json"}},
-		{"log", "sealgraph/log/v1", []string{"log", "root", "--format", "json"}},
-		{"linklog", "sealgraph/linklog/v1", []string{"linklog", "middle", "--format", "json"}},
-		{"compare", "sealgraph/compare/v1", []string{"compare", "root", "--format", "json"}},
+		{"show", "sealgraph/show/v2", []string{"show", "root", "--format", "json"}},
+		{"status", "sealgraph/status/v3", []string{"status", "--format=json"}},
+		{"stale", "sealgraph/stale/v2", []string{"stale", "--format", "json", "--frontier"}},
+		{"graph", "sealgraph/graph/v2", []string{"graph", "--format", "json"}},
+		{"impact", "sealgraph/impact/v2", []string{"impact", "@" + fixture.root2, "--format", "json"}},
+		{"log", "sealgraph/log/v2", []string{"log", "root", "--format", "json"}},
+		{"linklog", "sealgraph/linklog/v2", []string{"linklog", "middle", "--format", "json"}},
+		{"compare", "sealgraph/compare/v2", []string{"compare", "@" + fixture.root1, "root", "--format", "json"}},
 	}
 	for _, test := range commands {
 		t.Run(test.name, func(t *testing.T) {
@@ -243,8 +266,9 @@ func TestCLIInspectionJSONSchemasAndStructuredPaths(t *testing.T) {
 		t.Fatal("missing impact")
 	}
 	paths := items[0].(map[string]any)["paths"].([]any)
-	if _, ok := paths[0].([]any); !ok {
-		t.Fatalf("path is not a structured array: %#v", paths[0])
+	path, ok := paths[0].(map[string]any)
+	if !ok || len(path["cause_seal_ids"].([]any)) < 2 {
+		t.Fatalf("path is not a structured impact path: %#v", paths[0])
 	}
 	if code, stdout, stderr := runCLI(t, fixture.dir, nil, "stale", "--refs-only", "--format", "json"); code != 2 || stdout != "" || !strings.Contains(stderr, "mutually exclusive") {
 		t.Fatalf("mixed format code=%d stdout=%q stderr=%q", code, stdout, stderr)
@@ -323,7 +347,7 @@ func TestCLITerminalMutationReceiptsAbbreviateHashes(t *testing.T) {
 	var stdout sizedTerminalBuffer
 	stdout.width = 80
 	var stderr bytes.Buffer
-	code := runStandaloneAtWithInput(dir, []string{"add", "root", "--root", "--content", "root"}, bytes.NewReader(nil), &stdout, &stderr)
+	code := runStandaloneAtWithInput(dir, []string{"add", "root", "--root", "--clear-cause-links", "--content", "root"}, bytes.NewReader(nil), &stdout, &stderr)
 	if code != 0 || stderr.Len() != 0 {
 		t.Fatalf("terminal add code=%d stderr=%q", code, stderr.String())
 	}
@@ -336,7 +360,7 @@ func TestCLITerminalMutationReceiptsAbbreviateHashes(t *testing.T) {
 		t.Fatalf("terminal seal code=%d stderr=%q", code, stderr.String())
 	}
 	show := decodeCLIJSON(t, mustRunCLI(t, dir, "show", "root", "--format", "json"))
-	sealID := show["seal_id"].(string)
+	sealID := show["seal"].(map[string]any)["seal_id"].(string)
 	if !strings.Contains(stdout.String(), "SEALED") || !strings.Contains(stdout.String(), sealID[:12]) || strings.Contains(stdout.String(), sealID) {
 		t.Fatalf("terminal seal did not abbreviate Seal ID:\n%s", stdout.String())
 	}
@@ -350,7 +374,7 @@ func TestCLINonTerminalDefaultsToJSONAndExplicitHumanOverrides(t *testing.T) {
 		t.Fatalf("redirected status code=%d stderr=%q", code, stderr)
 	}
 	value := decodeCLIJSON(t, string(data))
-	if value["schema"] != "sealgraph/status/v2" {
+	if value["schema"] != "sealgraph/status/v3" {
 		t.Fatalf("redirected status=%s", data)
 	}
 
@@ -362,17 +386,17 @@ func TestCLINonTerminalDefaultsToJSONAndExplicitHumanOverrides(t *testing.T) {
 		t.Fatalf("explicit human status=%s", data)
 	}
 
-	mustRunCLI(t, fixture.dir, "add", "root", "--root", "--content", "root-v3")
+	mustRunCLI(t, fixture.dir, "add", "root", "--root", "--clear-cause-links", "--content", "root-v3")
 	code, data, stderr = runCLIToRegularFile(t, fixture.dir, path, "candidate", "show", "root")
 	if code != 0 || stderr != "" {
 		t.Fatalf("redirected candidate show code=%d stderr=%q", code, stderr)
 	}
 	value = decodeCLIJSON(t, string(data))
-	if value["schema"] != "sealgraph/candidate-show/v1" {
+	if value["schema"] != "sealgraph/candidate-show/v2" {
 		t.Fatalf("redirected candidate show=%s", data)
 	}
 	comparison := decodeCLIJSON(t, mustRunCLI(t, fixture.dir, "candidate", "compare", "root", "--format", "json"))
-	if comparison["schema"] != "sealgraph/candidate-compare/v1" {
+	if comparison["schema"] != "sealgraph/candidate-compare/v2" {
 		t.Fatalf("candidate comparison JSON=%v", comparison)
 	}
 	code, data, stderr = runCLIToRegularFile(t, fixture.dir, path, "candidate", "show", "root", "--raw-content")
@@ -405,13 +429,13 @@ func runCLIToRegularFile(t *testing.T, dir, path string, args ...string) (int, [
 func TestCLIFsckHumanAndJSON(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
 	mustSealCLI(t, dir, "root")
-	if output := mustRunCLI(t, dir, "fsck"); !strings.HasPrefix(output, "REPOSITORY CHECK: OK\n") || !strings.Contains(output, "Objects") || !strings.Contains(output, "Active Seals") {
+	if output := mustRunCLI(t, dir, "fsck"); !strings.HasPrefix(output, "REPOSITORY CHECK: OK\n") || !strings.Contains(output, "Blobs") || !strings.Contains(output, "Active Seals") {
 		t.Fatalf("fsck output=%q", output)
 	}
 	value := decodeCLIJSON(t, mustRunCLI(t, dir, "fsck", "--format", "json"))
-	if value["schema"] != "sealgraph/fsck/v1" || value["result"] != "ok" {
+	if value["schema"] != "sealgraph/fsck/v2" || value["result"] != "ok" {
 		t.Fatalf("fsck JSON=%#v", value)
 	}
 }
@@ -425,7 +449,7 @@ func TestCLIExactContentFileAndStdinRoundTripWithoutSeal(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedID := domain.ComputeNativeBlobID(content).String()
-	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content-file", "content.bin")
+	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--clear-cause-links", "--content-file", "content.bin")
 	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
 		t.Fatalf("file add code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -437,7 +461,7 @@ func TestCLIExactContentFileAndStdinRoundTripWithoutSeal(t *testing.T) {
 		t.Fatalf("add sealed unexpectedly code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	mustRunCLI(t, dir, "candidate", "discard", "root")
-	code, stdout, stderr = runCLI(t, dir, content, "add", "root", "--root", "--content-file", "-")
+	code, stdout, stderr = runCLI(t, dir, content, "add", "root", "--root", "--clear-cause-links", "--content-file", "-")
 	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
 		t.Fatalf("stdin add code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -480,14 +504,14 @@ func TestCLIUnsafeContentFilesFailBeforeCandidateMutation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			mustRunCLI(t, dir, "init")
-			mustRunCLI(t, dir, "add", "root", "--root", "--content", "stable")
+			mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "stable")
 			candidatePath := filepath.Join(dir, ".sealgraph", "index", "root", ".candidate")
 			before, err := os.ReadFile(candidatePath)
 			if err != nil {
 				t.Fatal(err)
 			}
 			source := prepare(t, dir)
-			code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content-file", source)
+			code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--clear-cause-links", "--content-file", source)
 			if code != 1 || stdout != "" || stderr == "" {
 				t.Fatalf("unsafe add code=%d stdout=%q stderr=%q", code, stdout, stderr)
 			}
@@ -505,7 +529,7 @@ func TestCLIUnsafeContentFilesFailBeforeCandidateMutation(t *testing.T) {
 func TestCLIContentSourceConflictFailsBeforeCandidateMutation(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
-	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content", "a", "--content-file", "missing")
+	code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--clear-cause-links", "--content", "a", "--content-file", "missing")
 	if code != 2 || stdout != "" || !strings.Contains(stderr, "at most one") {
 		t.Fatalf("conflict code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -520,7 +544,7 @@ func TestCLILocalSourceLifecycleAndContentlessRefresh(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "spec.md"), []byte("v1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	output := mustRunCLI(t, dir, "add", "spec.md", "--root", "--bind-source")
+	output := mustRunCLI(t, dir, "add", "spec.md", "--root", "--clear-cause-links", "--bind-source")
 	if !strings.Contains(output, "source_mode=initial-ref-path") || !strings.Contains(output, "source_binding=BOUND") {
 		t.Fatalf("initial output=%q", output)
 	}
@@ -571,7 +595,7 @@ func TestCLIBashCompletionUsesCanonicalVocabularyAndMetadataOnly(t *testing.T) {
 		t.Fatalf("completion advertised Git-shaped names: %s", mode)
 	}
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
 	if err := os.WriteFile(filepath.Join(dir, "source.md"), []byte("source"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -587,12 +611,18 @@ func TestCLIBashCompletionUsesCanonicalVocabularyAndMetadataOnly(t *testing.T) {
 	if output := mustRunCLI(t, dir, "__completion", "--bash", "source", "bind", "x", "--file", ""); output != "__sealgraph_completion_mode=file\n" {
 		t.Fatalf("file completion=%q", output)
 	}
+	if output := mustRunCLI(t, dir, "__completion", "--bash", "load", "--format", ""); output != "__sealgraph_completion_mode=plain\nuniversal-blob-v1\n" {
+		t.Fatalf("load format completion=%q", output)
+	}
+	if output := mustRunCLI(t, dir, "__completion", "--bash", "migrate", "extract", "--source-format", ""); output != "__sealgraph_completion_mode=plain\n4\n" {
+		t.Fatalf("extract source-format completion=%q", output)
+	}
 }
 
 func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "v1")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "v1")
 	sealOutput := mustRunCLI(t, dir, "seal", "root")
 	fields := strings.Fields(sealOutput)
 	if len(fields) != 4 || !strings.HasPrefix(fields[3], "operation=") {
@@ -632,7 +662,7 @@ func TestCLIRecoveryRequiresExactOperationAndRestoresREF(t *testing.T) {
 func TestCLIRefDropEmitsRecoverableReceipt(t *testing.T) {
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "v1")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "v1")
 	mustRunCLI(t, dir, "seal", "root")
 	if err := os.WriteFile(filepath.Join(dir, "root.txt"), []byte("v1"), 0o600); err != nil {
 		t.Fatal(err)
@@ -679,7 +709,7 @@ func TestCLIManifestFeedsAddWithoutRepositoryMutation(t *testing.T) {
 	}
 	mustRunCLI(t, dir, "init")
 	expectedID := domain.ComputeNativeBlobID([]byte(first)).String()
-	code, stdout, stderr := runCLI(t, dir, []byte(first), "add", "manifest", "--root", "--content-file", "-")
+	code, stdout, stderr := runCLI(t, dir, []byte(first), "add", "manifest", "--root", "--clear-cause-links", "--content-file", "-")
 	if code != 0 || stderr != "" || !strings.Contains(stdout, "content="+expectedID) {
 		t.Fatalf("manifest add code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -695,16 +725,16 @@ func runCLI(t *testing.T, dir string, stdin []byte, args ...string) (int, string
 	return code, stdout.String(), stderr.String()
 }
 
-func TestCLIFormat4RootAndSelectorShow(t *testing.T) {
+func TestCLIFormat5RootAndSelectorShow(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
 		t.Fatalf("init code=%d stderr=%s", code, stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--content", "material"); code != 0 || !strings.Contains(stdout, "CANDIDATE root") {
+	if code, stdout, stderr := runCLI(t, dir, nil, "add", "root", "--root", "--clear-cause-links", "--content", "material"); code != 0 || !strings.Contains(stdout, "CANDIDATE root") {
 		t.Fatalf("add code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	code, stdout, stderr := runCLI(t, dir, nil, "candidate", "show", "root")
-	if code != 0 || !strings.Contains(stdout, "Parent revision") || !strings.Contains(stdout, "Expected REF head") || !strings.Contains(stdout, "expected absent") {
+	if code != 0 || !strings.Contains(stdout, "Prospective Seal") || !strings.Contains(stdout, "Expected REF head") || !strings.Contains(stdout, "expected absent") {
 		t.Fatalf("candidate show code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	code, stdout, stderr = runCLI(t, dir, nil, "seal", "root")
@@ -713,60 +743,204 @@ func TestCLIFormat4RootAndSelectorShow(t *testing.T) {
 	}
 	id := strings.Fields(stdout)[2]
 	code, stdout, stderr = runCLI(t, dir, nil, "show", "@"+id[:12])
-	if code != 0 || !strings.Contains(stdout, "Current REF(s)") || !strings.Contains(stdout, "root") || !strings.Contains(stdout, "Parent revision") || strings.Contains(stdout, "target_ref") {
+	if code != 0 || !strings.Contains(stdout, "Current REF(s)") || !strings.Contains(stdout, "root") || !strings.Contains(stdout, "Observed previous state") || strings.Contains(stdout, "target_ref") {
 		t.Fatalf("show code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 }
 
-func cliLogicalDump(t *testing.T) []byte {
+func cliUniversalDump(t *testing.T) []byte {
 	t.Helper()
-	data := []byte("migrated")
-	contentID := domain.ComputeNativeBlobID(data)
-	payload := migration.Format3SealPayload{
-		Schema: migration.Format3SealSchema, REF: "ROOT",
-		Content:     domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: contentID},
-		Attachments: []domain.Attachment{}, Links: []migration.Format3Link{}, Root: true,
+	content := []byte("migrated")
+	contentID := domain.ComputeNativeBlobID(content)
+	payload := domain.SealPayload{
+		Schema: domain.SealSchema,
+		Content: domain.ContentRef{
+			Store: domain.NativeStore,
+			Type:  domain.BlobType,
+			ID:    contentID,
+		},
+		Attachments: make([]domain.Attachment, 0),
+		Links:       make([]domain.Link, 0),
+		Root:        true,
 	}
-	sealBytes, err := migration.EncodeFormat3Seal(payload)
+	payloadBytes, err := canonical.EncodeSeal(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := domain.ComputeNativeBlobID(sealBytes)
-	dump, err := migration.EncodeLogicalDumpV1(migration.LogicalDumpV1{
-		Objects: []migration.ObjectRecord{{ID: contentID, Data: data}},
-		Seals:   []migration.SealRecord{{OldSealID: oldID, Payload: payload}},
-		REFs:    []migration.RefRecord{{Name: "ROOT", Head: oldID}},
-		Tags:    []migration.TagRecord{}, ExcludedObjects: []domain.ObjectID{},
-	})
+	oldID := domain.ComputeNativeBlobID(payloadBytes)
+	value := migration.UniversalBlobV1{}
+	value.Objects = append(value.Objects, migration.ObjectRecord{ID: contentID, Data: content})
+	value.Seals = append(value.Seals, migration.UniversalSealRecord{ID: oldID, Payload: payload, PayloadBytes: payloadBytes})
+	value.REFs = append(value.REFs, migration.RefRecord{Name: "ROOT", Head: oldID})
+	value.Tags = make([]migration.TagRecord, 0)
+	value.ExcludedObjects = make([]domain.ObjectID, 0)
+	value.ExcludedState = append(value.ExcludedState, migration.UniversalExcludedState...)
+	document, err := migration.EncodeUniversalBlobV1(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return dump
+	return document
 }
 
-func TestCLILoadPublishesOnlyAfterCanonicalInput(t *testing.T) {
+func TestCLILoadUniversalBlobPublishesFormat5(t *testing.T) {
 	dir := t.TempDir()
-	input := cliLogicalDump(t)
-	code, stdout, stderr := runCLI(t, dir, input, "load", "--format", "logical-v1")
-	if code != 0 || !strings.Contains(stdout, `"schema":"sealgraph/logical-load-receipt/v1"`) || stderr != "" {
+	input := cliUniversalDump(t)
+	code, stdout, stderr := runCLI(t, dir, input, "load", "--format", "universal-blob-v1")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, `"schema":"sealgraph/universal-blob-load-receipt/v1"`) {
 		t.Fatalf("load code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "show", "ROOT"); code != 0 || !strings.Contains(stdout, `Preview (escaped)`) || !strings.Contains(stdout, `"migrated"`) {
-		t.Fatalf("show loaded code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	if output := mustRunCLI(t, dir, "show", "ROOT"); !strings.Contains(output, `"migrated"`) || !strings.Contains(output, "Material ID") {
+		t.Fatalf("loaded show=%s", output)
 	}
-	other := t.TempDir()
-	code, stdout, stderr = runCLI(t, other, bytes.TrimSuffix(input, []byte{'\n'}), "load", "--format", "logical-v1")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "not canonical") {
-		t.Fatalf("noncanonical load code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	digest := fmt.Sprintf("%x", sha256.Sum256(input))
+	code, recovered, stderr := runCLI(t, dir, nil, "load-receipt", "--source-document-sha256", digest)
+	if code != 0 || stderr != "" || recovered != stdout {
+		t.Fatalf("load-receipt code=%d equal=%t stderr=%s", code, recovered == stdout, stderr)
 	}
 }
 
-func TestCLIFormat3DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
+func TestCLIFormat4RepositoryStopsWithMigrationGuideWithoutMutation(t *testing.T) {
+	dir := t.TempDir()
+	makeCLIFormat4Repository(t, dir)
+	root := filepath.Join(dir, ".sealgraph")
+	configPath := filepath.Join(root, "config")
+	format4 := []byte("repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n")
+	for _, args := range [][]string{{"show", "ROOT"}, {"init"}} {
+		code, stdout, stderr := runCLI(t, dir, nil, args...)
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "FORMAT4_REQUIRES_MIGRATION") || !strings.Contains(stderr, "migrate extract --source-format 4 --format universal-blob-v1") || !strings.Contains(stderr, "load --format universal-blob-v1") {
+			t.Fatalf("%v code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
+		}
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil || !bytes.Equal(after, format4) {
+		t.Fatalf("format-4 config changed: %q err=%v", after, err)
+	}
+}
+
+func TestCLIAllOrdinaryRepositoryOperationsRejectFormat4(t *testing.T) {
+	dir := t.TempDir()
+	makeCLIFormat4Repository(t, dir)
+	commands := [][]string{
+		{"init"},
+		{"add", "ROOT", "--root", "--clear-cause-links", "--content", "replacement"},
+		{"source", "list"},
+		{"source", "bind", "ROOT", "--file", "source.txt"},
+		{"source", "rebind", "ROOT", "--from", "source.txt", "--file", "other.txt"},
+		{"source", "unbind", "ROOT", "--from", "source.txt"},
+		{"source", "show", "ROOT"},
+		{"source", "compare", "ROOT"},
+		{"link", "ROOT", "--target", "ROOT", "--no-previous"},
+		{"unlink", "ROOT", "--target", "ROOT"},
+		{"tag", "ROOT"},
+		{"tag", "ROOT", "reviewed"},
+		{"mv", "ROOT", "OTHER"},
+		{"candidate", "show", "ROOT"},
+		{"candidate", "compare", "ROOT"},
+		{"candidate", "discard", "ROOT"},
+		{"seal", "ROOT"},
+		{"recover", "show"},
+		{"recover", strings.Repeat("0", 32)},
+		{"ref", "drop", "ROOT"},
+		{"show", "ROOT"},
+		{"log", "ROOT"},
+		{"linklog", "ROOT"},
+		{"compare", "ROOT", "ROOT"},
+		{"status"},
+		{"stale"},
+		{"impact", "ROOT"},
+		{"graph"},
+		{"fsck"},
+		{"load-receipt", "--source-document-sha256", strings.Repeat("0", 64)},
+	}
+	for _, args := range commands {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			code, stdout, stderr := runCLI(t, dir, nil, args...)
+			if code != 1 || stdout != "" || !strings.Contains(stderr, "FORMAT4_REQUIRES_MIGRATION") {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+		})
+	}
+}
+
+func TestCLIFormat5BinaryExtractsFormat4AndLoadsFormat5(t *testing.T) {
+	source := t.TempDir()
+	makeCLIFormat4Repository(t, source)
+	code, document, stderr := runCLI(t, source, nil, "migrate", "extract", "--source-format", "4", "--format", "universal-blob-v1")
+	if code != 0 || stderr != "" {
+		t.Fatalf("extract code=%d stderr=%s", code, stderr)
+	}
+	if _, err := migration.DecodeUniversalBlobV1([]byte(document)); err != nil {
+		t.Fatalf("extract document: %v", err)
+	}
+	destination := t.TempDir()
+	code, receipt, stderr := runCLI(t, destination, []byte(document), "load", "--format", "universal-blob-v1")
+	if code != 0 || stderr != "" || !strings.Contains(receipt, `"schema":"sealgraph/universal-blob-load-receipt/v1"`) {
+		t.Fatalf("load code=%d receipt=%s stderr=%s", code, receipt, stderr)
+	}
+	if output := mustRunCLI(t, destination, "show", "ROOT"); !strings.Contains(output, `"format-4 through format-5"`) {
+		t.Fatalf("migrated show=%s", output)
+	}
+}
+
+func TestCLIMigrateExtractReportsOutputSinkFailure(t *testing.T) {
+	source := t.TempDir()
+	makeCLIFormat4Repository(t, source)
+	var stderr bytes.Buffer
+	code := runStandaloneAtWithInput(source, []string{"migrate", "extract", "--source-format", "4", "--format", "universal-blob-v1"}, bytes.NewReader(nil), errorWriter{}, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "write universal-blob-v1 document") || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestCLIMigrateExtractRequiresExactOptions(t *testing.T) {
+	for _, args := range [][]string{{"migrate"}, {"migrate", "other"}, {"migrate", "extract"}, {"migrate", "extract", "--source-format", "5", "--format", "universal-blob-v1"}, {"migrate", "extract", "--source-format", "4", "--format", "other"}, {"migrate", "extract", "--source-format", "4", "--source-format", "4", "--format", "universal-blob-v1"}} {
+		code, stdout, _ := runCLI(t, t.TempDir(), nil, args...)
+		if code != 2 || stdout != "" {
+			t.Fatalf("%v code=%d stdout=%q", args, code, stdout)
+		}
+	}
+}
+
+func makeCLIFormat4Repository(t *testing.T, dir string) {
+	t.Helper()
+	root := filepath.Join(dir, ".sealgraph")
+	for _, relative := range []string{"objects", filepath.Join("refs", "seals"), "index", "locks"} {
+		if err := os.MkdirAll(filepath.Join(root, relative), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "config"), []byte("repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	objectStore := native.NewObjectStore(root)
+	contentID, err := objectStore.WriteBlob(context.Background(), []byte("format-4 through format-5"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := domain.SealPayload{Schema: domain.SealSchema, Content: domain.ContentRef{Store: domain.NativeStore, Type: domain.BlobType, ID: contentID}, Attachments: []domain.Attachment{}, Links: []domain.Link{}, Root: true}
+	payloadBytes, err := canonical.EncodeSeal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealID, err := objectStore.WriteBlob(context.Background(), payloadBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := native.NewRefStore(root).Update(context.Background(), "ROOT", nil, &sealID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type errorWriter struct{}
+
+func (errorWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestCLIFormat5DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
 		t.Fatal(stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "dump", "--format", "logical-v1"); code != 2 || stdout != "" || !strings.Contains(stderr, `unknown command "dump"`) {
+	if code, stdout, stderr := runCLI(t, dir, nil, "dump", "--format", "universal-blob-v1"); code != 2 || stdout != "" || !strings.Contains(stderr, `unknown command "dump"`) {
 		t.Fatalf("dump code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	for _, args := range [][]string{{"graph"}, {"stale", "--scan"}} {
@@ -774,7 +948,7 @@ func TestCLIFormat3DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
 			t.Fatalf("%v code=%d stderr=%s", args, code, stderr)
 		}
 	}
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
 	rootID := mustSealCLI(t, dir, "root")
 	if stdout := mustRunCLI(t, dir, "tag", "root", "reviewed/1.0"); !strings.Contains(stdout, rootID) {
 		t.Fatalf("tag create stdout=%s", stdout)
@@ -805,20 +979,30 @@ func verifyMovedTagScope(t *testing.T, dir, rootID string) {
 	}
 }
 
-func TestCLILoadRequiresSingleKnownFormatAndAbsentTarget(t *testing.T) {
-	input := cliLogicalDump(t)
-	for _, args := range [][]string{{"load"}, {"load", "--format", "other"}, {"load", "--format", "logical-v1", "extra"}, {"load", "--format", "logical-v1", "--format", "logical-v1"}} {
-		code, stdout, _ := runCLI(t, t.TempDir(), input, args...)
+func TestCLILoadRequiresSingleUniversalBlobFormat(t *testing.T) {
+	for _, args := range [][]string{{"load"}, {"load", "--format", "other"}, {"load", "--format", "universal-blob-v1", "extra"}, {"load", "--format", "universal-blob-v1", "--format", "universal-blob-v1"}} {
+		code, stdout, _ := runCLI(t, t.TempDir(), nil, args...)
 		if code != 2 || stdout != "" {
 			t.Fatalf("%v code=%d stdout=%s", args, code, stdout)
 		}
 	}
 	dir := t.TempDir()
-	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
-		t.Fatal(stderr)
-	}
-	if code, stdout, stderr := runCLI(t, dir, input, "load", "--format", "logical-v1"); code != 1 || stdout != "" || !strings.Contains(stderr, "already exists") {
+	mustRunCLI(t, dir, "init")
+	code, stdout, stderr := runCLI(t, dir, cliUniversalDump(t), "load", "--format", "universal-blob-v1")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "already exists") {
 		t.Fatalf("existing load code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+}
+
+func TestCLILoadReceiptRequiresOneLowerHexDigest(t *testing.T) {
+	for _, args := range [][]string{{"load-receipt"}, {"load-receipt", "--source-document-sha256", "nope"}, {"load-receipt", "--source-document-sha256", strings.Repeat("0", 64), "extra"}, {"load-receipt", "--source-document-sha256", strings.Repeat("0", 64), "--source-document-sha256", strings.Repeat("0", 64)}} {
+		code, stdout, _ := runCLI(t, t.TempDir(), nil, args...)
+		if code != 2 && !(len(args) == 3 && args[2] == "nope" && code == 1) {
+			t.Fatalf("%v code=%d stdout=%s", args, code, stdout)
+		}
+		if stdout != "" {
+			t.Fatalf("%v emitted stdout=%q", args, stdout)
+		}
 	}
 }
 
@@ -850,21 +1034,23 @@ func newCLIRevisionFixture(t *testing.T) cliRevisionFixture {
 	t.Helper()
 	dir := t.TempDir()
 	mustRunCLI(t, dir, "init")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root-v1")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root-v1")
 	root1 := mustSealCLI(t, dir, "root")
-	mustRunCLI(t, dir, "add", "middle", "--content", "middle", "--depend-on", "root")
+	mustRunCLI(t, dir, "add", "middle", "--content", "middle", "--non-root", "--target", "root", "--no-previous")
 	mustSealCLI(t, dir, "middle")
-	mustRunCLI(t, dir, "add", "leaf", "--content", "leaf", "--depend-on", "middle")
+	mustRunCLI(t, dir, "add", "leaf", "--content", "leaf", "--non-root", "--target", "middle", "--no-previous")
 	mustSealCLI(t, dir, "leaf")
-	mustRunCLI(t, dir, "add", "root", "--root", "--content", "root-v2")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root-v2")
 	root2 := mustSealCLI(t, dir, "root")
+	mustRunCLI(t, dir, "add", "revision-observer", "--content", "root revision evidence", "--non-root", "--target", "root", "--previous", "@"+root1)
+	mustSealCLI(t, dir, "revision-observer")
 	return cliRevisionFixture{dir: dir, root1: root1, root2: root2}
 }
 
-func TestCLIRevisionGraphDeriveStaleHistoryAndImpact(t *testing.T) {
+func TestCLIRevisionGraphStaleHistoryAndImpact(t *testing.T) {
 	fixture := newCLIRevisionFixture(t)
 	verifyCLIStaleAndImpact(t, fixture)
-	verifyCLIDeriveAndHistory(t, fixture)
+	verifyCLIComparisonAndHistory(t, fixture)
 }
 
 func verifyCLIStaleAndImpact(t *testing.T, fixture cliRevisionFixture) {
@@ -881,14 +1067,9 @@ func verifyCLIStaleAndImpact(t *testing.T, fixture cliRevisionFixture) {
 	}
 }
 
-func verifyCLIDeriveAndHistory(t *testing.T, fixture cliRevisionFixture) {
+func verifyCLIComparisonAndHistory(t *testing.T, fixture cliRevisionFixture) {
 	t.Helper()
-	stdout := mustRunCLI(t, fixture.dir, "derive", "preserved", "--from", "@"+fixture.root1)
-	if !strings.Contains(stdout, "parent="+fixture.root1) {
-		t.Fatalf("derive stdout=%q", stdout)
-	}
-	mustSealCLI(t, fixture.dir, "preserved")
-	stdout = mustRunCLI(t, fixture.dir, "compare", "root")
+	stdout := mustRunCLI(t, fixture.dir, "compare", "@"+fixture.root1, "root")
 	if !strings.Contains(stdout, "From Seal ID (prefix)") || !strings.Contains(stdout, fixture.root1[:12]) || !strings.Contains(stdout, "To Seal ID (prefix)") || !strings.Contains(stdout, fixture.root2[:12]) {
 		t.Fatalf("diff stdout=%q", stdout)
 	}

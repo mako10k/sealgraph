@@ -369,7 +369,7 @@ Repository-wide `@SEAL_TOKEN` accepts only `[0-9a-f]{4,64}`, resolves uniquely
 against `I_O`, and does not assert revision membership.
 
 Format 5 retains ADR 0006's TAGNAME reservation: a raw TAGNAME matching
-`[0-9a-f]{4,64}` is invalid. Format-4 exporters and format-5 manifest readers
+`[0-9a-f]{4,64}` is invalid. Format-4 migration extractors and format-5 manifest readers
 reject such a name as invalid canonical state rather than retaining an
 unaddressable tag. No forced-tag selector or hex-to-tag fallback is added.
 

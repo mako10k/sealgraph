@@ -1,6 +1,6 @@
 // Package v5 defines the domain model selected by the accepted format-5 ADRs.
-// It is versioned separately so the checked-in format-4 runtime cannot
-// accidentally treat format-5 bytes as format-4 state during the transition.
+// The explicit version boundary prevents migration-only format-4 payloads from
+// being treated as live format-5 repository state.
 package v5
 
 import "github.com/mako10k/sealgraph/internal/domain"
@@ -59,4 +59,33 @@ type Candidate struct {
 	Root            bool             `json:"root"`
 	Draft           bool             `json:"draft"`
 	CauseLinks      []CauseLink      `json:"cause_links"`
+}
+
+// ResolvedSeal is the repository reader's typed join of a Seal Blob and the
+// exact Material and Provenance Blobs it names. ID is the Seal BlobID; the
+// embedded records retain the two typed child IDs and their validated values.
+// It is an in-memory view and is never encoded as a canonical object.
+type ResolvedSeal struct {
+	ID           domain.ObjectID
+	Seal         Seal
+	Material     Material
+	Provenance   Provenance
+	ContentBytes int
+}
+
+// AssertionSource retains the exact immutable observer that contributed one
+// Cause-Link-scoped revision assertion to an observation.
+type AssertionSource struct {
+	ObserverSeal       domain.ObjectID
+	ObserverProvenance domain.ObjectID
+	CauseLink          CauseLink
+}
+
+// RevisionObservation exposes every observed assertion for one target and the
+// sorted structural union of the asserted previous SealIDs.
+type RevisionObservation struct {
+	TargetSeal         domain.ObjectID
+	PreviousStates     []string
+	Assertions         []AssertionSource
+	StructuralPrevious []domain.ObjectID
 }
