@@ -42,6 +42,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0025-universal-blob-seal-material-and-provenance.md`](adr/0025-universal-blob-seal-material-and-provenance.md)
 - [`adr/0026-format4-to-universal-blob-migration.md`](adr/0026-format4-to-universal-blob-migration.md)
 - [`adr/0027-format5-cli-authoring-and-inspection-schemas.md`](adr/0027-format5-cli-authoring-and-inspection-schemas.md)
+- [`adr/0028-upstream-impact-assessment.md`](adr/0028-upstream-impact-assessment.md)
 
 ## Agent-auditable design
 
@@ -75,6 +76,8 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/operator-contract-acceptance-2026-08-17.md`](process/operator-contract-acceptance-2026-08-17.md)
 - [`process/local-ref-recovery-contract-acceptance-2026-08-17.md`](process/local-ref-recovery-contract-acceptance-2026-08-17.md)
 - [`process/cause-scoped-revision-decision-review-2026-08-28.md`](process/cause-scoped-revision-decision-review-2026-08-28.md)
+- [`process/upstream-impact-assessment-decision-2026-08-31.md`](process/upstream-impact-assessment-decision-2026-08-31.md)
+- [`process/upstream-impact-assessment-acceptance-2026-08-31.md`](process/upstream-impact-assessment-acceptance-2026-08-31.md)
 - [`process/standalone-beta-acceptance-2026-08-17.md`](process/standalone-beta-acceptance-2026-08-17.md)
 - [`process/release-v0.1.0-beta.2-receipt.md`](process/release-v0.1.0-beta.2-receipt.md)
 - [`process/release-v0.1.0-beta.3-checklist.md`](process/release-v0.1.0-beta.3-checklist.md)
