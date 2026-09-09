@@ -65,6 +65,11 @@ It creates canonical `objects` and `refs/seals` plus empty runtime `index` and
 `locks`. It never detects or inspects Git. A complete format-5 repository is
 idempotent; missing safe runtime directories may be bootstrapped explicitly.
 
+New repositories also include a recommended `.sealgraph/.gitignore` excluding
+local runtime directories and canonical-write temporary files (see the storage
+format's Git tracking section). It leaves canonical files trackable. Re-running
+`init` neither adds a missing `.gitignore` nor overwrites an existing one.
+
 An exact format-4 config fails before mutation with
 `FORMAT4_REQUIRES_MIGRATION` and this sequence:
 

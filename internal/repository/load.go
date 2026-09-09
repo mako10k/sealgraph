@@ -300,7 +300,7 @@ func verifyUniversalLoadModes(root string) error {
 
 func expectedUniversalLoadFileMode(relative string) (os.FileMode, bool) {
 	switch {
-	case relative == "config":
+	case relative == "config", relative == ".gitignore":
 		return 0o644, true
 	case strings.HasPrefix(relative, "objects/"):
 		return 0o444, true

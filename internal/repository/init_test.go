@@ -3,10 +3,81 @@ package repository
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestInitGitignorePolicy(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("Git is required to check ignore semantics")
+	}
+	dir := t.TempDir()
+	if _, err := InitStandalone(dir); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", "--quiet", dir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	for path, ignored := range map[string]bool{
+		"index/design/.candidate": true, "index/design/.track": true,
+		"cache/graph": true, "locks/writer": true, "logs/recovery/record.json": true,
+		"objects/ab/.tmp-object-123":         true,
+		"refs/seals/design/.tmp-ref-123":     true,
+		"refs/seals/design/api/.tmp-ref-123": true,
+		".gitignore":                         false, "config": false,
+		"objects/ab/" + strings.Repeat("c", 62): false,
+		"refs/seals/design/.ref":                false,
+		"refs/seals/index/.ref":                 false, "refs/seals/cache/.ref": false,
+		"refs/seals/locks/.ref": false, "refs/seals/logs/.ref": false,
+	} {
+		t.Run(path, func(t *testing.T) {
+			cmd := exec.Command("git", "-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "--quiet", "--", ".sealgraph/"+path)
+			cmd.Dir = dir
+			output, err := cmd.CombinedOutput()
+			var exitErr *exec.ExitError
+			if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
+				t.Fatalf("check-ignore: %v: %s", err, output)
+			}
+			if (err == nil) != ignored {
+				t.Fatalf("ignored=%v, want %v", err == nil, ignored)
+			}
+		})
+	}
+}
+
+func TestReinitPreservesGitignorePolicy(t *testing.T) {
+	for _, absent := range []bool{false, true} {
+		dir := t.TempDir()
+		if _, err := InitStandalone(dir); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, ".sealgraph", ".gitignore")
+		custom := []byte("# custom policy\n/cache/\n")
+		var err error
+		if absent {
+			err = os.Remove(path)
+		} else {
+			err = os.WriteFile(path, custom, 0o644)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result, err := InitStandalone(dir); err != nil || result.Outcome != InitAlreadyComplete {
+			t.Fatalf("reinit result=%+v err=%v", result, err)
+		}
+		got, err := os.ReadFile(path)
+		if absent {
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("missing gitignore was recreated: %v", err)
+			}
+		} else if err != nil || string(got) != string(custom) {
+			t.Fatalf("custom gitignore changed: %q, %v", got, err)
+		}
+	}
+}
 
 func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	plain := t.TempDir()
@@ -20,7 +91,7 @@ func TestInitIsIndependentOfGitRepositoryPresence(t *testing.T) {
 	if result, err := InitStandalone(insideGit); err != nil || result.Outcome != InitInitialized {
 		t.Fatalf("inside Git init result=%+v err=%v", result, err)
 	}
-	for _, relative := range []string{"config", "objects", filepath.Join("refs", "seals"), "index", "locks"} {
+	for _, relative := range []string{"config", ".gitignore", "objects", filepath.Join("refs", "seals"), "index", "locks"} {
 		plainInfo, plainErr := os.Stat(filepath.Join(plain, ".sealgraph", relative))
 		gitInfo, gitErr := os.Stat(filepath.Join(insideGit, ".sealgraph", relative))
 		if plainErr != nil || gitErr != nil || plainInfo.IsDir() != gitInfo.IsDir() {
@@ -42,7 +113,7 @@ func TestInitCreatesExplicitFormat5Modes(t *testing.T) {
 		t.Fatalf("config=%q err=%v", configBytesOnDisk, err)
 	}
 	for relative, expected := range map[string]os.FileMode{
-		".": 0o755, "config": 0o644, "objects": 0o755,
+		".": 0o755, "config": 0o644, ".gitignore": 0o644, "objects": 0o755,
 		"refs": 0o755, filepath.Join("refs", "seals"): 0o755,
 		"index": 0o755, "locks": 0o755,
 	} {

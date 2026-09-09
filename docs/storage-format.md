@@ -8,6 +8,7 @@ runtime readers never interpret formats 1 through 4.
 
 ```text
 .sealgraph/
+├── .gitignore                       # recommended outer-Git policy, non-canonical
 ├── config
 ├── objects/
 │   └── aa/
@@ -297,6 +298,21 @@ and `refs/seals/**/.ref` manifests as ordinary exact-byte files. It must not
 stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or
 temporary paths. LFS, clean/smudge filters, working-tree encoding, and
 line-ending transformation over canonical paths are unsupported.
+
+New standalone `init` repositories include this recommended `.gitignore`:
+
+```gitignore
+/index/
+/cache/
+/locks/
+/logs/
+/objects/*/.tmp-object-*
+/refs/seals/**/.tmp-ref-*
+```
+
+The file itself may be tracked by outer Git but is not canonical provenance.
+It is created without detecting or inspecting Git. Existing repositories keep
+their current policy: re-running `init` does not create or overwrite this file.
 
 ## 12. Non-canonical local recovery journal
 

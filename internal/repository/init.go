@@ -12,6 +12,17 @@ const (
 	format4ConfigBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
 )
 
+const recommendedGitignore = `# Local runtime state; keep config, objects and REF manifests tracked.
+/index/
+/cache/
+/locks/
+/logs/
+
+# Temporary files used for atomic canonical writes.
+/objects/*/.tmp-object-*
+/refs/seals/**/.tmp-ref-*
+`
+
 const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary format-5 operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
 
 type InitOutcome string
@@ -64,6 +75,9 @@ func InitStandalone(workDir string) (InitResult, error) {
 	}
 	if err := writeSyncedFile(filepath.Join(staging, "config"), []byte(configBytes), 0o644); err != nil {
 		return InitResult{}, fmt.Errorf("write repository config: %w", err)
+	}
+	if err := writeSyncedFile(filepath.Join(staging, ".gitignore"), []byte(recommendedGitignore), 0o644); err != nil {
+		return InitResult{}, fmt.Errorf("write recommended gitignore: %w", err)
 	}
 	if err := syncStagingTree(staging); err != nil {
 		return InitResult{}, fmt.Errorf("synchronize initialization staging tree: %w", err)
