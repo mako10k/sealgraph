@@ -1,31 +1,33 @@
-# Initial implementation plan
+# Sealgraph implementation plan
 
-Status: historical execution plan through the standalone beta. The checked-in
-runtime now uses format 4 and has completed the format-4 native, migration,
-operator-contract, full-inventory `fsck`, and recurring-dogfood slices.
-`PLAN.pert` is the current perttool projection. Attachment mutation and the
-separately gated Git sidecar remain future work.
+Status: current through the accepted format-6 Cause Link metadata decision set.
+The checked-in runtime, normative documents, and tracked dogfood use format 5;
+the Cause-scoped revision contract, format/runtime slices, and normative sync
+are complete. `PLAN.pert` is the current perttool projection. Attachment
+mutation and the separately gated Git sidecar remain future work.
 
-## Current format-4 frontier
+## Current format-6 Link metadata frontier
 
 Proceed in this order; do not partially mix formats:
 
-1. [x] add deterministic read-only logical dump to the format-3 binary;
-2. [x] implement format-4 canonical Seal/candidate bytes and fixture hashes;
-3. [x] add empty-repository load with complete old-to-new mapping;
-4. [x] implement active revision indexing, `derive`, `add --parent`, active-leaf
-   admission, stale cache/`--scan`, history, frontier, and bounded impact;
-5. [x] resolve the rename-safe tag namespace and narrow crash-safe `mv`;
-6. [x] explicitly convert tracked dogfood and exercise a same-material sibling;
-7. add read-only native tree views before selecting a Git SDK;
-8. prove staged/commit/merge-stage behavior in temporary SHA-1/SHA-256
-   repositories, then add validation-only hook dispatch.
+1. [x] deliver and synchronize the accepted format-5 Cause-scoped revision,
+   Universal Blob, migration, CLI, inspection, and tracked-dogfood baseline;
+2. [x] accept the extensible Cause Link metadata requirement and ADRs 0029,
+   0030, and 0031;
+3. [ ] implement Seal v6, Provenance v2, Candidate v6, canonical bounded
+   metadata, exact historical v5 reading, v6-only writes, change identity, and
+   the config-only migration primitive;
+4. [ ] implement one-namespace Candidate mutation, legacy authoring
+   preservation, successor human/JSON inspection, comparison, typed `linklog`,
+   and the exact public migration command and receipt; and
+5. [ ] synchronize requirements, architecture, storage format, CLI,
+   integrations, help, completion, fixtures, and full validation.
 
-The runtime and tracked project dogfood now use format 4 with
-`ref_format = manifest-v1`. The source format-3 state remains available from
-outer Git history, and the explicit dump/load identity receipt records every
-rewritten Seal, REF, and tag. Release claims stay blocked until the remaining
-product, recurring-dogfood, and release gates pass.
+This reconciliation starts none of the three unchecked implementation tasks.
+Migrating the project repository, committing, pushing, releasing, deploying,
+or starting the Git sidecar remains separately authorized. The format-4 and
+earlier sections below are historical implementation context, not the current
+runtime frontier.
 
 ## Historical implementation phases
 

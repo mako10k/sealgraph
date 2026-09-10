@@ -1,6 +1,9 @@
 # ADR 0017: Generic Link Metadata and read-only query boundary
 
-Status: proposed on 2026-08-17; implementation requires explicit acceptance.
+Status: Rejected on 2026-09-10; replaced by accepted
+[ADR 0029](0029-extensible-cause-link-metadata.md). Its format-4 Link shape,
+reserved virtual namespace, SealGraphQL design, and implementation scope were
+not adopted.
 
 ## Context
 
