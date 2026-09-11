@@ -9,6 +9,7 @@ import (
 )
 
 var benchmarkStaleStatuses []RefStatus
+var benchmarkImpactPaths [][]domain.ObjectID
 
 func TestStaleFactsMemoizeSharedCauseSubgraphWithoutChangingPaths(t *testing.T) {
 	graph, heads := sharedCauseBenchmarkGraph(2, 3)
@@ -40,6 +41,24 @@ func TestFrontierMemoizesSharedCauseClosure(t *testing.T) {
 	}
 }
 
+func TestImpactPathsRetainBoundedShortestLexicalOrder(t *testing.T) {
+	head := benchmarkObjectID(1)
+	first := benchmarkObjectID(2)
+	second := benchmarkObjectID(3)
+	third := benchmarkObjectID(4)
+	bridge := benchmarkObjectID(5)
+	graph := &observedGraph{causes: map[string][]domain.ObjectID{
+		head.String():   {first, second, bridge},
+		bridge.String(): {third},
+	}}
+	sources := map[string]bool{first.String(): true, second.String(): true, third.String(): true}
+	paths := graph.impactPaths(head, sources, 2, make(map[string][][]domain.ObjectID))
+	want := [][]domain.ObjectID{{head, first}, {head, second}}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths=%v, want %v", paths, want)
+	}
+}
+
 func BenchmarkStaleFactsSharedCauseSubgraph(b *testing.B) {
 	const (
 		headCount = 2_000
@@ -59,6 +78,17 @@ func BenchmarkStaleFactsSharedCauseSubgraph(b *testing.B) {
 			})
 		}
 		benchmarkStaleStatuses = statuses
+	}
+}
+
+func BenchmarkImpactPathsSharedNoMatch(b *testing.B) {
+	const depth = 16
+	graph, head := sharedDiamondBenchmarkGraph(depth)
+	sources := map[string]bool{benchmarkObjectID(10_000).String(): true}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		benchmarkImpactPaths = graph.impactPaths(head, sources, 2, make(map[string][][]domain.ObjectID))
 	}
 }
 
@@ -92,4 +122,20 @@ func sharedCauseBenchmarkGraph(headCount, depth int) (*observedGraph, []domain.O
 
 func benchmarkObjectID(value int) domain.ObjectID {
 	return domain.ObjectID{Hex: fmt.Sprintf("%064x", value)}
+}
+
+func sharedDiamondBenchmarkGraph(depth int) (*observedGraph, domain.ObjectID) {
+	graph := &observedGraph{causes: make(map[string][]domain.ObjectID)}
+	head := benchmarkObjectID(1)
+	current := head
+	for index := range depth {
+		left := benchmarkObjectID(2 + index*3)
+		right := benchmarkObjectID(3 + index*3)
+		next := benchmarkObjectID(4 + index*3)
+		graph.causes[current.String()] = []domain.ObjectID{left, right}
+		graph.causes[left.String()] = []domain.ObjectID{next}
+		graph.causes[right.String()] = []domain.ObjectID{next}
+		current = next
+	}
+	return graph, head
 }
