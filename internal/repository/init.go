@@ -9,6 +9,7 @@ import (
 
 const (
 	configBytes        = "repository_format = 5\nobject_format = sha256\nref_format = manifest-v1\n"
+	format6ConfigBytes = "repository_format = 6\nobject_format = sha256\nref_format = manifest-v1\n"
 	format4ConfigBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
 )
 
@@ -23,7 +24,7 @@ const recommendedGitignore = `# Local runtime state; keep config, objects and RE
 /refs/seals/**/.tmp-ref-*
 `
 
-const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary format-5 operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
+const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary repository operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
 
 type InitOutcome string
 
@@ -98,7 +99,7 @@ func InitStandalone(workDir string) (InitResult, error) {
 }
 
 func validateLayout(repositoryDir string) error {
-	if err := validateCanonicalLayout(repositoryDir); err != nil {
+	if _, err := validateFormatLayout(repositoryDir); err != nil {
 		return err
 	}
 	for _, relative := range []string{"index", "locks"} {
@@ -109,38 +110,60 @@ func validateLayout(repositoryDir string) error {
 	return nil
 }
 
-func validateCanonicalLayout(repositoryDir string) error {
+func repositoryFormat(repositoryDir string) (int, error) {
 	configPath := filepath.Join(repositoryDir, "config")
 	configInfo, err := os.Lstat(configPath)
 	if err != nil {
-		return fmt.Errorf("inspect config: %w", err)
+		return 0, fmt.Errorf("inspect config: %w", err)
 	}
 	if !configInfo.Mode().IsRegular() || configInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("config is not a regular file")
+		return 0, fmt.Errorf("config is not a regular file")
 	}
 	config, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read config: %w", err)
+		return 0, fmt.Errorf("read config: %w", err)
 	}
-	if string(config) == format4ConfigBytes {
-		return errors.New(format4MigrationGuide)
+	switch string(config) {
+	case configBytes:
+		return 5, nil
+	case format6ConfigBytes:
+		return 6, nil
+	case format4ConfigBytes:
+		return 0, errors.New(format4MigrationGuide)
+	default:
+		return 0, fmt.Errorf("unsupported or malformed config")
 	}
-	if string(config) != configBytes {
-		return fmt.Errorf("unsupported or malformed config")
+}
+
+func validateFormatLayout(repositoryDir string) (int, error) {
+	format, err := repositoryFormat(repositoryDir)
+	if err != nil {
+		return 0, err
 	}
 	for _, relative := range []string{"objects", "refs", filepath.Join("refs", "seals")} {
 		if err := validateRealDirectory(filepath.Join(repositoryDir, relative), relative); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	entries, err := os.ReadDir(filepath.Join(repositoryDir, "refs"))
 	if err != nil {
-		return fmt.Errorf("list canonical refs directory: %w", err)
+		return 0, fmt.Errorf("list canonical refs directory: %w", err)
 	}
 	for _, entry := range entries {
 		if entry.Name() != "seals" {
-			return fmt.Errorf("unexpected canonical refs entry %q; format 5 manifest-v1 stores tags inside refs/seals/<REF>/.ref", entry.Name())
+			return 0, fmt.Errorf("unexpected canonical refs entry %q; manifest-v1 stores tags inside refs/seals/<REF>/.ref", entry.Name())
 		}
+	}
+	return format, nil
+}
+
+func validateCanonicalLayout(repositoryDir string) error {
+	format, err := validateFormatLayout(repositoryDir)
+	if err != nil {
+		return err
+	}
+	if format != 5 {
+		return fmt.Errorf("init supports repository format 5; found format %d", format)
 	}
 	return nil
 }

@@ -1,8 +1,10 @@
 # Sealgraph requirements
 
-Status: normative format-5 contract. Accepted ADRs 0023, 0025, 0026, and 0027
-replace the incompatible format-4 Seal, revision, migration, and CLI contracts.
-The checked-in runtime creates format 5 only and fails closed on format 4.
+Status: normative format-5 and format-6 contract. Accepted ADRs 0023, 0025,
+0026, and 0027 define the format-5 boundary. Accepted ADRs 0029, 0030, and
+0031 add the format-6 Cause Link metadata, storage/migration, and CLI/output
+boundary. New repositories initialize as format 5; format 6 is entered only by
+the explicit 5-to-6 migration. Both fail closed on format 4 in ordinary use.
 
 ## 1. Purpose
 
@@ -64,7 +66,7 @@ Seal-level `actor`, `created_at`, event `message`, and equivalent operation
 metadata are outside material/provenance identity. When needed, such a claim is
 ordinary separately sealed content linked to its exact subject generation.
 
-Format 5 has no intrinsic parent field. Revision evidence exists only inside a
+Formats 5 and 6 have no intrinsic parent field. Revision evidence exists only inside a
 Cause Link made by one immutable observer. A target MAY have multiple asserted
 previous revisions and multiple observers; branching is valid. An assertion
 MUST NOT imply preference, truth, trust, approval, or same-REF ownership.
@@ -92,6 +94,14 @@ A format-5 Cause Link contains exactly `target_seal`, the sorted duplicate-free
 the containing observer. Link messages are identity-bearing but do not assert
 actor, authority, trusted time, or a seal-operation event.
 
+A format-6 Cause Link adds a required `metadata` array. Each entry contains a
+unique non-empty UTF-8 `namespace`, a nullable non-empty UTF-8 `schema`, and one
+bounded canonical JSON `value`. Entries sort bytewise by namespace. Metadata is
+opaque to core, identity-bearing, and observer-local; it MUST NOT imply a new
+edge, authority, validation success, approval, or trusted event. Secret
+plaintext remains forbidden. Format-5 Cause Links project to empty metadata
+only in shared inspection views; their historical bytes and IDs never change.
+
 `--target TARGET`, `--previous PREVIOUS`, and related selector inputs resolve
 to exact full SealIDs before Candidate persistence. Dynamic HEAD pointers and
 selector spelling MUST NOT be persisted.
@@ -101,9 +111,11 @@ The CLI MUST also support explicit historical generation selection.
 Selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
 `REF@TOKEN`. A repository-wide `SEAL_TOKEN` is 4 through 64 lower-case hex
 characters, resolves uniquely across the native ODB, and must decode as a
-canonical format-5 Seal. `REF@hex` instead resolves uniquely within the REF's
-current HEAD plus observed structural revision closure; unrelated loose objects
-do not participate in that scoped prefix match.
+canonical Seal generation permitted by the current repository format. Format 5
+therefore accepts Seal v5 only; format 6 accepts valid Seal v5 and Seal v6
+objects with their exact required Provenance pairing. `REF@hex` instead resolves
+uniquely within the REF's current HEAD plus observed structural revision closure;
+unrelated loose objects do not participate in that scoped prefix match.
 `REF@non-hex`
 resolves an immutable tag in that REF's UI namespace. Only the resolved full
 SealID is persisted.
@@ -230,8 +242,9 @@ repository or machine must verify.
 
 ## 6. Working candidate
 
-`add`, `link`, and `unlink` edit the next Candidate state for one destination
-REF. Attachment mutation commands are intentionally absent.
+`add`, `link`, `unlink`, and, in format 6, `link-metadata set/remove` edit the
+next Candidate state for one destination REF. Attachment mutation commands are
+intentionally absent.
 
 `add` MAY specify dependencies atomically with content creation/update:
 
@@ -259,6 +272,23 @@ removes exactly one target record. Neither operation unions omitted values,
 associates positional arguments, changes another target, or creates a Seal.
 Multiple targets require separate reviewed Candidate mutations. `derive` and
 `add --parent` are absent.
+
+In format 6, legacy `add`/`link` authoring preserves existing metadata on the
+same exact target and creates empty metadata for a new target. Only
+`link-metadata set` adds or replaces one complete namespace entry, and only
+`link-metadata remove` removes one existing namespace. Both operations require
+an existing Candidate or REF baseline and exact Cause target, preserve every
+unselected field, validate the complete successor graph, and replace one
+expected-old Candidate version. They never migrate, seal, move a REF, interpret
+metadata meaning, or perform a batch mutation.
+
+In a format-6 repository, reading Candidate v5 is side-effect free and projects
+empty Link metadata in memory. A successful separately authorized Candidate
+mutation writes the complete successor as Candidate v6. Publication never
+publishes Candidate v5 bytes directly or rewrites that file as a hidden
+preliminary action: it constructs and validates the exact in-memory Candidate-v6
+projection, creates Provenance v2 and Seal v6, and then follows the existing
+expected-old observation and one-REF CAS workflow.
 
 Candidate inspection MUST remain distinct from immutable `REF@TOKEN`
 selection. The standalone CLI MUST allow one candidate to be shown, compared
@@ -321,15 +351,30 @@ reachable Seal once by minimum depth unless bounded complete paths are
 explicitly requested. `linklog` compares exact Cause records across each
 structural revision edge and never infers a repoint.
 
-Successful machine output uses `show/v2`, `candidate-show/v2`,
+Successful format-5 machine output uses `show/v2`, `candidate-show/v2`,
 `candidate-compare/v2`, `status/v3`, `stale/v2`, `graph/v2`, `impact/v2`,
-`log/v2`, `linklog/v2`, `compare/v2`, and `fsck/v2`. A changed meaning MUST
-NOT be emitted under a format-4 schema identifier.
+`log/v2`, `linklog/v2`, `compare/v2`, and `fsck/v2`. In format 6, every listed
+schema containing Links, assertion sources, typed schema generations, or
+comparisons advances to `/v3`; `status/v3` and `stale/v2` remain unchanged.
+Format-6 shared Link records include complete metadata, typed Seal/Provenance
+generations, and detailed per-target/per-namespace comparison records as fixed
+by ADR 0031. A changed meaning MUST NOT be emitted under an older schema.
 
-Default human inspection MUST NOT emit arbitrary content or metadata bytes
-directly. It MUST use bounded, unambiguous escaping. Exact content extraction
-MAY be provided only by an explicit bytes-only mode whose stdout contains no
-mixed metadata or added newline.
+Format-6 Assessment-free change identity uses
+`sealgraph/upstream-change/v2`. It retains ADR 0028's established member order,
+and `after_cause_links` contains complete canonical format-6 Cause Links,
+including metadata. Format-6 operations emit and compare only v2 change IDs,
+even when every metadata array is empty; any metadata addition, replacement, or
+removal therefore changes `change_id`. Existing immutable v1 change and
+Assessment Blobs are not rewritten, and Assessment-reference persistence
+remains separately gated.
+
+Default human inspection MUST NOT emit arbitrary content bytes directly. It
+MUST use bounded, unambiguous escaping. In format 6, selected Link metadata is
+shown completely as bounded canonical JSON with namespace and schema; control
+characters remain escaped and format-5 projected emptiness is labeled. Exact
+content extraction MAY be provided only by an explicit bytes-only mode whose
+stdout contains no mixed metadata or added newline.
 
 Inspection output MUST default to width-aware human presentation when stdout
 is a terminal and to a versioned structured machine document when stdout is a
@@ -583,3 +628,25 @@ deletion, and garbage collection remain absent.
 namespace. An exact candidate or local source binding blocks it. It MUST NOT
 remove or modify a workfile, source binding, candidate, immutable object, Seal,
 Link, or downstream Seal, and it has no recursive, prefix, batch, or force form.
+
+## 16. Format-6 migration boundary
+
+The only format-5-to-format-6 transition is:
+
+```sh
+sealgraph migrate repository --from 5 --to 6 [--format human|json]
+```
+
+The transaction validates exact format-5 state, snapshots canonical objects,
+REF manifests, and Candidate bytes, atomically replaces only `config`, reopens
+under format 6, runs complete fsck/readback, and proves retained state unchanged.
+It MUST NOT rewrite a historical Seal, Provenance, Candidate, Material, REF, tag,
+or content Blob. A committed durability/readback/output uncertainty MUST state
+that migration may already be committed and MUST NOT authorize automatic retry.
+
+Format 6 reads historical Seal v5/Provenance v1 pairs and Candidate v5 files
+strictly and writes only Seal v6/Provenance v2 and Candidate v6 successors.
+Seal v6 MUST pair only with Provenance v2; Seal v5 MUST pair only with
+Provenance v1. Material remains v1. Mixed-generation observations are valid
+only through these exact pairings and never project metadata into historical
+identity.

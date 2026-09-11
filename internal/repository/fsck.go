@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
+	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/store"
@@ -18,15 +19,19 @@ import (
 
 type FsckReport struct {
 	Blobs, Seals, Materials, Provenances, REFs, Tags, ActiveSeals int
+	SealsV5, SealsV6, ProvenancesV1, ProvenancesV2                int
+	CandidatesV5, CandidatesV6                                    int
 	HistoricalOrDetachedSeals                                     []domain.ObjectID
 	UnreferencedBlobs                                             []domain.ObjectID
 }
 
 type fsckInventory struct {
-	objects     []store.Object
-	seals       map[string]domainv5.Seal
-	materials   map[string]domainv5.Material
-	provenances map[string]domainv5.Provenance
+	objects              []store.Object
+	seals                map[string]domainv5.Seal
+	materials            map[string]domainv5.Material
+	provenances          map[string]domainv5.Provenance
+	sealGeneration       map[string]int
+	provenanceGeneration map[string]int
 }
 type fsckTag struct {
 	REF, Name string
@@ -48,7 +53,7 @@ func (r *Repository) Fsck(ctx context.Context) (FsckReport, error) {
 	if err := validateFsckREFObservationPhysical(observation, physical); err != nil {
 		return FsckReport{}, err
 	}
-	inventory, err := fsckInventoryFromPhysical(ctx, physical)
+	inventory, err := fsckInventoryFromPhysicalFormat(ctx, physical, r.format)
 	if err != nil {
 		return FsckReport{}, err
 	}
@@ -68,14 +73,40 @@ func (r *Repository) Fsck(ctx context.Context) (FsckReport, error) {
 		allHeads["fsck/"+id] = domain.ObjectID{Hex: id}
 	}
 	if _, err := r.buildObservedGraph(ctx, allHeads, resolvedSeals); err != nil {
-		return FsckReport{}, fmt.Errorf("validate complete format-5 graph: %w", err)
+		return FsckReport{}, fmt.Errorf("validate complete repository graph: %w", err)
 	}
 	activeGraph, err := r.buildObservedGraph(ctx, observation.heads, resolvedSeals)
 	if err != nil {
-		return FsckReport{}, fmt.Errorf("validate active format-5 graph: %w", err)
+		return FsckReport{}, fmt.Errorf("validate active repository graph: %w", err)
 	}
 	referenced := fsckReferencedClosure(inventory)
-	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}}
+	candidatesV5, candidatesV6, err := r.fsckCandidateGenerations(ctx)
+	if err != nil {
+		return FsckReport{}, err
+	}
+	report := buildFsckReport(inventory, observation, tags, activeGraph, referenced, candidatesV5, candidatesV6)
+	if err := r.validateFsckFinalObservation(ctx, observation, physical); err != nil {
+		return FsckReport{}, err
+	}
+	return report, nil
+}
+
+func buildFsckReport(inventory fsckInventory, observation headObservation, tags []fsckTag, activeGraph *observedGraph, referenced map[string]bool, candidatesV5, candidatesV6 int) FsckReport {
+	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}, CandidatesV5: candidatesV5, CandidatesV6: candidatesV6}
+	for _, generation := range inventory.sealGeneration {
+		if generation == 5 {
+			report.SealsV5++
+		} else {
+			report.SealsV6++
+		}
+	}
+	for _, generation := range inventory.provenanceGeneration {
+		if generation == 1 {
+			report.ProvenancesV1++
+		} else {
+			report.ProvenancesV2++
+		}
+	}
 	for id := range inventory.seals {
 		if !activeGraph.active[id] {
 			report.HistoricalOrDetachedSeals = append(report.HistoricalOrDetachedSeals, domain.ObjectID{Hex: id})
@@ -88,10 +119,7 @@ func (r *Repository) Fsck(ctx context.Context) (FsckReport, error) {
 	}
 	sortIDs(report.HistoricalOrDetachedSeals)
 	sortIDs(report.UnreferencedBlobs)
-	if err := r.validateFsckFinalObservation(ctx, observation, physical); err != nil {
-		return FsckReport{}, err
-	}
-	return report, nil
+	return report
 }
 
 func validateFsckPhysicalRepository(observation physicalRepositoryObservation) error {
@@ -116,9 +144,13 @@ func validateFsckFixedPhysicalEntries(entries map[string]physicalEntryObservatio
 	if !ok || !config.Present || !config.Mode.IsRegular() {
 		return fmt.Errorf("CONFIG is absent or not a regular file")
 	}
-	expectedConfigDigest := sha256.Sum256([]byte(configBytes))
-	if config.Size != int64(len(configBytes)) || config.SHA256 != expectedConfigDigest {
-		return fmt.Errorf("CONFIG bytes are not the exact format-5 config")
+	expected := configBytes
+	if string(config.Data) == format6ConfigBytes {
+		expected = format6ConfigBytes
+	}
+	expectedConfigDigest := sha256.Sum256([]byte(expected))
+	if config.Size != int64(len(expected)) || config.SHA256 != expectedConfigDigest {
+		return fmt.Errorf("CONFIG bytes are not an exact supported config")
 	}
 	if err := requireFsckDirectory(entries, "objects"); err != nil {
 		return err
@@ -259,6 +291,11 @@ func validateFsckTypedReferences(inventory fsckInventory) error {
 		if _, ok := inventory.provenances[seal.Provenance.String()]; !ok {
 			return fmt.Errorf("Seal %s references Blob %s that is not canonical Provenance", id, seal.Provenance)
 		}
+		sealGeneration := inventory.sealGeneration[id]
+		provenanceGeneration := inventory.provenanceGeneration[seal.Provenance.String()]
+		if (sealGeneration == 5 && provenanceGeneration != 1) || (sealGeneration == 6 && provenanceGeneration != 2) {
+			return fmt.Errorf("Seal %s generation v%d cross-pairs with Provenance generation v%d", id, sealGeneration, provenanceGeneration)
+		}
 	}
 	for id, material := range inventory.materials {
 		if !objects[material.Content.String()] {
@@ -324,10 +361,14 @@ func (r *Repository) fsckInventory(ctx context.Context) (fsckInventory, error) {
 	if err != nil {
 		return fsckInventory{}, fmt.Errorf("inventory immutable Blobs: %w", err)
 	}
-	return classifyFsckObjects(objects), nil
+	return classifyFsckObjects(objects, r.format), nil
 }
 
 func fsckInventoryFromPhysical(ctx context.Context, physical physicalRepositoryObservation) (fsckInventory, error) {
+	return fsckInventoryFromPhysicalFormat(ctx, physical, 5)
+}
+
+func fsckInventoryFromPhysicalFormat(ctx context.Context, physical physicalRepositoryObservation, format int) (fsckInventory, error) {
 	objects := []store.Object{}
 	for _, entry := range physical.Entries {
 		if err := ctx.Err(); err != nil {
@@ -351,23 +392,62 @@ func fsckInventoryFromPhysical(ctx context.Context, physical physicalRepositoryO
 		objects = append(objects, object)
 	}
 	sort.Slice(objects, func(i, j int) bool { return objects[i].ID.String() < objects[j].ID.String() })
-	return classifyFsckObjects(objects), nil
+	return classifyFsckObjects(objects, format), nil
 }
 
-func classifyFsckObjects(objects []store.Object) fsckInventory {
-	result := fsckInventory{objects: objects, seals: make(map[string]domainv5.Seal), materials: make(map[string]domainv5.Material), provenances: make(map[string]domainv5.Provenance)}
+func classifyFsckObjects(objects []store.Object, format int) fsckInventory {
+	result := fsckInventory{objects: objects, seals: make(map[string]domainv5.Seal), materials: make(map[string]domainv5.Material), provenances: make(map[string]domainv5.Provenance), sealGeneration: make(map[string]int), provenanceGeneration: make(map[string]int)}
 	for _, object := range objects {
 		if value, err := canonicalv5.DecodeSeal(object.Data); err == nil {
 			result.seals[object.ID.String()] = value
+			result.sealGeneration[object.ID.String()] = 5
 		}
 		if value, err := canonicalv5.DecodeMaterial(object.Data); err == nil {
 			result.materials[object.ID.String()] = value
 		}
 		if value, err := canonicalv5.DecodeProvenance(object.Data); err == nil {
 			result.provenances[object.ID.String()] = value
+			result.provenanceGeneration[object.ID.String()] = 1
+		}
+		if format == 6 {
+			if value, err := canonicalv6.DecodeSeal(object.Data); err == nil {
+				result.seals[object.ID.String()] = value
+				result.sealGeneration[object.ID.String()] = 6
+			}
+			if value, err := canonicalv6.DecodeProvenance(object.Data); err == nil {
+				result.provenances[object.ID.String()] = value
+				result.provenanceGeneration[object.ID.String()] = 2
+			}
 		}
 	}
 	return result
+}
+
+func (r *Repository) fsckCandidateGenerations(ctx context.Context) (int, int, error) {
+	names, err := r.candidates.List()
+	if err != nil {
+		return 0, 0, fmt.Errorf("validate Candidate namespace for fsck: %w", err)
+	}
+	v5, v6 := 0, 0
+	for _, name := range names {
+		snapshot, err := r.candidates.LoadSnapshot(name)
+		if err != nil {
+			return 0, 0, err
+		}
+		if _, err := canonicalv6.DecodeCandidate(snapshot.Bytes); err == nil {
+			v6++
+		} else if _, err := canonicalv5.DecodeCandidate(snapshot.Bytes); err == nil {
+			v5++
+		} else {
+			return 0, 0, fmt.Errorf("Candidate %s has unsupported generation", name)
+		}
+		if r.format == 6 {
+			if _, err := r.InspectCandidate(ctx, name); err != nil {
+				return 0, 0, fmt.Errorf("validate Candidate %s closure for fsck: %w", name, err)
+			}
+		}
+	}
+	return v5, v6, nil
 }
 
 func fsckResolvedSeals(inventory fsckInventory) map[string]domainv5.ResolvedSeal {
@@ -389,12 +469,12 @@ func fsckResolvedSeals(inventory fsckInventory) map[string]domainv5.ResolvedSeal
 func validateFsckTargets(observation headObservation, tags []fsckTag, seals map[string]domainv5.Seal) error {
 	for _, ref := range observation.names {
 		if _, ok := seals[observation.heads[ref].String()]; !ok {
-			return fmt.Errorf("REF %s head %s is not a canonical format-5 Seal", ref, observation.heads[ref])
+			return fmt.Errorf("REF %s head %s is not a supported canonical Seal", ref, observation.heads[ref])
 		}
 	}
 	for _, tag := range tags {
 		if _, ok := seals[tag.Seal.String()]; !ok {
-			return fmt.Errorf("tag %s@%s target %s is not a canonical format-5 Seal", tag.REF, tag.Name, tag.Seal)
+			return fmt.Errorf("tag %s@%s target %s is not a supported canonical Seal", tag.REF, tag.Name, tag.Seal)
 		}
 	}
 	return nil

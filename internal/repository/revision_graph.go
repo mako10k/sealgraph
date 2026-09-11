@@ -259,7 +259,7 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 	if err := r.revalidateHeads(ctx, observation, "stale"); err != nil {
 		return nil, "", err
 	}
-	_ = scan // Cache bypass is semantically identical; format-5 cache is not yet persisted.
+	_ = scan // Cache bypass is semantically identical; the cache is not persisted.
 	return result, "", nil
 }
 

@@ -174,3 +174,61 @@ func AppendBool(b []byte, value bool) []byte {
 	}
 	return append(b, "false"...)
 }
+
+// AppendNativeObjectID appends one validated native ID as a JSON string.
+func AppendNativeObjectID(b []byte, id domain.ObjectID) ([]byte, error) {
+	if err := id.ValidateNative(); err != nil {
+		return nil, err
+	}
+	return AppendString(b, id.String())
+}
+
+// AppendNativeObjectIDs appends a canonical array whose caller has already
+// established semantic ordering and uniqueness.
+func AppendNativeObjectIDs(b []byte, ids []domain.ObjectID) ([]byte, error) {
+	b = append(b, '[')
+	for i, id := range ids {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		var err error
+		b, err = AppendNativeObjectID(b, id)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return append(b, ']'), nil
+}
+
+// AppendStrings appends a canonical JSON string array whose caller has
+// already established semantic ordering and uniqueness.
+func AppendStrings(b []byte, values []string) ([]byte, error) {
+	b = append(b, '[')
+	for i, value := range values {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		var err error
+		b, err = AppendString(b, value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return append(b, ']'), nil
+}
+
+// AppendProvenanceStart appends the shared schema/root/draft prefix. The
+// version-specific codec remains responsible for Cause Link bytes.
+func AppendProvenanceStart(b []byte, schema string, root, draft bool) ([]byte, error) {
+	b = append(b, `{"schema":`...)
+	var err error
+	b, err = AppendString(b, schema)
+	if err != nil {
+		return nil, err
+	}
+	b = append(b, `,"root":`...)
+	b = AppendBool(b, root)
+	b = append(b, `,"draft":`...)
+	b = AppendBool(b, draft)
+	return append(b, `,"cause_links":`...), nil
+}

@@ -1,8 +1,9 @@
 # CLI contract
 
-Status: the checked-in standalone CLI creates and opens repository format 5.
-Accepted ADRs 0023, 0025, 0026, and 0027 define the incompatible Cause-scoped
-revision, typed-Blob, migration, and machine-output boundary.
+Status: the checked-in standalone CLI creates repository format 5 and opens
+formats 5 and 6. Accepted ADRs 0023, 0025, 0026, and 0027 define the format-5
+boundary; accepted ADRs 0029, 0030, and 0031 define format-6 Link metadata,
+storage/migration, and output.
 
 ## 0. Discovery, diagnostics, and output
 
@@ -13,6 +14,19 @@ sealgraph help
 sealgraph help COMMAND
 sealgraph COMMAND --help
 sealgraph help candidate show
+```
+
+The format-6 command families use the same parent and leaf navigation:
+
+```sh
+sealgraph help migrate
+sealgraph help migrate repository
+sealgraph migrate repository --help
+sealgraph help link-metadata
+sealgraph help link-metadata set
+sealgraph link-metadata set --help
+sealgraph help link-metadata remove
+sealgraph link-metadata remove --help
 ```
 
 Help and completion MUST NOT bootstrap `.sealgraph`, open bound source files,
@@ -33,7 +47,7 @@ overrides detection. Machine documents use full IDs. `--raw-content` and
 | Form | Meaning |
 | --- | --- |
 | `REF` | exact current HEAD of REF |
-| `@SEAL_TOKEN` | repository-wide unique 4-64 lower-hex native object prefix that decodes as a format-5 Seal |
+| `@SEAL_TOKEN` | repository-wide unique 4-64 lower-hex native object prefix that decodes as a canonical Seal permitted by the current repository format |
 | `REF@hex` | Seal in the current HEAD's observed revision closure |
 | `REF@TAGNAME` | immutable exact tag target in that REF's manifest |
 
@@ -147,6 +161,20 @@ receipt before emitting those exact bytes and their final LF. Missing,
 mismatched, noncanonical, or stale receipts fail without partial stdout. It
 does not create, repair, migrate, or republish repository state.
 
+### `sealgraph migrate repository`
+
+```sh
+sealgraph migrate repository --from 5 --to 6 [--format human|json]
+```
+
+Both exact format options are required once. The command validates and captures
+the current format-5 repository, atomically replaces only config, reopens and
+fscks format 6, and verifies that retained objects, REF manifests, and Candidate
+bytes are unchanged. It never infers a format, rewrites history, downgrades,
+batches paths, or retries a possibly committed migration. Success emits
+`sealgraph/repository-migrate/v1`; committed output failure reports
+`MIGRATION_COMMITTED_OUTPUT_UNDELIVERED` and directs the operator to `fsck`.
+
 ## 3. Candidate authoring
 
 Format 5 uses one-target whole-record Cause operations:
@@ -217,6 +245,29 @@ Retargeting is explicit and normally takes two reviewed mutations: add/replace
 the new complete target record, then unlink the old exact target. Neither step
 may leave an invalid root-with-Cause or non-root-without-Cause Candidate.
 
+In format 6, `add` and `link` preserve metadata on an existing exact target and
+create empty metadata for a new target. `unlink` still removes the whole Link.
+
+### `sealgraph link-metadata`
+
+```sh
+sealgraph link-metadata set REF --target TARGET --namespace NAMESPACE \
+  (--schema SCHEMA | --no-schema) \
+  (--value-json JSON | --value-file PATH_OR_DASH) [--format human|json]
+
+sealgraph link-metadata remove REF --target TARGET --namespace NAMESPACE \
+  [--format human|json]
+```
+
+These format-6-only operations resolve one exact existing Cause target. Set
+adds or replaces one complete namespace entry; remove requires that namespace
+to exist. Value input is one complete bounded JSON value, with named files
+restricted to regular non-symlinks and `-` meaning exact stdin. Canonicalization
+rejects duplicate object keys and every out-of-model value. Both commands
+preserve all unselected Candidate and Link fields, validate before one
+expected-old replacement, and emit `sealgraph/link-metadata-mutation/v1` on
+success. They never interpret metadata, migrate, seal, or batch targets.
+
 ### `sealgraph candidate`
 
 ```sh
@@ -246,6 +297,9 @@ intentional historical/provisional provenance visibly.
 Publication writes immutable Material, Provenance, and Seal Blobs, revalidates
 the observation, CAS-updates one REF, and removes only the unchanged Candidate
 version. There is no batch, force, automatic relink, or automatic stale repair.
+In a format-6 repository, sealing Candidate v5 first constructs and validates
+its exact Candidate-v6 projection in memory, then creates Provenance v2 and Seal
+v6; it never rewrites the Candidate file as a hidden preliminary action.
 
 ## 4. Local source and explicit manifests
 
@@ -314,7 +368,7 @@ through Cause targets and their observer-scoped previous assertions. Revision
 activity follows revision edges only. Graph output retains every assertion
 source. `stale --frontier` is the upstream-first exact-Cause review frontier;
 it is navigation, not a batch plan. `--scan` is semantically identical to a
-cache bypass; the current format-5 runtime persists no graph cache.
+cache bypass; the current runtime persists no graph cache.
 
 Impact revision proof uses all observed assertions by default. Repeatable
 `--asserted-by` restricts proof edges and scoped observations to exactly those
@@ -349,6 +403,22 @@ Format-5 JSON schemas are:
 
 Exact member order and shared record shapes are normative in ADR 0027.
 
+In a format-6 repository, `show`, `candidate show`, `candidate compare`,
+`graph`, `impact`, `log`, `linklog`, `compare`, and `fsck` use their `/v3`
+schemas from ADR 0031. `status/v3` and `stale/v2` remain unchanged. Shared
+records expose exact Seal/Provenance/Candidate generations and complete
+metadata. Comparisons expose per-target Cause changes and per-namespace
+metadata changes. Human output labels generation, displays complete bounded
+canonical metadata values, and distinguishes historical projected empty
+metadata from stored v2 empty metadata.
+
+Format-6 Assessment-free change identity is
+`sealgraph/upstream-change/v2`. Its `after_cause_links` contains complete
+format-6 Cause Links including metadata, and format-6 operations emit and
+compare only v2 change IDs even when metadata arrays are empty. Metadata
+mutation therefore changes `change_id`. Existing v1 change and Assessment Blobs
+are not rewritten, and no Assessment-reference command is added here.
+
 ## 7. Local operational recovery
 
 ```sh
@@ -365,6 +435,6 @@ the latest record, or performs reset/reflog/undo semantics.
 
 `git sealgraph ...` is a separate unreleased surface implemented by the
 `git-sealgraph` executable. Standalone `sealgraph` never detects `.git`.
-Any future sidecar uses the same format-5 `.sealgraph` bytes, offers read-only
+Any future sidecar uses the same supported native `.sealgraph` bytes, offers read-only
 Git views where approved, and never turns Git commit/merge success into a Seal,
 automatic relink, or approval.

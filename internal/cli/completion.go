@@ -26,16 +26,8 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 	}
 	prior := words[:max(0, len(words)-1)]
 	if len(prior) != 0 {
-		switch prior[len(prior)-1] {
-		case "--file", "--content-file":
-			return "file", nil
-		case "--format":
-			if prior[0] == "load" || prior[0] == "migrate" {
-				return "plain", []string{"universal-blob-v1"}
-			}
-			return "plain", []string{"human", "json"}
-		case "--source-format":
-			return "plain", []string{"4"}
+		if mode, values, ok := completionForOption(prior); ok {
+			return mode, values
 		}
 	}
 	if len(prior) == 0 {
@@ -65,6 +57,26 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 		}
 	}
 	return "plain", repositoryCompletionValues(workDir, path)
+}
+
+func completionForOption(prior []string) (string, []string, bool) {
+	switch prior[len(prior)-1] {
+	case "--file", "--content-file", "--value-file":
+		return "file", nil, true
+	case "--format":
+		if prior[0] == "load" || (prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract") {
+			return "plain", []string{"universal-blob-v1"}, true
+		}
+		return "plain", []string{"human", "json"}, true
+	case "--source-format":
+		return "plain", []string{"4"}, true
+	case "--from":
+		return "plain", []string{"5"}, true
+	case "--to":
+		return "plain", []string{"6"}, true
+	default:
+		return "", nil, false
+	}
 }
 
 func topLevelCompletionValues() []string {

@@ -274,7 +274,10 @@ func padDisplay(value string, width int) string {
 }
 
 func shortID(value fmt.Stringer) string {
-	text := value.String()
+	return shortTextID(value.String())
+}
+
+func shortTextID(text string) string {
 	if len(text) <= shortIDLength {
 		return text
 	}
@@ -330,7 +333,7 @@ func humanRelation(value string) string {
 	return strings.ToLower(replacer.Replace(value))
 }
 
-func printShowHuman(output io.Writer, result repository.ShowResult) {
+func printShowHuman(output io.Writer, result repository.ShowResult, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("SEAL")
 	printer.fields(0,
@@ -342,10 +345,17 @@ func printShowHuman(output io.Writer, result repository.ShowResult) {
 		humanField{"Root boundary", yesNo(result.Resolved.Provenance.Root)},
 		humanField{"Draft", yesNo(result.Resolved.Provenance.Draft)},
 	)
+	if format == 6 {
+		printer.fields(0, humanField{"Seal schema", result.Resolved.Seal.Schema}, humanField{"Provenance schema", result.Resolved.Provenance.Schema})
+	}
 	fmt.Fprintln(output)
 	printHumanContent(printer, result.Resolved.Material.Content, result.Content)
 	printHumanAttachments(printer, result.Resolved.Material.Attachments)
-	printHumanLinks(printer, result.Resolved.Provenance.CauseLinks)
+	metadataOwner := ""
+	if format == 6 {
+		metadataOwner = result.Resolved.Provenance.Schema
+	}
+	printHumanLinks(printer, result.Resolved.Provenance.CauseLinks, metadataOwner)
 }
 
 func printHumanContent(printer humanPrinter, id domain.ObjectID, content []byte) {
@@ -380,11 +390,15 @@ func printHumanAttachments(printer humanPrinter, attachments []domainv5.Attachme
 	printer.table(2, []string{"NAME", "MEDIA TYPE", "BLOB ID (PREFIX)"}, rows)
 }
 
-func printHumanLinks(printer humanPrinter, links []domainv5.CauseLink) {
+func printHumanLinks(printer humanPrinter, links []domainv5.CauseLink, metadataOwner string) {
 	fmt.Fprintln(printer.output)
 	printer.heading(fmt.Sprintf("CAUSES (%d)", len(links)))
 	if len(links) == 0 {
 		printer.note("None")
+		return
+	}
+	if metadataOwner != "" {
+		printHumanLinksWithMetadata(printer, links, metadataOwner)
 		return
 	}
 	rows := make([][]string, 0, len(links))
@@ -394,7 +408,34 @@ func printHumanLinks(printer humanPrinter, links []domainv5.CauseLink) {
 	printer.table(2, []string{"TARGET SEAL", "PREVIOUS", "MESSAGES"}, rows)
 }
 
-func printCandidateInspectionHuman(output io.Writer, inspection repository.CandidateInspection) {
+func printHumanLinksWithMetadata(printer humanPrinter, links []domainv5.CauseLink, ownerSchema string) {
+	for index, link := range links {
+		fmt.Fprintf(printer.output, "  Cause %d\n", index+1)
+		printer.fields(4,
+			humanField{"Target Seal ID (prefix)", shortID(link.TargetSeal)},
+			humanField{"Previous revisions", humanList(idsJSON(link.PreviousRevisionSealOfTargetSeal))},
+			humanField{"Messages", humanList(link.Messages)},
+		)
+		if len(link.Metadata) == 0 {
+			label := "none"
+			if ownerSchema == domainv5.ProvenanceSchema || ownerSchema == domainv5.CandidateSchema {
+				label = "projected empty from v5"
+			}
+			fmt.Fprintf(printer.output, "    Metadata: %s\n", label)
+			continue
+		}
+		fmt.Fprintf(printer.output, "    Metadata (%d)\n", len(link.Metadata))
+		for _, entry := range link.Metadata {
+			schema := "none"
+			if entry.Schema != nil {
+				schema = quoteHumanString(*entry.Schema)
+			}
+			fmt.Fprintf(printer.output, "      Namespace: %s\n      Schema: %s\n      Value: %s\n", quoteHumanString(entry.Namespace), schema, entry.Value)
+		}
+	}
+}
+
+func printCandidateInspectionHuman(output io.Writer, inspection repository.CandidateInspection, format int) {
 	printer := newHumanPrinter(output)
 	candidate := inspection.Candidate
 	printer.heading("CANDIDATE")
@@ -407,10 +448,17 @@ func printCandidateInspectionHuman(output io.Writer, inspection repository.Candi
 		humanField{"Root boundary", yesNo(candidate.Root)},
 		humanField{"Draft", yesNo(candidate.Draft)},
 	)
+	if format == 6 {
+		printer.fields(0, humanField{"Candidate schema", candidate.Schema}, humanField{"Prospective Seal schema", inspection.Prospective.Seal.Schema}, humanField{"Prospective provenance schema", inspection.Prospective.Provenance.Schema})
+	}
 	fmt.Fprintln(output)
 	printHumanContent(printer, candidate.Content, inspection.Content)
 	printHumanAttachments(printer, candidate.Attachments)
-	printHumanLinks(printer, candidate.CauseLinks)
+	metadataOwner := ""
+	if format == 6 {
+		metadataOwner = candidate.Schema
+	}
+	printHumanLinks(printer, candidate.CauseLinks, metadataOwner)
 }
 
 func printSourcesHuman(output io.Writer, bindings []repository.SourceBinding) {
@@ -489,7 +537,7 @@ func printStatusesHuman(output io.Writer, title string, statuses []repository.Re
 	}
 }
 
-func printGraphHuman(output io.Writer, nodes []repository.GraphNode) {
+func printGraphHuman(output io.Writer, nodes []repository.GraphNode, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("REVISION_CAUSE_GRAPH")
 	if len(nodes) == 0 {
@@ -498,12 +546,20 @@ func printGraphHuman(output io.Writer, nodes []repository.GraphNode) {
 	}
 	rows := make([][]string, 0, len(nodes)*2)
 	for _, node := range nodes {
-		rows = append(rows, []string{"Seal", shortID(node.Resolved.ID), humanGraphState(string(node.State)), humanList(node.REFs)})
+		row := []string{"Seal", shortID(node.Resolved.ID), humanGraphState(string(node.State)), humanList(node.REFs)}
+		if format == 6 {
+			row = append(row, node.Resolved.Seal.Schema+" / "+node.Resolved.Provenance.Schema)
+		}
+		rows = append(rows, row)
 		for _, link := range node.Causes {
 			rows = append(rows, []string{"  Cause", shortID(link.Target), humanGraphState(string(link.State)), ""})
 		}
 	}
-	printer.table(0, []string{"RELATION", "SEAL ID (PREFIX)", "STATE", "CURRENT REF(S)"}, rows)
+	headings := []string{"RELATION", "SEAL ID (PREFIX)", "STATE", "CURRENT REF(S)"}
+	if format == 6 {
+		headings = append(headings, "SCHEMAS")
+	}
+	printer.table(0, headings, rows)
 }
 
 func humanGraphState(value string) string {
@@ -542,7 +598,7 @@ func printImpactsHuman(output io.Writer, result repository.ImpactResult) {
 	}
 }
 
-func printLogHuman(output io.Writer, result repository.LogResult) {
+func printLogHuman(output io.Writer, result repository.LogResult, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("REVISION HISTORY")
 	printer.fields(0, humanField{"REF", result.REF}, humanField{"Revisions", strconv.Itoa(len(result.Entries))})
@@ -560,14 +616,25 @@ func printLogHuman(output io.Writer, result repository.LogResult) {
 			humanField{"Root boundary", yesNo(entry.Resolved.Provenance.Root)},
 			humanField{"Draft", yesNo(entry.Resolved.Provenance.Draft)},
 		)
-		printHumanLinksIndented(printer, entry.Resolved.Provenance.CauseLinks, 2)
+		if format == 6 {
+			printer.fields(2, humanField{"Seal schema", entry.Resolved.Seal.Schema}, humanField{"Provenance schema", entry.Resolved.Provenance.Schema})
+		}
+		metadataOwner := ""
+		if format == 6 {
+			metadataOwner = entry.Resolved.Provenance.Schema
+		}
+		printHumanLinksIndented(printer, entry.Resolved.Provenance.CauseLinks, 2, metadataOwner)
 	}
 }
 
-func printHumanLinksIndented(printer humanPrinter, links []domainv5.CauseLink, indent int) {
+func printHumanLinksIndented(printer humanPrinter, links []domainv5.CauseLink, indent int, metadataOwner string) {
 	fmt.Fprintf(printer.output, "%sCauses (%d)\n", strings.Repeat(" ", indent), len(links))
 	if len(links) == 0 {
 		fmt.Fprintf(printer.output, "%sNone\n", strings.Repeat(" ", indent+2))
+		return
+	}
+	if metadataOwner != "" {
+		printHumanLinksWithMetadata(printer, links, metadataOwner)
 		return
 	}
 	rows := make([][]string, 0, len(links))
@@ -577,7 +644,7 @@ func printHumanLinksIndented(printer humanPrinter, links []domainv5.CauseLink, i
 	printer.table(indent+2, []string{"TARGET SEAL", "PREVIOUS", "MESSAGES"}, rows)
 }
 
-func printLinkLogHuman(output io.Writer, result repository.LinkLogResult) {
+func printLinkLogHuman(output io.Writer, result repository.LinkLogResult, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("CAUSE LINK HISTORY")
 	fields := []humanField{{"REF", result.REF}, {"Revision edges", strconv.Itoa(len(result.Entries))}}
@@ -593,10 +660,18 @@ func printLinkLogHuman(output io.Writer, result repository.LinkLogResult) {
 			humanField{"Supporting observers", strconv.Itoa(len(entry.SupportingAssertions))},
 			humanField{"Cause changes", strconv.Itoa(len(entry.Changes))},
 		)
+		if format == 6 {
+			printer.fields(2, humanField{"Newer schemas", entry.NewerSealSchema + " / " + entry.NewerProvenanceSchema}, humanField{"Previous schemas", entry.PreviousSealSchema + " / " + entry.PreviousProvenanceSchema})
+			records := make([]causeLinkChangeJSONV3, 0, len(entry.Changes))
+			for _, change := range entry.Changes {
+				records = append(records, causeLinkChangeRecordV3(change.Target.String(), change.Before, change.After))
+			}
+			printHumanCauseChanges(printer, records)
+		}
 	}
 }
 
-func printSealDiffHuman(output io.Writer, diff repository.SealComparison) {
+func printSealDiffHuman(output io.Writer, diff repository.SealComparison, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("SEAL COMPARISON")
 	printer.fields(0, humanField{"From Seal ID (prefix)", shortID(diff.From.ID)}, humanField{"To Seal ID (prefix)", shortID(diff.To.ID)})
@@ -607,8 +682,14 @@ func printSealDiffHuman(output io.Writer, diff repository.SealComparison) {
 		humanValueChangeRow("Root boundary", diff.From.Provenance.Root != diff.To.Provenance.Root, yesNo(diff.From.Provenance.Root), yesNo(diff.To.Provenance.Root)),
 		humanValueChangeRow("Draft", diff.From.Provenance.Draft != diff.To.Provenance.Draft, yesNo(diff.From.Provenance.Draft), yesNo(diff.To.Provenance.Draft)),
 	}
+	if format == 6 {
+		rows = append(rows, humanValueChangeRow("Seal schema", diff.From.Seal.Schema != diff.To.Seal.Schema, diff.From.Seal.Schema, diff.To.Seal.Schema), humanValueChangeRow("Provenance schema", diff.From.Provenance.Schema != diff.To.Provenance.Schema, diff.From.Provenance.Schema, diff.To.Provenance.Schema))
+	}
 	fmt.Fprintln(output)
 	printer.table(0, []string{"FIELD", "RESULT", "BEFORE", "AFTER"}, rows)
+	if format == 6 {
+		printHumanCauseChanges(printer, causeLinkChangesV3(diff.From.Provenance.CauseLinks, diff.To.Provenance.CauseLinks).Records)
+	}
 }
 
 func humanValueChangeRow(field string, changed bool, before, after string) []string {
@@ -619,7 +700,7 @@ func humanValueChangeRow(field string, changed bool, before, after string) []str
 	return []string{field, result, before, after}
 }
 
-func printCandidateDiffHuman(output io.Writer, result repository.CandidateDiffResult) {
+func printCandidateDiffHuman(output io.Writer, result repository.CandidateDiffResult, format int) {
 	printer := newHumanPrinter(output)
 	inspection := result.Inspection
 	candidate := inspection.Candidate
@@ -631,6 +712,9 @@ func printCandidateDiffHuman(output io.Writer, result repository.CandidateDiffRe
 		humanField{"Current REF head", shortOptionalID(inspection.CurrentHead)},
 		humanField{"Publication check", strings.ToLower(strings.ReplaceAll(string(inspection.ExpectedHeadState), "_", " "))},
 	)
+	if format == 6 {
+		printer.fields(0, humanField{"Candidate schema", candidate.Schema}, humanField{"Prospective Seal schema", inspection.Prospective.Seal.Schema}, humanField{"Prospective provenance schema", inspection.Prospective.Provenance.Schema})
+	}
 	contentBefore, materialBefore, provenanceBefore := "none", "none", "none"
 	rootBefore, draftBefore := "none", "none"
 	if result.Baseline != nil {
@@ -649,9 +733,70 @@ func printCandidateDiffHuman(output io.Writer, result repository.CandidateDiffRe
 	}
 	fmt.Fprintln(output)
 	printer.table(0, []string{"FIELD", "RESULT", "BEFORE", "CANDIDATE"}, rows)
+	if format == 6 {
+		var before []domainv5.CauseLink
+		if result.Baseline != nil {
+			before = result.Baseline.Provenance.CauseLinks
+		}
+		printHumanCauseChanges(printer, causeLinkChangesV3(before, candidate.CauseLinks).Records)
+	}
 }
 
-func printFsckHuman(output io.Writer, report repository.FsckReport) {
+func printHumanCauseChanges(printer humanPrinter, records []causeLinkChangeJSONV3) {
+	if len(records) == 0 {
+		printer.note("Cause Links unchanged.")
+		return
+	}
+	for _, record := range records {
+		action := "changed"
+		if record.Before == nil {
+			action = "target added"
+		} else if record.After == nil {
+			action = "target removed"
+		}
+		fmt.Fprintf(printer.output, "\n  Cause target %s: %s\n", shortTextID(record.Target), action)
+		printer.fields(4,
+			humanField{"Previous revisions", humanChangeLabel(record.Previous)},
+			humanField{"Messages", humanChangeLabel(record.Messages)},
+		)
+		for _, metadata := range record.Metadata {
+			fmt.Fprintf(printer.output, "    Metadata namespace %s: %s\n", quoteHumanString(metadata.Namespace), metadataChangeLabel(metadata))
+			printHumanMetadataSide(printer.output, "before", metadata.Before)
+			printHumanMetadataSide(printer.output, "after", metadata.After)
+		}
+	}
+}
+
+func humanChangeLabel(change changeJSON) string {
+	if change.Changed {
+		return "changed"
+	}
+	return "unchanged"
+}
+
+func metadataChangeLabel(change metadataChangeJSON) string {
+	if change.Before == nil {
+		return "added"
+	}
+	if change.After == nil {
+		return "removed"
+	}
+	return "changed"
+}
+
+func printHumanMetadataSide(output io.Writer, label string, entry *metadataEntryJSON) {
+	if entry == nil {
+		fmt.Fprintf(output, "      %s: none\n", label)
+		return
+	}
+	schema := "none"
+	if entry.Schema != nil {
+		schema = quoteHumanString(*entry.Schema)
+	}
+	fmt.Fprintf(output, "      %s schema: %s\n      %s value: %s\n", label, schema, label, entry.Value)
+}
+
+func printFsckHuman(output io.Writer, report repository.FsckReport, format int) {
 	printer := newHumanPrinter(output)
 	printer.heading("REPOSITORY CHECK: OK")
 	rows := [][]string{
@@ -664,6 +809,13 @@ func printFsckHuman(output io.Writer, report repository.FsckReport) {
 		{"Active Seals", strconv.Itoa(report.ActiveSeals)},
 		{"Historical or detached Seals", strconv.Itoa(len(report.HistoricalOrDetachedSeals))},
 		{"Unreferenced Blobs", strconv.Itoa(len(report.UnreferencedBlobs))},
+	}
+	if format == 6 {
+		rows = append(rows,
+			[]string{"Seals v5", strconv.Itoa(report.SealsV5)}, []string{"Seals v6", strconv.Itoa(report.SealsV6)},
+			[]string{"Provenances v1", strconv.Itoa(report.ProvenancesV1)}, []string{"Provenances v2", strconv.Itoa(report.ProvenancesV2)},
+			[]string{"Candidates v5", strconv.Itoa(report.CandidatesV5)}, []string{"Candidates v6", strconv.Itoa(report.CandidatesV6)},
+		)
 	}
 	printer.table(0, []string{"INVENTORY", "COUNT"}, rows)
 	ids := make([][]string, 0, len(report.HistoricalOrDetachedSeals)+len(report.UnreferencedBlobs))

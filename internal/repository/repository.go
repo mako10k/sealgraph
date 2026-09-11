@@ -1,6 +1,6 @@
-// Package repository coordinates the standalone format-5 runtime. Format-4
-// repositories are rejected at the config boundary and are never interpreted
-// by ordinary runtime readers.
+// Package repository coordinates the standalone format-5 and format-6 runtime.
+// Format-4 repositories are rejected at the config boundary and are never
+// interpreted by ordinary runtime readers.
 package repository
 
 import (
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
+	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/recovery"
@@ -21,6 +22,7 @@ import (
 type Repository struct {
 	dir        string
 	workDir    string
+	format     int
 	objects    *native.ObjectStore
 	refs       store.RefStore
 	tags       store.TagStore
@@ -30,25 +32,37 @@ type Repository struct {
 	writer     writerGuard
 }
 
+// Format reports the validated repository format selected when the repository
+// was opened. It is used only to choose public compatibility schemas.
+func (r *Repository) Format() int { return r.format }
+
 func OpenStandalone(workDir string) (*Repository, error) {
 	dir := filepath.Join(workDir, ".sealgraph")
 	if err := validateLayout(dir); err != nil {
-		return nil, fmt.Errorf("open standalone repository %s: %w; run 'sealgraph init' only for an absent format-5 repository", dir, err)
+		return nil, fmt.Errorf("open standalone repository %s: %w; run 'sealgraph init' only for an absent repository", dir, err)
 	}
-	return newRepository(dir), nil
+	format, err := repositoryFormat(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open standalone repository %s: %w", dir, err)
+	}
+	return newRepositoryFormat(dir, format), nil
 }
 
 func newRepository(dir string) *Repository {
-	candidates := candidateStore{root: filepath.Join(dir, "index")}
+	return newRepositoryFormat(dir, 5)
+}
+
+func newRepositoryFormat(dir string, format int) *Repository {
+	candidates := candidateStore{root: filepath.Join(dir, "index"), format: format}
 	return &Repository{
-		dir: dir, workDir: filepath.Dir(dir), objects: native.NewObjectStore(dir),
+		dir: dir, workDir: filepath.Dir(dir), format: format, objects: native.NewObjectStore(dir),
 		refs: native.NewRefStore(dir), tags: native.NewTagStore(dir), candidates: candidates,
 		sources: sourceStore{candidates: candidates}, recovery: recovery.NewStore(dir),
 		writer: newWriterGuard(filepath.Join(dir, "locks")),
 	}
 }
 
-// CauseInput is one complete format-5 Cause Link authoring record. Selectors
+// CauseInput is one complete Cause Link authoring record. Selectors
 // are resolved before Candidate persistence; an empty Previous slice is the
 // explicit --no-previous assertion.
 type CauseInput struct {
@@ -246,7 +260,9 @@ func (r *Repository) resolveCauseInputObserved(ctx context.Context, input CauseI
 func replaceCauseLink(links []domainv5.CauseLink, replacement domainv5.CauseLink) []domainv5.CauseLink {
 	result := make([]domainv5.CauseLink, 0, len(links)+1)
 	for _, link := range links {
-		if !link.TargetSeal.Equal(replacement.TargetSeal) {
+		if link.TargetSeal.Equal(replacement.TargetSeal) {
+			replacement.Metadata = cloneMetadata(link.Metadata)
+		} else {
 			result = append(result, link)
 		}
 	}
@@ -258,7 +274,20 @@ func cloneCauseLinks(links []domainv5.CauseLink) []domainv5.CauseLink {
 	for i, link := range links {
 		result[i] = domainv5.CauseLink{TargetSeal: link.TargetSeal,
 			PreviousRevisionSealOfTargetSeal: append([]domain.ObjectID(nil), link.PreviousRevisionSealOfTargetSeal...),
-			Messages:                         append([]string(nil), link.Messages...)}
+			Messages:                         append([]string(nil), link.Messages...), Metadata: cloneMetadata(link.Metadata)}
+	}
+	return result
+}
+
+func cloneMetadata(entries []domainv5.MetadataEntry) []domainv5.MetadataEntry {
+	result := make([]domainv5.MetadataEntry, len(entries))
+	for i, entry := range entries {
+		var schema *string
+		if entry.Schema != nil {
+			value := *entry.Schema
+			schema = &value
+		}
+		result[i] = domainv5.MetadataEntry{Namespace: entry.Namespace, Schema: schema, Value: append([]byte(nil), entry.Value...)}
 	}
 	return result
 }
@@ -296,7 +325,7 @@ func (r *Repository) Link(ctx context.Context, ref string, input CauseInput) (do
 }
 
 func (r *Repository) validateCandidateMutation(ctx context.Context, candidate domainv5.Candidate, observation headObservation) error {
-	prospective, err := prospectiveSeal(candidate)
+	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return fmt.Errorf("prospective Candidate is invalid: %w", err)
 	}
@@ -331,33 +360,11 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		if err != nil {
 			return SealResult{}, err
 		}
-		material := domainv5.Material{Schema: domainv5.MaterialSchema, Content: candidate.Content, Attachments: candidate.Attachments}
-		materialBytes, err := canonicalv5.EncodeMaterial(material)
+		resolved, err := r.writeCandidateSealBlobs(ctx, ref, candidate)
 		if err != nil {
-			return SealResult{}, fmt.Errorf("canonicalize Material for %s: %w", ref, err)
+			return SealResult{}, err
 		}
-		materialID, err := r.objects.WriteBlob(ctx, materialBytes)
-		if err != nil {
-			return SealResult{}, fmt.Errorf("store immutable Material for %s: %w", ref, err)
-		}
-		provenance := domainv5.Provenance{Schema: domainv5.ProvenanceSchema, Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks}
-		provenanceBytes, err := canonicalv5.EncodeProvenance(provenance)
-		if err != nil {
-			return SealResult{}, fmt.Errorf("canonicalize Provenance for %s: %w", ref, err)
-		}
-		provenanceID, err := r.objects.WriteBlob(ctx, provenanceBytes)
-		if err != nil {
-			return SealResult{}, fmt.Errorf("store immutable Provenance for %s: %w", ref, err)
-		}
-		seal := domainv5.Seal{Schema: domainv5.SealSchema, Material: materialID, Provenance: provenanceID}
-		sealBytes, err := canonicalv5.EncodeSeal(seal)
-		if err != nil {
-			return SealResult{}, fmt.Errorf("canonicalize Seal for %s: %w", ref, err)
-		}
-		sealID, err := r.objects.WriteBlob(ctx, sealBytes)
-		if err != nil {
-			return SealResult{}, fmt.Errorf("store immutable Seal for %s: %w", ref, err)
-		}
+		sealID := resolved.ID
 		if err := r.revalidateHeads(ctx, observation, "seal admission"); err != nil {
 			return SealResult{}, fmt.Errorf("Seal Blob %s was written but REF %s was not advanced: %w", sealID, ref, err)
 		}
@@ -384,7 +391,7 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		if err != nil {
 			return SealResult{ID: sealID, OperationID: record.ID}, fmt.Errorf("REF %s was published at Seal %s but published content readback failed: %w", ref, sealID, err)
 		}
-		resolved := domainv5.ResolvedSeal{ID: sealID, Seal: seal, Material: material, Provenance: provenance, ContentBytes: len(content)}
+		resolved.ContentBytes = len(content)
 		result := SealResult{ID: sealID, Resolved: resolved, OperationID: record.ID}
 		if err := r.commitRecovery(record); err != nil {
 			return result, fmt.Errorf("REF %s was published at Seal %s but recovery record %s could not be marked COMMITTED: %w", ref, sealID, record.ID, err)
@@ -396,8 +403,45 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 	})
 }
 
+func (r *Repository) writeCandidateSealBlobs(ctx context.Context, ref string, candidate domainv5.Candidate) (domainv5.ResolvedSeal, error) {
+	resolved, err := r.prospectiveSeal(candidate)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("canonicalize prospective Seal for %s: %w", ref, err)
+	}
+	materialBytes, err := canonicalv5.EncodeMaterial(resolved.Material)
+	if err != nil {
+		return domainv5.ResolvedSeal{}, err
+	}
+	var provenanceBytes, sealBytes []byte
+	if r.format == 6 {
+		provenanceBytes, err = canonicalv6.EncodeProvenance(resolved.Provenance)
+		if err == nil {
+			sealBytes, err = canonicalv6.EncodeSeal(resolved.Seal)
+		}
+	} else {
+		provenanceBytes, err = canonicalv5.EncodeProvenance(resolved.Provenance)
+		if err == nil {
+			sealBytes, err = canonicalv5.EncodeSeal(resolved.Seal)
+		}
+	}
+	if err != nil {
+		return domainv5.ResolvedSeal{}, fmt.Errorf("canonicalize typed Blobs for %s: %w", ref, err)
+	}
+	for _, object := range []struct {
+		label    string
+		expected domain.ObjectID
+		data     []byte
+	}{{"Material", resolved.Seal.Material, materialBytes}, {"Provenance", resolved.Seal.Provenance, provenanceBytes}, {"Seal", resolved.ID, sealBytes}} {
+		written, err := r.objects.WriteBlob(ctx, object.data)
+		if err != nil || !written.Equal(object.expected) {
+			return domainv5.ResolvedSeal{}, fmt.Errorf("store immutable %s for %s: id=%s err=%w", object.label, ref, written, err)
+		}
+	}
+	return resolved, nil
+}
+
 func (r *Repository) validateSealCandidate(ctx context.Context, candidate domainv5.Candidate) (headObservation, error) {
-	prospective, err := prospectiveSeal(candidate)
+	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return headObservation{}, fmt.Errorf("derive prospective Seal for %s: %w", candidate.REF, err)
 	}
@@ -443,9 +487,9 @@ func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5
 	if sealObject.Type != domain.BlobType {
 		return domainv5.ResolvedSeal{}, fmt.Errorf("Seal object %s has type %s, expected blob", id, sealObject.Type)
 	}
-	seal, err := canonicalv5.DecodeSeal(sealObject.Data)
+	seal, generation, err := r.decodeSeal(sealObject.Data)
 	if err != nil {
-		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s is not a canonical format-5 Seal Blob: %w", id, err)
+		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s is not a supported canonical Seal Blob: %w", id, err)
 	}
 	materialObject, err := r.objects.ReadObject(ctx, seal.Material)
 	if err != nil {
@@ -459,9 +503,17 @@ func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5
 	if err != nil {
 		return domainv5.ResolvedSeal{}, fmt.Errorf("read Provenance %s for Seal %s: %w", seal.Provenance, id, err)
 	}
-	provenance, err := canonicalv5.DecodeProvenance(provenanceObject.Data)
+	var provenance domainv5.Provenance
+	if generation == 6 {
+		provenance, err = canonicalv6.DecodeProvenance(provenanceObject.Data)
+	} else {
+		provenance, err = canonicalv5.DecodeProvenance(provenanceObject.Data)
+		for index := range provenance.CauseLinks {
+			provenance.CauseLinks[index].Metadata = []domainv5.MetadataEntry{}
+		}
+	}
 	if err != nil {
-		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s named as Provenance by Seal %s is invalid: %w", seal.Provenance, id, err)
+		return domainv5.ResolvedSeal{}, fmt.Errorf("object %s named as Provenance by Seal %s is invalid for generation %d: %w", seal.Provenance, id, generation, err)
 	}
 	content, err := r.readRepositoryBlobID(ctx, material.Content, fmt.Sprintf("content for Seal %s", id))
 	if err != nil {
@@ -473,6 +525,19 @@ func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5
 		}
 	}
 	return domainv5.ResolvedSeal{ID: id, Seal: seal, Material: material, Provenance: provenance, ContentBytes: len(content)}, nil
+}
+
+func (r *Repository) decodeSeal(data []byte) (domainv5.Seal, int, error) {
+	if r.format == 6 {
+		if seal, err := canonicalv6.DecodeSeal(data); err == nil {
+			return seal, 6, nil
+		}
+	}
+	seal, err := canonicalv5.DecodeSeal(data)
+	if err != nil {
+		return domainv5.Seal{}, 0, err
+	}
+	return seal, 5, nil
 }
 
 type SelectorKind uint8
@@ -579,7 +644,7 @@ func (r *Repository) resolveSelectorObserved(ctx context.Context, text string, o
 	}
 	resolved, err := r.LoadSeal(ctx, id)
 	if err != nil {
-		return ResolvedSelector{}, fmt.Errorf("selector %q resolved object %s that is not a canonical format-5 Seal: %w", text, id, err)
+		return ResolvedSelector{}, fmt.Errorf("selector %q resolved object %s that is not a supported canonical Seal: %w", text, id, err)
 	}
 	if selector.Kind == SelectorScopedSeal {
 		head, ok := observation.heads[selector.REF]

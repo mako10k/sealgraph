@@ -1,10 +1,12 @@
 # Sealgraph implementation plan
 
 Status: current through the accepted format-6 Cause Link metadata decision set.
-The checked-in runtime, normative documents, and tracked dogfood use format 5;
-the Cause-scoped revision contract, format/runtime slices, and normative sync
-are complete. `PLAN.pert` is the current perttool projection. Attachment
-mutation and the separately gated Git sidecar remain future work.
+The checked-in runtime and normative documents implement formats 5 and 6; new
+repositories and the tracked dogfood remain format 5 until an explicit
+repository migration is separately authorized. The Cause-scoped revision
+contract, format/runtime slices, and normative sync are complete. `PLAN.pert`
+is the current perttool projection. Attachment mutation and the separately
+gated Git sidecar remain future work.
 
 ## Current format-6 Link metadata frontier
 
@@ -14,20 +16,20 @@ Proceed in this order; do not partially mix formats:
    Universal Blob, migration, CLI, inspection, and tracked-dogfood baseline;
 2. [x] accept the extensible Cause Link metadata requirement and ADRs 0029,
    0030, and 0031;
-3. [ ] implement Seal v6, Provenance v2, Candidate v6, canonical bounded
+3. [x] implement Seal v6, Provenance v2, Candidate v6, canonical bounded
    metadata, exact historical v5 reading, v6-only writes, change identity, and
    the config-only migration primitive;
-4. [ ] implement one-namespace Candidate mutation, legacy authoring
+4. [x] implement one-namespace Candidate mutation, legacy authoring
    preservation, successor human/JSON inspection, comparison, typed `linklog`,
    and the exact public migration command and receipt; and
-5. [ ] synchronize requirements, architecture, storage format, CLI,
+5. [x] synchronize requirements, architecture, storage format, CLI,
    integrations, help, completion, fixtures, and full validation.
 
-This reconciliation starts none of the three unchecked implementation tasks.
-Migrating the project repository, committing, pushing, releasing, deploying,
-or starting the Git sidecar remains separately authorized. The format-4 and
-earlier sections below are historical implementation context, not the current
-runtime frontier.
+The implementation, accepted normative synchronization, public navigation, and
+full validation are complete. Migrating the project repository, releasing,
+deploying, or starting the Git sidecar remains separately authorized. The
+format-4 and earlier sections below are historical implementation context, not
+the current runtime frontier.
 
 ## Historical implementation phases
 

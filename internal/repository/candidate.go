@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
+	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 )
@@ -22,7 +23,10 @@ var (
 
 const candidateFile = ".candidate"
 
-type candidateStore struct{ root string }
+type candidateStore struct {
+	root   string
+	format int
+}
 
 type candidateSnapshot struct {
 	Candidate domainv5.Candidate
@@ -59,7 +63,7 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("read candidate %s: %w", ref, err)
 	}
-	candidate, err := canonicalv5.DecodeCandidate(data)
+	candidate, err := s.decode(data)
 	if err != nil {
 		return candidateSnapshot{}, fmt.Errorf("candidate %s is corrupt: %w; recreate it explicitly with add", ref, err)
 	}
@@ -69,18 +73,38 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 	return candidateSnapshot{Candidate: candidate, Bytes: data}, nil
 }
 
+func (s candidateStore) decode(data []byte) (domainv5.Candidate, error) {
+	if s.format == 6 {
+		if candidate, err := canonicalv6.DecodeCandidate(data); err == nil {
+			return candidate, nil
+		}
+		candidate, err := canonicalv5.DecodeCandidate(data)
+		if err != nil {
+			return domainv5.Candidate{}, fmt.Errorf("neither exact Candidate v6 nor historical Candidate v5: %w", err)
+		}
+		for i := range candidate.CauseLinks {
+			candidate.CauseLinks[i].Metadata = []domainv5.MetadataEntry{}
+		}
+		return candidate, nil
+	}
+	return canonicalv5.DecodeCandidate(data)
+}
+
 func (s candidateStore) SaveIfUnchanged(candidate domainv5.Candidate, expected []byte, expectedPresent bool) error {
-	normalized, err := domainv5.NormalizeCandidate(candidate)
+	var data []byte
+	var err error
+	if s.format == 6 {
+		candidate.Schema = "sealgraph/candidate/v6"
+		data, err = canonicalv6.EncodeCandidate(candidate)
+	} else {
+		candidate.Schema = domainv5.CandidateSchema
+		data, err = canonicalv5.EncodeCandidate(candidate)
+	}
 	if err != nil {
 		return err
 	}
-	candidate = normalized
 	if err := s.ensureDirectory(candidate.REF); err != nil {
 		return fmt.Errorf("prepare candidate %s directory: %w", candidate.REF, err)
-	}
-	data, err := canonicalv5.EncodeCandidate(candidate)
-	if err != nil {
-		return fmt.Errorf("encode candidate %s: %w", candidate.REF, err)
 	}
 	dir := s.directory(candidate.REF)
 	temp, err := os.CreateTemp(dir, ".tmp-candidate-")
