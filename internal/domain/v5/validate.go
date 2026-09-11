@@ -132,6 +132,9 @@ func normalizeAttachments(input []Attachment) ([]Attachment, error) {
 func normalizeCauseLinks(input []CauseLink) ([]CauseLink, error) {
 	links := make([]CauseLink, len(input))
 	for i, link := range input {
+		if len(link.Metadata) != 0 {
+			return nil, fmt.Errorf("format-5 Cause Link target %s cannot contain metadata", link.TargetSeal)
+		}
 		if err := link.TargetSeal.ValidateNative(); err != nil {
 			return nil, fmt.Errorf("Cause Link has invalid target SealID: %w", err)
 		}
@@ -147,6 +150,7 @@ func normalizeCauseLinks(input []CauseLink) ([]CauseLink, error) {
 			TargetSeal:                       link.TargetSeal,
 			PreviousRevisionSealOfTargetSeal: previous,
 			Messages:                         messages,
+			Metadata:                         []MetadataEntry{},
 		}
 	}
 	sort.Slice(links, func(i, j int) bool { return causeLinkLess(links[i], links[j]) })

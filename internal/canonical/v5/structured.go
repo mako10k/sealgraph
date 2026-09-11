@@ -91,13 +91,10 @@ func EncodeProvenance(provenance domainv5.Provenance) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 0, 512)
-	b = append(b, `{"schema":`...)
-	b, _ = canonical.AppendString(b, normalized.Schema)
-	b = append(b, `,"root":`...)
-	b = canonical.AppendBool(b, normalized.Root)
-	b = append(b, `,"draft":`...)
-	b = canonical.AppendBool(b, normalized.Draft)
-	b = append(b, `,"cause_links":`...)
+	b, err = canonical.AppendProvenanceStart(b, normalized.Schema, normalized.Root, normalized.Draft)
+	if err != nil {
+		return nil, err
+	}
 	b, err = appendCauseLinks(b, normalized.CauseLinks)
 	if err != nil {
 		return nil, err
@@ -114,25 +111,21 @@ func appendCauseLinks(b []byte, links []domainv5.CauseLink) ([]byte, error) {
 			b = append(b, ',')
 		}
 		b = append(b, `{"target_seal":`...)
-		b = appendObjectID(b, link.TargetSeal)
-		b = append(b, `,"previous_revision_seal_of_target_seal":[`...)
-		for j, previous := range link.PreviousRevisionSealOfTargetSeal {
-			if j > 0 {
-				b = append(b, ',')
-			}
-			b = appendObjectID(b, previous)
+		b, err = canonical.AppendNativeObjectID(b, link.TargetSeal)
+		if err != nil {
+			return nil, err
 		}
-		b = append(b, `],"messages":[`...)
-		for j, message := range link.Messages {
-			if j > 0 {
-				b = append(b, ',')
-			}
-			b, err = canonical.AppendString(b, message)
-			if err != nil {
-				return nil, err
-			}
+		b = append(b, `,"previous_revision_seal_of_target_seal":`...)
+		b, err = canonical.AppendNativeObjectIDs(b, link.PreviousRevisionSealOfTargetSeal)
+		if err != nil {
+			return nil, err
 		}
-		b = append(b, `]}`...)
+		b = append(b, `,"messages":`...)
+		b, err = canonical.AppendStrings(b, link.Messages)
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, '}')
 	}
 	return append(b, ']'), nil
 }

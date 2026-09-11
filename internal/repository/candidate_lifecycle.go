@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
+	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/store"
@@ -77,7 +78,7 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 			}
 		}
 	}
-	prospective, err := prospectiveSeal(candidate)
+	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return CandidateInspection{}, nil, fmt.Errorf("derive prospective Candidate IDs: %w", err)
 	}
@@ -105,21 +106,35 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 		ExpectedHeadState: candidateExpectedHeadState(candidate.ExpectedREFHead, currentHead)}, baseline, nil
 }
 
-func prospectiveSeal(candidate domainv5.Candidate) (domainv5.ResolvedSeal, error) {
+func (r *Repository) prospectiveSeal(candidate domainv5.Candidate) (domainv5.ResolvedSeal, error) {
 	material := domainv5.Material{Schema: domainv5.MaterialSchema, Content: candidate.Content, Attachments: candidate.Attachments}
 	materialBytes, err := canonicalv5.EncodeMaterial(material)
 	if err != nil {
 		return domainv5.ResolvedSeal{}, err
 	}
 	materialID := domain.ComputeNativeBlobID(materialBytes)
-	provenance := domainv5.Provenance{Schema: domainv5.ProvenanceSchema, Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks}
-	provenanceBytes, err := canonicalv5.EncodeProvenance(provenance)
+	provenance := domainv5.Provenance{Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks}
+	var provenanceBytes []byte
+	if r.format == 6 {
+		provenance.Schema = "sealgraph/provenance/v2"
+		provenanceBytes, err = canonicalv6.EncodeProvenance(provenance)
+	} else {
+		provenance.Schema = domainv5.ProvenanceSchema
+		provenanceBytes, err = canonicalv5.EncodeProvenance(provenance)
+	}
 	if err != nil {
 		return domainv5.ResolvedSeal{}, err
 	}
 	provenanceID := domain.ComputeNativeBlobID(provenanceBytes)
-	seal := domainv5.Seal{Schema: domainv5.SealSchema, Material: materialID, Provenance: provenanceID}
-	sealBytes, err := canonicalv5.EncodeSeal(seal)
+	seal := domainv5.Seal{Material: materialID, Provenance: provenanceID}
+	var sealBytes []byte
+	if r.format == 6 {
+		seal.Schema = "sealgraph/seal/v6"
+		sealBytes, err = canonicalv6.EncodeSeal(seal)
+	} else {
+		seal.Schema = domainv5.SealSchema
+		sealBytes, err = canonicalv5.EncodeSeal(seal)
+	}
 	if err != nil {
 		return domainv5.ResolvedSeal{}, err
 	}
