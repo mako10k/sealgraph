@@ -184,20 +184,33 @@ func (graph *observedGraph) staleFacts(head domain.ObjectID) (bool, []domain.Obj
 	}
 	paths := [][]domain.ObjectID{}
 	for _, target := range graph.causes[head.String()] {
-		graph.firstStalePaths(target, []domain.ObjectID{target}, &paths)
+		paths = append(paths, graph.firstStalePaths(target)...)
 	}
 	sortPaths(paths)
 	return self, direct, paths
 }
 
-func (graph *observedGraph) firstStalePaths(current domain.ObjectID, path []domain.ObjectID, result *[][]domain.ObjectID) {
+func (graph *observedGraph) firstStalePaths(current domain.ObjectID) [][]domain.ObjectID {
+	if paths, ok := graph.stalePaths[current.String()]; ok {
+		return paths
+	}
 	if !graph.isActiveLeaf(current) {
-		*result = append(*result, append([]domain.ObjectID(nil), path...))
-		return
+		paths := [][]domain.ObjectID{{current}}
+		graph.stalePaths[current.String()] = paths
+		return paths
 	}
+	paths := [][]domain.ObjectID{}
 	for _, next := range graph.causes[current.String()] {
-		graph.firstStalePaths(next, append(path, next), result)
+		for _, suffix := range graph.firstStalePaths(next) {
+			path := make([]domain.ObjectID, 1, len(suffix)+1)
+			path[0] = current
+			path = append(path, suffix...)
+			paths = append(paths, path)
+		}
 	}
+	sortPaths(paths)
+	graph.stalePaths[current.String()] = paths
+	return paths
 }
 
 func sortPaths(paths [][]domain.ObjectID) {
@@ -222,7 +235,7 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 		return nil, "", err
 	}
 	result := []RefStatus{}
-	staleHeads := make(map[string]domain.ObjectID)
+	staleHeads := make(map[string]bool)
 	for _, ref := range observation.names {
 		head := observation.heads[ref]
 		value := graph.nodes[head.String()]
@@ -230,13 +243,14 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 		if self || len(direct) > 0 || len(transitive) > 0 {
 			copy := head
 			result = append(result, RefStatus{REF: ref, Head: &copy, Draft: value.Provenance.Draft, StaleSelf: self, StaleDirect: direct, StaleTransitive: transitive})
-			staleHeads[ref] = head
+			staleHeads[head.String()] = true
 		}
 	}
 	if frontier {
 		filtered := result[:0]
+		blocked := make(map[string]bool)
 		for _, status := range result {
-			if graph.isFrontier(*status.Head, staleHeads) {
+			if graph.isFrontier(*status.Head, staleHeads, blocked) {
 				filtered = append(filtered, status)
 			}
 		}
@@ -245,30 +259,35 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 	if err := r.revalidateHeads(ctx, observation, "stale"); err != nil {
 		return nil, "", err
 	}
-	_ = scan // Cache bypass is semantically identical; format-5 cache is not yet persisted.
+	_ = scan // Cache bypass is semantically identical; the cache is not persisted.
 	return result, "", nil
 }
 
-func (graph *observedGraph) isFrontier(head domain.ObjectID, stale map[string]domain.ObjectID) bool {
-	targets := make(map[string]bool)
-	for _, id := range stale {
-		targets[id.String()] = true
-	}
-	stack := append([]domain.ObjectID(nil), graph.causes[head.String()]...)
-	seen := make(map[string]bool)
-	for len(stack) > 0 {
-		id := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if seen[id.String()] {
-			continue
-		}
-		seen[id.String()] = true
-		if targets[id.String()] {
+func (graph *observedGraph) isFrontier(head domain.ObjectID, stale, blocked map[string]bool) bool {
+	for _, target := range graph.causes[head.String()] {
+		if graph.reachesStaleHead(target, stale, blocked) {
 			return false
 		}
-		stack = append(stack, graph.causes[id.String()]...)
 	}
 	return true
+}
+
+func (graph *observedGraph) reachesStaleHead(current domain.ObjectID, stale, memo map[string]bool) bool {
+	key := current.String()
+	if stale[key] {
+		return true
+	}
+	if blocked, ok := memo[key]; ok {
+		return blocked
+	}
+	for _, next := range graph.causes[key] {
+		if graph.reachesStaleHead(next, stale, memo) {
+			memo[key] = true
+			return true
+		}
+	}
+	memo[key] = false
+	return false
 }
 
 type RevisionState string
@@ -401,22 +420,22 @@ func (r *Repository) Impact(ctx context.Context, selector string, assertedBy []s
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	limit := 1
+	if allPaths {
+		limit = maxPaths
+		if limit <= 0 {
+			limit = 100
+		}
+	}
+	pathMemo := make(map[string][][]domain.ObjectID)
 	for _, text := range ids {
 		head := uniqueHeads[text]
 		if head.Equal(selected.ID) {
 			continue
 		}
-		paths := graph.impactPaths(head, sourceSet)
+		paths := graph.impactPaths(head, sourceSet, limit+1, pathMemo)
 		if len(paths) == 0 {
 			continue
-		}
-		sortPaths(paths)
-		limit := 1
-		if allPaths {
-			limit = maxPaths
-			if limit <= 0 {
-				limit = 100
-			}
 		}
 		shown := paths
 		if len(shown) > limit {
@@ -470,20 +489,48 @@ func revisionClosure(source domain.ObjectID, revisions map[string][]domain.Objec
 	}
 	return result
 }
-func (graph *observedGraph) impactPaths(head domain.ObjectID, sources map[string]bool) [][]domain.ObjectID {
-	result := [][]domain.ObjectID{}
-	var visit func(domain.ObjectID, []domain.ObjectID)
-	visit = func(id domain.ObjectID, path []domain.ObjectID) {
-		if len(path) > 1 && sources[id.String()] {
-			result = append(result, append([]domain.ObjectID(nil), path...))
-			return
-		}
-		for _, next := range graph.causes[id.String()] {
-			visit(next, append(path, next))
+func (graph *observedGraph) impactPaths(head domain.ObjectID, sources map[string]bool, limit int, memo map[string][][]domain.ObjectID) [][]domain.ObjectID {
+	paths := [][]domain.ObjectID{}
+	for _, target := range graph.causes[head.String()] {
+		for _, suffix := range graph.impactSuffixPaths(target, sources, limit, memo) {
+			path := make([]domain.ObjectID, 1, len(suffix)+1)
+			path[0] = head
+			path = append(path, suffix...)
+			paths = append(paths, path)
 		}
 	}
-	visit(head, []domain.ObjectID{head})
-	return result
+	sortPaths(paths)
+	if len(paths) > limit {
+		paths = paths[:limit]
+	}
+	return paths
+}
+
+func (graph *observedGraph) impactSuffixPaths(current domain.ObjectID, sources map[string]bool, limit int, memo map[string][][]domain.ObjectID) [][]domain.ObjectID {
+	key := current.String()
+	if paths, ok := memo[key]; ok {
+		return paths
+	}
+	if sources[key] {
+		paths := [][]domain.ObjectID{{current}}
+		memo[key] = paths
+		return paths
+	}
+	paths := [][]domain.ObjectID{}
+	for _, next := range graph.causes[key] {
+		for _, suffix := range graph.impactSuffixPaths(next, sources, limit, memo) {
+			path := make([]domain.ObjectID, 1, len(suffix)+1)
+			path[0] = current
+			path = append(path, suffix...)
+			paths = append(paths, path)
+		}
+	}
+	sortPaths(paths)
+	if len(paths) > limit {
+		paths = paths[:limit]
+	}
+	memo[key] = paths
+	return paths
 }
 
 func (graph *observedGraph) revisionProof(source, target domain.ObjectID, revisions map[string][]domain.ObjectID, filter map[string]bool) (RevisionProof, error) {

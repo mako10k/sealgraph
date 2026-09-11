@@ -103,6 +103,13 @@ When a major architecture choice changes:
 
 Do not make llmthink a build dependency.
 
+ADRs 0029, 0030, and 0031 and the normative product documents own the accepted
+format-6 Link metadata contract. The earlier
+`docs/decisions/2026-08-17-link-metadata-sealgraphql.think` file remains design
+reasoning rather than runtime or specification authority. llmthink does not
+interpret Link metadata or become a dependency of its canonicalization,
+storage, inspection, or migration.
+
 ## 3. secdat
 
 Role: secret-safe execution and developer/release credential supply.

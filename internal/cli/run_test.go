@@ -59,6 +59,119 @@ func TestCLIInitReportsAllThreeOutcomesWithoutPaths(t *testing.T) {
 	}
 }
 
+func TestCLIFormat6MigrationAndLinkMetadataReceipts(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
+	mustRunCLI(t, dir, "seal", "root")
+	mustRunCLI(t, dir, "add", "dependent", "--non-root", "--target", "root", "--no-previous", "--content", "dependent")
+	code, migration, stderr := runCLI(t, dir, nil, "migrate", "repository", "--from", "5", "--to", "6", "--format", "json")
+	if code != 0 || stderr != "" {
+		t.Fatalf("migration code=%d stderr=%q", code, stderr)
+	}
+	migrationJSON := decodeCLIJSON(t, migration)
+	if migrationJSON["schema"] != "sealgraph/repository-migrate/v1" || migrationJSON["result"] != "MIGRATED" || migrationJSON["from_format"] != float64(5) || migrationJSON["to_format"] != float64(6) {
+		t.Fatalf("migration=%s", migration)
+	}
+	verifyFormat6ProjectedHuman(t, dir)
+	code, receipt, stderr := runCLI(t, dir, nil, "link-metadata", "set", "dependent", "--target", "root", "--namespace", "example.test/context", "--no-schema", "--value-json", ` {"b":2,"a":1} `, "--format", "json")
+	if code != 0 || stderr != "" {
+		t.Fatalf("set code=%d stderr=%q", code, stderr)
+	}
+	set := decodeCLIJSON(t, receipt)
+	if set["schema"] != "sealgraph/link-metadata-mutation/v1" || set["action"] != "SET" || set["before"] != nil || set["candidate_schema"] != "sealgraph/candidate/v6" {
+		t.Fatalf("set=%s", receipt)
+	}
+	after := set["after"].(map[string]any)
+	value := after["value"].(map[string]any)
+	if after["schema"] != nil || value["a"] != float64(1) || value["b"] != float64(2) {
+		t.Fatalf("after=%v", after)
+	}
+	verifyFormat6InspectionSchemas(t, dir)
+	verifyFormat6CandidateMetadataView(t, dir)
+	code, removed, stderr := runCLI(t, dir, nil, "link-metadata", "remove", "dependent", "--target", "root", "--namespace", "example.test/context", "--format", "json")
+	if code != 0 || stderr != "" || decodeCLIJSON(t, removed)["action"] != "REMOVED" {
+		t.Fatalf("remove code=%d stdout=%q stderr=%q", code, removed, stderr)
+	}
+}
+
+func verifyFormat6ProjectedHuman(t *testing.T, dir string) {
+	t.Helper()
+	code, projected, stderr := runCLI(t, dir, nil, "candidate", "show", "dependent", "--format", "human")
+	if code != 0 || stderr != "" || !strings.Contains(projected, "projected empty from v5") || !strings.Contains(projected, "sealgraph/candidate/v5") {
+		t.Fatalf("projected code=%d output=%q stderr=%q", code, projected, stderr)
+	}
+}
+
+func verifyFormat6InspectionSchemas(t *testing.T, dir string) {
+	t.Helper()
+	for command, args := range map[string][]string{
+		"sealgraph/show/v3":              {"show", "root", "--format", "json"},
+		"sealgraph/candidate-show/v3":    {"candidate", "show", "dependent", "--format", "json"},
+		"sealgraph/candidate-compare/v3": {"candidate", "compare", "dependent", "--format", "json"},
+		"sealgraph/graph/v3":             {"graph", "--format", "json"},
+		"sealgraph/impact/v3":            {"impact", "root", "--format", "json"},
+		"sealgraph/log/v3":               {"log", "root", "--format", "json"},
+		"sealgraph/linklog/v3":           {"linklog", "root", "--format", "json"},
+		"sealgraph/compare/v3":           {"compare", "root", "root", "--format", "json"},
+		"sealgraph/fsck/v3":              {"fsck", "--format", "json"},
+	} {
+		code, output, stderr := runCLI(t, dir, nil, args...)
+		if code != 0 || stderr != "" || decodeCLIJSON(t, output)["schema"] != command {
+			t.Fatalf("%v code=%d output=%q stderr=%q", args, code, output, stderr)
+		}
+	}
+}
+
+func verifyFormat6CandidateMetadataView(t *testing.T, dir string) {
+	t.Helper()
+	code, candidateOutput, stderr := runCLI(t, dir, nil, "candidate", "show", "dependent", "--format", "json")
+	if code != 0 || stderr != "" {
+		t.Fatalf("candidate view code=%d stderr=%q", code, stderr)
+	}
+	candidate := decodeCLIJSON(t, candidateOutput)["candidate"].(map[string]any)
+	links := candidate["cause_links"].([]any)
+	metadata := links[0].(map[string]any)["metadata"].([]any)
+	if candidate["candidate_schema"] != "sealgraph/candidate/v6" || len(metadata) != 1 {
+		t.Fatalf("candidate=%s", candidateOutput)
+	}
+	code, human, stderr := runCLI(t, dir, nil, "candidate", "show", "dependent", "--format", "human")
+	if code != 0 || stderr != "" || !strings.Contains(human, `Namespace: "example.test/context"`) || !strings.Contains(human, `Value: {"a":1,"b":2}`) {
+		t.Fatalf("human code=%d output=%q stderr=%q", code, human, stderr)
+	}
+}
+
+func TestCLIMigrateRepositoryReportsCommittedOutputFailure(t *testing.T) {
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
+	var stderr bytes.Buffer
+	code := runStandaloneAtWithInput(dir, []string{"migrate", "repository", "--from", "5", "--to", "6", "--format", "json"}, bytes.NewReader(nil), errorWriter{}, &stderr)
+	if code != 3 || !strings.Contains(stderr.String(), "MIGRATION_COMMITTED_OUTPUT_UNDELIVERED") || !strings.Contains(stderr.String(), "do not retry") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	code, output, stderrText := runCLI(t, dir, nil, "fsck", "--format", "json")
+	if code != 0 || stderrText != "" || decodeCLIJSON(t, output)["schema"] != "sealgraph/fsck/v3" {
+		t.Fatalf("readback code=%d output=%q stderr=%q", code, output, stderrText)
+	}
+}
+
+func TestCLILinkMetadataRejectsAmbiguousAndDuplicateKeyInput(t *testing.T) {
+	if code, stdout, stderr := runCLI(t, t.TempDir(), nil, "link-metadata", "set", "ref", "--target", "target", "--namespace", "n", "--no-schema", "--value-json", "null", "--value-file", "value.json"); code != 2 || stdout != "" || !strings.Contains(stderr, "exactly one of --value-json or --value-file") {
+		t.Fatalf("ambiguous code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	dir := t.TempDir()
+	mustRunCLI(t, dir, "init")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "root")
+	mustRunCLI(t, dir, "seal", "root")
+	mustRunCLI(t, dir, "add", "dependent", "--non-root", "--target", "root", "--no-previous", "--content", "dependent")
+	mustRunCLI(t, dir, "migrate", "repository", "--from", "5", "--to", "6", "--format", "json")
+	code, stdout, stderr := runCLI(t, dir, nil, "link-metadata", "set", "dependent", "--target", "root", "--namespace", "n", "--no-schema", "--value-json", `{"a":1,"a":2}`)
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "duplicate metadata object key") {
+		t.Fatalf("duplicate code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
 func TestCLIHelpDefinesOperatorSemanticsWithoutGitDiscovery(t *testing.T) {
 	code, stdout, stderr := runCLI(t, t.TempDir(), nil, "help")
 	if code != 0 || stderr != "" {
@@ -143,6 +256,7 @@ func TestCLIUsageAndUnknownNavigation(t *testing.T) {
 		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
 		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
 		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
+		{[]string{"compare", "root"}, []string{"SECOND_SELECTOR_REQUIRED", "compare requires exactly two explicit Seal selectors", "help: sealgraph help compare"}},
 		{[]string{"add", "spec", "--content", "x", "--non-root=false", "--target", "@abcd", "--no-previous"}, []string{"--non-root=false is invalid", "help: sealgraph help add"}},
 		{[]string{"link", "spec", "--target", "@abcd", "--no-previous=false"}, []string{"--no-previous=false is invalid", "help: sealgraph help link"}},
 	}

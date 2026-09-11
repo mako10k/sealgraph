@@ -1,8 +1,10 @@
 # Storage format
 
-Status: the checked-in runtime writes native format 5 and supports only the
-explicit `universal-blob-v1` extract/load boundary for format 4. Ordinary
-runtime readers never interpret formats 1 through 4.
+Status: the checked-in runtime initializes native format 5 and, after the
+explicit config-only migration, writes native format 6 while retaining strict
+format-5 history. It also supports the explicit `universal-blob-v1`
+extract/load boundary for format 4. Ordinary runtime readers never interpret
+formats 1 through 4.
 
 ## 1. Layout
 
@@ -289,7 +291,7 @@ stored in Seal, Link, REF, candidate, tag, or canonical config state.
 `.sealgraph/cache/` may contain a derived revision/Cause index only when bound
 to repository/schema version and the complete observation. Cache results MUST
 be equivalent to canonical scan, and a hit MUST NOT skip Blob, graph, selector,
-or observation revalidation. The current format-5 runtime does not persist a
+or observation revalidation. The current runtime does not persist a
 graph cache; `stale --scan` is therefore semantically identical. Future cache
 state remains disposable and never repairs canonical state.
 
@@ -342,3 +344,66 @@ manifest is limited to 16 MiB. V1 permits exactly one transition for `seal`,
 `tag`, or `ref-drop` and exactly two sorted transitions for `mv`; `seal` ends
 present, `tag` is present-to-present, `ref-drop` is present-to-absent, and `mv`
 contains one present-to-absent plus one absent-to-present transition.
+
+## 13. Canonical format-6 successor
+
+Format-6 config bytes differ from format 5 only in the first value:
+
+```text
+repository_format = 6
+object_format = sha256
+ref_format = manifest-v1
+```
+
+The only transition is the explicit atomic config-only command defined by ADR
+0030. It rewrites no object, REF manifest, tag, Candidate, or identity. A
+format-6 repository accepts exact historical Seal v5/Provenance v1 and
+Candidate v5 records, but every successor write uses Seal v6/Provenance v2 and
+Candidate v6. Cross-generation Seal/Provenance pairings are corruption.
+
+Provenance v2 retains member order `schema, root, draft, cause_links`. Its Cause
+Link member order is:
+
+```text
+target_seal, previous_revision_seal_of_target_seal, messages, metadata
+```
+
+Metadata is a required array sorted bytewise by unique namespace. Each entry
+has exact order `namespace, schema, value`; schema is null or non-empty UTF-8,
+and value is one bounded canonical JSON value. The closed value model is null,
+boolean, shortest signed 64-bit integer, bounded UTF-8 string, array, or object.
+Objects sort unique keys bytewise and reject duplicate keys before host-map
+decoding. Floating point, negative zero, exponent notation, invalid UTF-8,
+excess depth/nodes/bytes, and unknown record members fail closed. The exact
+bounds and escaping rules are normative in ADR 0030.
+
+Candidate v6 retains Candidate v5 member order and adds metadata inside each
+Cause Link. Candidate files remain mutable canonical JSON plus LF. Historical
+Candidate v5 readers project empty metadata in memory only; files are upgraded to v6
+only by an actual successful Candidate mutation.
+
+Publication does not publish Candidate v5 bytes directly and does not rewrite a
+Candidate v5 file as a preliminary step. It constructs and validates the exact
+Candidate-v6 projection in memory, creates Provenance v2 and Seal v6, performs
+the existing expected-old and coherent-observation revalidation, and only then
+uses the one-REF CAS workflow.
+
+Seal v6 retains exact member order `schema, material, provenance`; schema is
+`sealgraph/seal/v6` and provenance must decode as
+`sealgraph/provenance/v2`. Material remains `sealgraph/material/v1`. Complete
+metadata affects Provenance identity and therefore Seal identity without
+creating a structural or revision edge.
+
+Format-6 Assessment-free change identity uses
+`sealgraph/upstream-change/v2` with exact member order:
+
+```text
+schema, before_seal, after_material, after_root, after_draft, after_cause_links
+```
+
+`after_cause_links` contains complete canonical format-6 Cause Links, including
+metadata. Format-6 operations emit and compare only v2 change IDs, even when all
+metadata arrays are empty, so adding, replacing, or removing metadata changes
+`change_id`. Existing immutable v1 upstream-change and Assessment Blobs are not
+rewritten. Migration fabricates or adopts no Assessment; Assessment-reference
+storage remains separately gated by ADR 0028.

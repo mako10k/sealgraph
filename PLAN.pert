@@ -1,10 +1,10 @@
 project SEALGRAPH:
-  version 5
+  version 6
   title "Sealgraph initial implementation"
-  as_of 2026-08-28
+  as_of 2026-09-10
   duration_unit point
   velocity 1p/1d
-  finish CAUSE_REVISION_READY
+  finish FORMAT6_METADATA_READY
 
 milestone START:
   title "Architecture scaffold exists"
@@ -104,15 +104,32 @@ milestone RECOVERY_READY:
 
 milestone CAUSE_REVISION_DESIGN:
   title "Cause-scoped revision and Universal Blob ADR set is accepted"
+  state reached
 
 milestone CAUSE_REVISION_FORMAT:
   title "Universal Blob format and incompatible migration boundary work"
+  state reached
 
 milestone CAUSE_REVISION_RUNTIME:
   title "Cause-scoped graph and format-5 public runtime work"
+  state reached
 
 milestone CAUSE_REVISION_READY:
   title "Cause-scoped revision normative and runtime acceptance passes"
+  state reached
+
+milestone LINK_METADATA_DESIGN:
+  title "Format-6 Cause Link metadata ADR set is accepted"
+  state reached
+
+milestone FORMAT6_METADATA_STORAGE:
+  title "Format-6 metadata storage and migration primitives work"
+
+milestone FORMAT6_METADATA_RUNTIME:
+  title "Format-6 metadata CLI and inspection runtime works"
+
+milestone FORMAT6_METADATA_READY:
+  title "Format-6 metadata normative and runtime acceptance passes"
 
 task FORMAT_SPEC START -> FORMAT:
   title "Lock canonical payload, REF grammar, and object IDs"
@@ -248,29 +265,57 @@ task CAUSE_REVISION_CONTRACT RECOVERY_READY -> CAUSE_REVISION_DESIGN:
   title "Accept Cause-scoped revision, Universal Blob, migration, and public interface contracts"
   description "Review and accept ADRs 0023, 0025, 0026, and 0027 covering manifest-coherent Cause-scoped observation, all-observer and explicitly filtered impact, unique-node branching log, edge-wise linklog, minimal typed Blob instances, exact format-5 Candidate bytes, one-target authoring, exact inspection schema successors, explicit loss of unobserved format-4 parent meaning, deterministic warning and receipt, exact export observation and durability, and no ordinary runtime compatibility layer while retaining ADR 0024 source-adapter separation."
   duration 3p
-  status active
+  status done
   source "Operator direction and ADRs 0023 through 0027"
 
 task CAUSE_REVISION_FORMAT_SLICE CAUSE_REVISION_DESIGN -> CAUSE_REVISION_FORMAT:
   title "Implement Universal Blob canonical format and isolated migration"
   description "Add the accepted Seal, Material, Provenance, and exact Candidate schemas; scalar-exact canonical JSON and typed Blob validation; target-normalized Cause assertions; double-captured format-4 dump with Kahn ordering and explicit exclusions; migration-only old-payload verification; format-5 load with file/directory/parent durability; collapse and unobserved-parent warnings; fully canonical durable receipts; load-receipt recovery; and fixed fixtures without a dual repository reader."
   duration 6p
-  status planned
+  status done
   source "ADRs 0023, 0025, 0026, and 0027 after acceptance"
 
 task CAUSE_REVISION_RUNTIME_SLICE CAUSE_REVISION_FORMAT -> CAUSE_REVISION_RUNTIME:
   title "Implement Cause-derived graph and Universal Blob runtime semantics"
   description "Replace intrinsic-parent algorithms coherently; implement exact-manifest observations and conditional Seal inventories, observed-closure selectors, explicit two-selector compare, publication-baseline candidate compare, unique-node bounded log/v2, impact/v2 with repeatable asserted-by filtering, edge-wise linklog/v2, all affected inspection successors including status/v3, one-target whole-record authoring, assertion-aware indexes, CLI and cache changes; and pass format-5 graph, typed-Blob, migration-readback, and no-automatic-repair acceptance."
   duration 8p
-  status planned
+  status done
   source "ADRs 0023, 0025, 0026, and 0027 after acceptance"
 
 task CAUSE_REVISION_NORMATIVE_SYNC CAUSE_REVISION_RUNTIME -> CAUSE_REVISION_READY:
   title "Synchronize format-5 normative and public contracts"
   description "Update requirements, architecture, storage-format, CLI, integrations, documentation index, runtime help, and completion from the accepted ADR bytes; bind fixed format-5 canonical and inspection JSON fixtures; remove contradictory format-4 parent authority from the format-5 sections; and pass cross-reference, schema-matrix, and full repository validation before READY."
   duration 3p
-  status planned
+  status done
   source "ADRs 0023 through 0027 normative synchronization gate"
+
+task LINK_METADATA_CONTRACT CAUSE_REVISION_READY -> LINK_METADATA_DESIGN:
+  title "Accept extensible Cause Link metadata format-6 decision set"
+  description "Recover and accept the optional namespaced Link metadata requirement, embedded Cause Link semantics, format-6 canonical storage and compatibility boundary, one-namespace Candidate mutation, successor inspection schemas, typed linklog endpoints, and exact config-only migration command while keeping query and Assessment work separate."
+  duration 3p
+  status done
+  source "Accepted requirement revision 2 and ADRs 0029 through 0031"
+
+task FORMAT6_METADATA_STORAGE_SLICE LINK_METADATA_DESIGN -> FORMAT6_METADATA_STORAGE:
+  title "Implement format-6 metadata storage and migration primitives"
+  description "Add Seal v6, Provenance v2, Candidate v6, canonical bounded metadata values, exact v5 historical reading and Candidate projection, v6-only writes, upstream-change/v2 identity, complete fsck generation accounting, and the atomic config-only format-5-to-format-6 repository migration primitive without migrating the project repository."
+  duration 5p
+  status done
+  source "Accepted ADRs 0029 and 0030"
+
+task FORMAT6_METADATA_CLI_SLICE FORMAT6_METADATA_STORAGE -> FORMAT6_METADATA_RUNTIME:
+  title "Implement format-6 metadata CLI and inspection contracts"
+  description "Add one-target one-namespace link-metadata set/remove, preserve metadata through legacy add/link authoring, implement successor human and JSON inspection/comparison/linklog schemas with typed endpoints and historical projection labels, expose the exact migration command and receipt, and keep query, validator, and Assessment commands absent."
+  duration 7p
+  status done
+  source "Accepted ADR 0031"
+
+task FORMAT6_METADATA_NORMATIVE_SYNC FORMAT6_METADATA_RUNTIME -> FORMAT6_METADATA_READY:
+  title "Synchronize format-6 metadata normative and public contracts"
+  description "Update requirements, architecture, storage-format, CLI, integrations, implementation plan, help, completion, and fixed canonical/output fixtures from accepted ADRs 0029 through 0031; validate mixed v5/v6 projection, migration ambiguity, and the complete repository without performing project-repository migration."
+  duration 3p
+  status done
+  source "Accepted ADRs 0029 through 0031 normative synchronization gate"
 
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
   model 1
@@ -303,3 +348,42 @@ work_event WE-41ce5b74eaec85767ac1742a2958169a07b5a48202e41ebb1adf486e2f9dbebf:
   task RECOVERY_CONTRACT
   kind finish
   occurred_at 2026-08-17T17:20:14+09:00
+
+work_event WE-98e24765abbe922044815a5a40147664b24a2f5a06b2406122d3408a57c8637c:
+  model 1
+  task FORMAT6_METADATA_STORAGE_SLICE
+  kind start
+  occurred_at 2026-09-11T20:42:13+09:00
+  planned_value 5p
+
+work_event WE-7b35df56f70451c860765c9a94f16322ec79c3cb14d3e3ff5f904f135231a1c2:
+  model 1
+  task FORMAT6_METADATA_STORAGE_SLICE
+  kind finish
+  occurred_at 2026-09-11T20:42:14+09:00
+
+work_event WE-907ea62b1226b2dad97aa70c53e61557bcc431d59de3b76e825d8d74c546e1b8:
+  model 1
+  task FORMAT6_METADATA_CLI_SLICE
+  kind start
+  occurred_at 2026-09-11T20:42:15+09:00
+  planned_value 7p
+
+work_event WE-dbce42ddfe7b1cc0ac8cc7989e02d517460ba5a2304e4cb4b0ff26ea67048926:
+  model 1
+  task FORMAT6_METADATA_CLI_SLICE
+  kind finish
+  occurred_at 2026-09-11T20:42:16+09:00
+
+work_event WE-70537108fdaf0743d33a54c5103a46daeb7fab6a81e382ffbb6fe7d17cb42451:
+  model 1
+  task FORMAT6_METADATA_NORMATIVE_SYNC
+  kind start
+  occurred_at 2026-09-11T20:42:17+09:00
+  planned_value 3p
+
+work_event WE-b9865ee280a781bb97f1946cecc8fbf538e2f842ca629ffb45c71bb406cf80f7:
+  model 1
+  task FORMAT6_METADATA_NORMATIVE_SYNC
+  kind finish
+  occurred_at 2026-09-11T20:42:18+09:00

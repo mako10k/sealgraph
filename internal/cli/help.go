@@ -69,6 +69,26 @@ var commandHelpRegistry = map[string]commandHelp{
 		Options: []helpOption{{"--target TARGET", "required exactly once; resolves to the record's exact target Seal"}, {"--previous PREVIOUS", "repeatable; exact previous revision asserted for TARGET"}, {"--no-previous", "assert no previous revision for TARGET; conflicts with --previous"}, {"-m MESSAGE", "repeatable identity-bearing message in this exact record"}},
 		Details: []string{"The operation replaces the whole record for that exact target and preserves every other Candidate field and Cause Link. It never unions messages or previous revisions with an existing record."}, Examples: []string{"sealgraph link design/api --target requirements/api --no-previous -m 'API design is based on this generation'", "sealgraph link design/api --target requirements/api --previous @abcd"}, Related: []string{"unlink", "candidate show", "selectors", "concepts cause"},
 	},
+	"link-metadata": {
+		Path: "link-metadata", Summary: "Set or remove one namespaced metadata entry on one exact Candidate Cause Link.",
+		Usage: []string{"sealgraph link-metadata <set|remove> ..."}, Subcommands: []string{"set", "remove"},
+		Details: []string{"Metadata is opaque, identity-bearing canonical JSON. These operations require repository format 6 and never create a Seal or move a REF."},
+		Related: []string{"link-metadata set", "link-metadata remove", "candidate show", "link"},
+	},
+	"link-metadata set": {
+		Path: "link-metadata set", Summary: "Add or replace one complete metadata entry on one exact Candidate Cause Link.",
+		Usage:   []string{"sealgraph link-metadata set REF --target TARGET --namespace NAMESPACE (--schema SCHEMA | --no-schema) (--value-json JSON | --value-file PATH_OR_DASH) [--format human|json]"},
+		Options: []helpOption{{"--target TARGET", "required exact Cause target selector"}, {"--namespace NAMESPACE", "required exact namespace"}, {"--schema SCHEMA", "non-empty schema; conflicts with --no-schema"}, {"--no-schema", "store a null schema; conflicts with --schema"}, {"--value-json JSON", "one complete JSON value; conflicts with --value-file"}, {"--value-file PATH_OR_DASH", "read one JSON value from a regular non-symlink file or stdin (-)"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"The value is canonicalized and duplicate object keys are rejected. Every unselected Candidate and Link field is preserved; an identical set is idempotent."},
+		Related: []string{"link-metadata remove", "candidate show", "link"},
+	},
+	"link-metadata remove": {
+		Path: "link-metadata remove", Summary: "Remove one existing namespace from one exact Candidate Cause Link.",
+		Usage:   []string{"sealgraph link-metadata remove REF --target TARGET --namespace NAMESPACE [--format human|json]"},
+		Options: []helpOption{{"--target TARGET", "required exact Cause target selector"}, {"--namespace NAMESPACE", "required exact namespace"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"Removing an absent namespace fails. The Cause Link itself and every unselected field are preserved."},
+		Related: []string{"link-metadata set", "candidate show", "unlink"},
+	},
 	"unlink": {
 		Path: "unlink", Summary: "Remove exactly one resolved Cause target from one candidate.",
 		Usage: []string{"sealgraph unlink REF --target TARGET"}, Arguments: []string{"REF (required): candidate REF."}, Options: []helpOption{{"--target TARGET", "required exactly once; exact target record to remove"}},
@@ -129,10 +149,17 @@ var commandHelpRegistry = map[string]commandHelp{
 	"graph": inspectionHelp("graph", "Inspect observed Cause and Cause-scoped revision edges.", "sealgraph graph [--format human|json]", nil),
 	"fsck":  inspectionHelp("fsck", "Validate the complete standalone object, REF/tag, material, revision, and Cause inventory without repair.", "sealgraph fsck [--format human|json]", nil),
 	"migrate": {
-		Path: "migrate", Summary: "Run an explicitly isolated one-way repository migration step.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1"}, Subcommands: []string{"extract"}, Details: []string{"Migration commands are outside ordinary format-5 repository operations. They never enable a general dual reader or in-place rewrite."}, Related: []string{"migrate extract", "load"},
+		Path: "migrate", Summary: "Run an explicitly isolated one-way repository migration step.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1", "sealgraph migrate repository --from 5 --to 6 [--format human|json]"}, Subcommands: []string{"extract", "repository"}, Details: []string{"Each migration command accepts one exact source/target contract. No downgrade, inference, force, or batch path exists."}, Related: []string{"migrate extract", "migrate repository", "load"},
 	},
 	"migrate extract": {
-		Path: "migrate extract", Summary: "Read one retained format-4 source and emit a canonical migration document.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Arguments: []string{"No positional arguments; the source is exactly .sealgraph below the current directory."}, Options: []helpOption{{"--source-format 4", "required exactly once; no other source format is accepted"}, {"--format universal-blob-v1", "required exactly once; no other document format is accepted"}}, Details: []string{"This is the only format-5 command that opens format 4. It has no source mutation operation, never inspects Git, rejects every Candidate or corrupt/unrecognized canonical entry, validates two equal complete source captures, and writes the document only after both captures agree."}, Examples: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Related: []string{"load", "init", "fsck"},
+		Path: "migrate extract", Summary: "Read one retained format-4 source and emit a canonical migration document.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Arguments: []string{"No positional arguments; the source is exactly .sealgraph below the current directory."}, Options: []helpOption{{"--source-format 4", "required exactly once; no other source format is accepted"}, {"--format universal-blob-v1", "required exactly once; no other document format is accepted"}}, Details: []string{"This is the only migration command that opens format 4. It has no source mutation operation, never inspects Git, rejects every Candidate or corrupt/unrecognized canonical entry, validates two equal complete source captures, and writes the document only after both captures agree."}, Examples: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Related: []string{"load", "init", "fsck"},
+	},
+	"migrate repository": {
+		Path: "migrate repository", Summary: "Atomically change one validated repository config from format 5 to format 6 without rewriting retained records.",
+		Usage:   []string{"sealgraph migrate repository --from 5 --to 6 [--format human|json]"},
+		Options: []helpOption{{"--from 5", "required exactly once"}, {"--to 6", "required exactly once"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"The command validates and snapshots format-5 state, atomically replaces only config, then reopens and fscks format 6. If receipt delivery fails after commit, do not rerun migration; use fsck."},
+		Related: []string{"fsck", "migrate extract"},
 	},
 	"load": {
 		Path: "load", Summary: "Atomically import one canonical format-4 migration document into an absent format-5 target.", Usage: []string{"sealgraph load --format universal-blob-v1 < repository.dump.json"}, Arguments: []string{"No positional arguments; stdin is the exact canonical document emitted by migrate extract."}, Options: []helpOption{{"--format universal-blob-v1", "required exactly once; no other value is accepted"}}, Details: []string{"First extract in the retained format-4 repository with `sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json`. Load consumes only that document; it never opens format 4, merges, replaces, or repairs an existing target. If receipt stdout delivery alone fails after publication, recover it with load-receipt; never retry load."}, Examples: []string{"sealgraph load --format universal-blob-v1 < repository.dump.json"}, Related: []string{"migrate extract", "load-receipt", "init", "fsck"},

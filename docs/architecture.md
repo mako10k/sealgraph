@@ -1,9 +1,10 @@
 # Architecture
 
-Status: the checked-in runtime implements the accepted format-5 typed-Blob,
-parentless Candidate, Cause-scoped revision, isolated format-4 extraction,
-atomic universal migration load, inspection, REF manifest, scoped tag, move,
-and recovery core. Git views remain separately sequenced.
+Status: the checked-in runtime implements the accepted format-5 and format-6
+typed-Blob, parentless Candidate, Cause-scoped revision, generic Link metadata,
+explicit format-5-to-6 migration, isolated format-4 extraction, atomic universal
+migration load, inspection, REF manifest, scoped tag, move, and recovery core.
+Git views remain separately sequenced.
 
 ## 1. Design center
 
@@ -70,28 +71,37 @@ modify unrelated Git policy silently.
 
 ## 3. Package boundaries
 
-### `internal/domain` and `internal/domain/v5`
+### `internal/domain`, `internal/domain/v5`, and `internal/domain/v6`
 
 Pure semantic types:
 
 - native `ObjectID` and portable REF/tag grammar;
-- format-5 `Attachment`, `CauseLink`, `Material`, `Provenance`, and `Seal`;
+- generation-tagged `Attachment`, `CauseLink`, metadata, `Material`,
+  `Provenance`, and `Seal` views;
 - parentless Candidate semantic/publication state;
 - REF names and derived observation facts.
 
 The format-4 payload type remains reachable only by the isolated migration
-document verifier; ordinary repository APIs use only versioned format-5 types.
+document verifier; ordinary repository APIs use only versioned format-5 and
+format-6 types.
 
 No filesystem, Git, CLI, clock, environment, or current-REF lookup occurs
 here. A Seal contains no owner REF.
 
-### `internal/canonical/v5`
+### `internal/canonical/v5` and `internal/canonical/v6`
 
 - deterministic Material, Provenance, Seal, and Candidate encoding;
 - exact member order and JSON escaping;
 - Cause/previous/message/attachment sorting and duplicate rejection;
 - canonical decode/re-encode byte equality;
 - fixed fixture hashes.
+
+The v6 codec adds bounded namespace-sorted canonical JSON metadata to every
+Cause Link and enforces exact Seal v6/Provenance v2 pairing. The v5 codec keeps
+historical bytes exact and never accepts v6 members. Material v1 remains shared.
+Format-6 Assessment-free change identity uses the generation-specific
+`upstream-change/v2` canonical record; Assessment references remain outside this
+slice.
 
 Canonical encoding does not resolve selectors, inspect REFs, derive stale, or
 perform I/O.
@@ -168,7 +178,10 @@ Coordinates:
 - candidate lifecycle;
 - content object writes and preservation of existing attachment objects;
 - exact selector resolution;
-- whole-record Cause authoring with one coherent selector observation;
+- format-5 whole-record and format-6 metadata-preserving legacy Cause authoring
+  with one coherent selector observation;
+- single-namespace Link metadata set/remove with expected-old Candidate
+  replacement and legacy authoring preservation;
 - normal Cause-closure admission;
 - canonical Material, Provenance, and Seal creation;
 - one-REF CAS publication;
@@ -178,7 +191,8 @@ Coordinates:
 - local non-canonical recovery-journal orchestration and operation-specific
   exact-state restoration;
 - absent-target universal-blob import, typed projection, semantic-loss receipt,
-  fsck/digest readback, and atomic namespace publication.
+  fsck/digest readback, and atomic namespace publication;
+- exact config-only format-5-to-6 migration with retained-state readback.
 
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.
@@ -266,7 +280,7 @@ native reader and shared domain packages.
 
 ## 4. Native object store
 
-Format 5 retains:
+Formats 5 and 6 retain:
 
 - immutable loose objects;
 - Git-compatible SHA-256 blob envelope and path where practical;
@@ -286,7 +300,9 @@ repository and must not receive Git maintenance or porcelain operations.
 One Seal publication:
 
 1. acquires the repository-wide native writer guard;
-2. loads one exact candidate version;
+2. loads one exact candidate version and, for Candidate v5 in a format-6
+   repository, constructs its exact Candidate-v6 projection in memory without
+   rewriting the Candidate file;
 3. validates `expected_ref_head`, Material, Provenance, complete Cause
    admissibility, and the prospective combined graph;
 4. canonicalizes and writes Material, Provenance, and Seal Blobs;

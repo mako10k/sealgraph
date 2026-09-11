@@ -18,6 +18,7 @@ type observedGraph struct {
 	children   map[string][]domain.ObjectID
 	assertions map[string][]domainv5.AssertionSource
 	active     map[string]bool
+	stalePaths map[string][][]domain.ObjectID
 }
 
 func (r *Repository) buildObservation(ctx context.Context, operation string) (headObservation, *observedGraph, error) {
@@ -27,7 +28,7 @@ func (r *Repository) buildObservation(ctx context.Context, operation string) (he
 	}
 	graph, err := r.buildObservedGraph(ctx, observation.heads, nil)
 	if err != nil {
-		return headObservation{}, nil, fmt.Errorf("derive format-5 observation for %s: %w", operation, err)
+		return headObservation{}, nil, fmt.Errorf("derive repository observation for %s: %w", operation, err)
 	}
 	return observation, graph, nil
 }
@@ -37,6 +38,7 @@ func (r *Repository) buildObservedGraph(ctx context.Context, heads map[string]do
 		nodes: make(map[string]domainv5.ResolvedSeal), heads: cloneHeads(heads), refs: make(map[string][]string),
 		causes: make(map[string][]domain.ObjectID), revisions: make(map[string][]domain.ObjectID),
 		children: make(map[string][]domain.ObjectID), assertions: make(map[string][]domainv5.AssertionSource), active: make(map[string]bool),
+		stalePaths: make(map[string][][]domain.ObjectID),
 	}
 	queue := make([]domain.ObjectID, 0, len(heads))
 	for ref, head := range heads {
@@ -61,7 +63,11 @@ func (r *Repository) buildObservedGraph(ctx context.Context, heads map[string]do
 		for _, link := range resolved.Provenance.CauseLinks {
 			graph.causes[id.String()] = appendUniqueID(graph.causes[id.String()], link.TargetSeal)
 			queue = append(queue, link.TargetSeal)
-			source := domainv5.AssertionSource{ObserverSeal: id, ObserverProvenance: resolved.Seal.Provenance, CauseLink: link}
+			source := domainv5.AssertionSource{
+				ObserverSeal: id, ObserverSealSchema: resolved.Seal.Schema,
+				ObserverProvenance: resolved.Seal.Provenance, ObserverProvenanceSchema: resolved.Provenance.Schema,
+				CauseLink: link,
+			}
 			graph.assertions[link.TargetSeal.String()] = append(graph.assertions[link.TargetSeal.String()], source)
 			for _, previous := range link.PreviousRevisionSealOfTargetSeal {
 				graph.revisions[link.TargetSeal.String()] = appendUniqueID(graph.revisions[link.TargetSeal.String()], previous)
@@ -260,7 +266,7 @@ func (r *Repository) validateProspectiveCandidate(ctx context.Context, candidate
 	if err != nil {
 		return headObservation{}, err
 	}
-	prospective, err := prospectiveSeal(candidate)
+	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return headObservation{}, err
 	}

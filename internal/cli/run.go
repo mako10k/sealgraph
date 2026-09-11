@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -83,6 +85,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runSource(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
 		return runLink(ctx, workDir, args[1:], stdout, stderr), true
+	case "link-metadata":
+		return runLinkMetadata(ctx, workDir, args[1:], stdin, stdout, stderr), true
 	case "unlink":
 		return runUnlink(ctx, workDir, args[1:], stdout, stderr), true
 	case "tag":
@@ -93,6 +97,10 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runCandidate(ctx, workDir, args[1:], stdout, stderr), true
 	case "seal":
 		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
+	case "migrate":
+		if len(args) > 1 && args[1] == "repository" {
+			return runMigrateRepository(ctx, workDir, args[2:], stdout, stderr), true
+		}
 	case "recover":
 		return runRecover(ctx, workDir, args[1:], stdout, stderr), true
 	case "ref":
@@ -400,12 +408,56 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 
 func runMigrate(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "migrate requires extract")
+		return usageError(stderr, "migrate requires extract or repository")
 	}
-	if args[0] != "extract" {
-		return usageError(stderr, "unknown migrate operation %q; expected extract", args[0])
+	switch args[0] {
+	case "extract":
+		return runMigrateExtract(ctx, workDir, args[1:], stdout, stderr)
+	case "repository":
+		return runMigrateRepository(ctx, workDir, args[1:], stdout, stderr)
+	default:
+		return usageError(stderr, "unknown migrate operation %q; expected extract or repository", args[0])
 	}
-	return runMigrateExtract(ctx, workDir, args[1:], stdout, stderr)
+}
+
+func runMigrateRepository(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, output, err := extractInspectionFormat(args, stdout)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	flags := flag.NewFlagSet("migrate repository", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var from, to singleString
+	flags.Var(&from, "from", "required source repository format")
+	flags.Var(&to, "to", "required target repository format")
+	if err := flags.Parse(args); err != nil {
+		return flagUsageError(stderr, "migrate repository", err)
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "migrate repository accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if !from.set || from.value != "5" || !to.set || to.value != "6" {
+		return usageError(stderr, "migrate repository requires exactly --from 5 --to 6")
+	}
+	result, err := repository.MigrateRepository5To6(ctx, workDir)
+	if err != nil {
+		return commandError(stderr, "migrate repository", err)
+	}
+	receipt := repositoryMigrationReceipt{
+		Schema: "sealgraph/repository-migrate/v1", FromFormat: 5, ToFormat: 6, Result: "MIGRATED",
+		RetainedSealsV5: result.RetainedSealsV5, RetainedProvenancesV1: result.RetainedProvenancesV1, RetainedCandidatesV5: result.RetainedCandidatesV5,
+	}
+	if output.JSON {
+		return writeCommittedMigrationJSON(stdout, stderr, receipt)
+	}
+	var human bytes.Buffer
+	printHumanReceipt(&human, "REPOSITORY MIGRATED",
+		humanField{"Format", "5 -> 6"}, humanField{"Result", "MIGRATED"},
+		humanField{"Retained Seals v5", strconv.Itoa(result.RetainedSealsV5)},
+		humanField{"Retained Provenances v1", strconv.Itoa(result.RetainedProvenancesV1)},
+		humanField{"Retained Candidates v5", strconv.Itoa(result.RetainedCandidatesV5)},
+	)
+	return writeCommittedMigrationBytes(stdout, stderr, human.Bytes())
 }
 
 func runMigrateExtract(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -792,6 +844,135 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	return 0
 }
 
+func runLinkMetadata(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "link-metadata requires set or remove")
+	}
+	switch args[0] {
+	case "set":
+		return runLinkMetadataSet(ctx, workDir, args[1:], stdin, stdout, stderr)
+	case "remove":
+		return runLinkMetadataRemove(ctx, workDir, args[1:], stdout, stderr)
+	default:
+		return usageError(stderr, "link-metadata requires set or remove")
+	}
+}
+
+func runLinkMetadataSet(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	args, output, err := extractInspectionFormat(args, stdout)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) == 0 {
+		return usageError(stderr, "link-metadata set requires exactly one REF")
+	}
+	ref := args[0]
+	flags := flag.NewFlagSet("link-metadata set", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var target, namespace, schema, valueJSON, valueFile singleString
+	var noSchema singleBool
+	flags.Var(&target, "target", "exact Cause target selector")
+	flags.Var(&namespace, "namespace", "exact metadata namespace")
+	flags.Var(&schema, "schema", "metadata schema")
+	flags.Var(&noSchema, "no-schema", "store a null schema")
+	flags.Var(&valueJSON, "value-json", "complete JSON value")
+	flags.Var(&valueFile, "value-file", "regular file or - for stdin")
+	if err := flags.Parse(args[1:]); err != nil {
+		return flagUsageError(stderr, "link-metadata set", err)
+	}
+	if flags.NArg() != 0 || ref == "" {
+		return usageError(stderr, "link-metadata set requires exactly one REF")
+	}
+	if !target.set || target.value == "" || !namespace.set || namespace.value == "" {
+		return usageError(stderr, "link-metadata set requires exactly one --target and --namespace")
+	}
+	if _, err := repository.ParseSelector(target.value); err != nil {
+		return usageError(stderr, "invalid --target %q: %v", target.value, err)
+	}
+	if schema.set == noSchema.set {
+		return usageError(stderr, "link-metadata set requires exactly one of --schema or --no-schema")
+	}
+	if valueJSON.set == valueFile.set {
+		return usageError(stderr, "link-metadata set requires exactly one of --value-json or --value-file")
+	}
+	value := []byte(valueJSON.value)
+	if valueFile.set {
+		value, err = readContentInput(workDir, valueFile.value, stdin)
+		if err != nil {
+			return commandError(stderr, "link-metadata set", err)
+		}
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "link-metadata set", err)
+	}
+	var schemaValue *string
+	if schema.set {
+		schemaValue = &schema.value
+	}
+	result, err := repo.SetLinkMetadata(ctx, ref, target.value, namespace.value, schemaValue, json.RawMessage(value))
+	if err != nil {
+		return commandError(stderr, "link-metadata set", err)
+	}
+	return writeLinkMetadataReceipt(stdout, stderr, output, result)
+}
+
+func runLinkMetadataRemove(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	args, output, err := extractInspectionFormat(args, stdout)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if len(args) == 0 {
+		return usageError(stderr, "link-metadata remove requires exactly one REF")
+	}
+	ref := args[0]
+	flags := flag.NewFlagSet("link-metadata remove", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var target, namespace singleString
+	flags.Var(&target, "target", "exact Cause target selector")
+	flags.Var(&namespace, "namespace", "exact metadata namespace")
+	if err := flags.Parse(args[1:]); err != nil {
+		return flagUsageError(stderr, "link-metadata remove", err)
+	}
+	if flags.NArg() != 0 || ref == "" || !target.set || target.value == "" || !namespace.set || namespace.value == "" {
+		return usageError(stderr, "link-metadata remove requires one REF, --target, and --namespace")
+	}
+	if _, err := repository.ParseSelector(target.value); err != nil {
+		return usageError(stderr, "invalid --target %q: %v", target.value, err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "link-metadata remove", err)
+	}
+	result, err := repo.RemoveLinkMetadata(ctx, ref, target.value, namespace.value)
+	if err != nil {
+		return commandError(stderr, "link-metadata remove", err)
+	}
+	return writeLinkMetadataReceipt(stdout, stderr, output, result)
+}
+
+func writeLinkMetadataReceipt(stdout, stderr io.Writer, output inspectionOutput, result repository.LinkMetadataMutationResult) int {
+	if output.JSON {
+		return writeInspectionJSON(stdout, stderr, "link-metadata", linkMetadataReceiptJSON(result))
+	}
+	schemaLabel := "none"
+	entry := result.After
+	if entry == nil {
+		entry = result.Before
+	}
+	if entry != nil && entry.Schema != nil {
+		schemaLabel = *entry.Schema
+	}
+	printHumanReceipt(stdout, "LINK METADATA "+result.Action,
+		humanField{"REF", result.REF}, humanField{"Target", result.TargetSeal},
+		humanField{"Namespace", result.Namespace}, humanField{"Schema", schemaLabel},
+		humanField{"Prospective provenance (prefix)", shortID(result.Prospective.Seal.Provenance)},
+		humanField{"Prospective Seal (prefix)", shortID(result.Prospective.ID)},
+		humanField{"Inspect", "sealgraph candidate show " + result.REF},
+	)
+	return 0
+}
+
 func runUnlink(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		return usageError(stderr, "unlink requires exactly one candidate REF")
@@ -1057,9 +1238,9 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return writeRawContent(stdout, stderr, "show", result.Content)
 	}
 	if output.JSON && !*rawContent {
-		return writeInspectionJSON(stdout, stderr, "show", showJSON(result))
+		return writeInspectionJSON(stdout, stderr, "show", formatAwareJSON(repo.Format(), showJSON(result), showJSONV3(result)))
 	}
-	printShowHuman(stdout, result)
+	printShowHuman(stdout, result, repo.Format())
 	return 0
 }
 
@@ -1117,9 +1298,9 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 		return writeRawContent(stdout, stderr, "candidate show", inspection.Content)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate show", candidateShowJSON(inspection))
+		return writeInspectionJSON(stdout, stderr, "candidate show", formatAwareJSON(repo.Format(), candidateShowJSON(inspection), candidateShowJSONV3(inspection)))
 	}
-	printCandidateInspection(stdout, inspection)
+	printCandidateInspectionHuman(stdout, inspection, repo.Format())
 	return 0
 }
 
@@ -1144,9 +1325,9 @@ func runCandidateCompare(ctx context.Context, workDir string, args []string, std
 		return commandError(stderr, "candidate compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate compare", candidateCompareJSON(result))
+		return writeInspectionJSON(stdout, stderr, "candidate compare", formatAwareJSON(repo.Format(), candidateCompareJSON(result), candidateCompareJSONV3(result)))
 	}
-	printCandidateDiff(stdout, result)
+	printCandidateDiffHuman(stdout, result, repo.Format())
 	return 0
 }
 
@@ -1171,14 +1352,6 @@ func runCandidateDiscard(ctx context.Context, workDir string, args []string, std
 	}
 	fmt.Fprintf(stdout, "DISCARDED CANDIDATE %s\n", ref)
 	return 0
-}
-
-func printCandidateInspection(stdout io.Writer, inspection repository.CandidateInspection) {
-	printCandidateInspectionHuman(stdout, inspection)
-}
-
-func printCandidateDiff(stdout io.Writer, result repository.CandidateDiffResult) {
-	printCandidateDiffHuman(stdout, result)
 }
 
 func runLog(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -1215,9 +1388,9 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 		return commandError(stderr, "log", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "log", logJSON(result))
+		return writeInspectionJSON(stdout, stderr, "log", formatAwareJSON(repo.Format(), logJSON(result), logJSONV3(result)))
 	}
-	printLogHuman(stdout, result)
+	printLogHuman(stdout, result, repo.Format())
 	return 0
 }
 
@@ -1256,9 +1429,9 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "linklog", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "linklog", linkLogJSON(result))
+		return writeInspectionJSON(stdout, stderr, "linklog", formatAwareJSON(repo.Format(), linkLogJSON(result), linkLogJSONV3(result)))
 	}
-	printLinkLogHuman(stdout, result)
+	printLinkLogHuman(stdout, result, repo.Format())
 	return 0
 }
 
@@ -1268,7 +1441,7 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 		return usageError(stderr, "%v", err)
 	}
 	if len(args) != 2 {
-		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: format-5 compare requires exactly two explicit Seal selectors")
+		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: compare requires exactly two explicit Seal selectors")
 	}
 	for _, arg := range args {
 		if _, err := repository.ParseSelector(arg); err != nil {
@@ -1284,9 +1457,9 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "compare", compareJSON(result))
+		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSON(repo.Format(), compareJSON(result), compareJSONV3(result)))
 	}
-	printSealDiffHuman(stdout, result)
+	printSealDiffHuman(stdout, result, repo.Format())
 	return 0
 }
 
@@ -1449,7 +1622,7 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 		return commandError(stderr, "impact", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "impact", impactJSON(result))
+		return writeInspectionJSON(stdout, stderr, "impact", formatAwareJSON(repo.Format(), impactJSON(result), impactJSONV3(result)))
 	}
 	printImpactsHuman(stdout, result)
 	return 0
@@ -1472,9 +1645,9 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 		return commandError(stderr, "graph", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "graph", graphJSON(nodes))
+		return writeInspectionJSON(stdout, stderr, "graph", formatAwareJSON(repo.Format(), graphJSON(nodes), graphJSONV3(nodes)))
 	}
-	printGraphHuman(stdout, nodes)
+	printGraphHuman(stdout, nodes, repo.Format())
 	return 0
 }
 
@@ -1495,9 +1668,9 @@ func runFsck(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return commandError(stderr, "fsck", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "fsck", fsckJSON(report))
+		return writeInspectionJSON(stdout, stderr, "fsck", formatAwareJSON(repo.Format(), fsckJSON(report), fsckJSONV3(report)))
 	}
-	printFsckHuman(stdout, report)
+	printFsckHuman(stdout, report, repo.Format())
 	return 0
 }
 

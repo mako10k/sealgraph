@@ -143,11 +143,13 @@ type CauseLinkChange struct {
 	Before, After *domainv5.CauseLink
 }
 type LinkLogEntry struct {
-	MinimumNewerDepth    int
-	Newer, Previous      domain.ObjectID
-	SupportingAssertions []domainv5.AssertionSource
-	TargetRevision       domainv5.RevisionObservation
-	Changes              []CauseLinkChange
+	MinimumNewerDepth                                                  int
+	Newer, Previous                                                    domain.ObjectID
+	NewerSealSchema, NewerProvenanceID, NewerProvenanceSchema          string
+	PreviousSealSchema, PreviousProvenanceID, PreviousProvenanceSchema string
+	SupportingAssertions                                               []domainv5.AssertionSource
+	TargetRevision                                                     domainv5.RevisionObservation
+	Changes                                                            []CauseLinkChange
 }
 type LinkLogResult struct {
 	REF      string
@@ -194,7 +196,13 @@ func (r *Repository) LinkLog(ctx context.Context, ref, upstreamSelector string) 
 					continue
 				}
 			}
-			result.Entries = append(result.Entries, LinkLogEntry{MinimumNewerDepth: entry.MinimumDepth, Newer: edge.Target, Previous: edge.Previous, SupportingAssertions: edge.Sources, TargetRevision: graph.revisionObservation(edge.Target), Changes: changes})
+			result.Entries = append(result.Entries, LinkLogEntry{
+				MinimumNewerDepth: entry.MinimumDepth, Newer: edge.Target,
+				NewerSealSchema: newer.Seal.Schema, NewerProvenanceID: newer.Seal.Provenance.String(), NewerProvenanceSchema: newer.Provenance.Schema,
+				Previous: edge.Previous, PreviousSealSchema: previous.Seal.Schema,
+				PreviousProvenanceID: previous.Seal.Provenance.String(), PreviousProvenanceSchema: previous.Provenance.Schema,
+				SupportingAssertions: edge.Sources, TargetRevision: graph.revisionObservation(edge.Target), Changes: changes,
+			})
 		}
 	}
 	sort.Slice(result.Entries, func(i, j int) bool {
