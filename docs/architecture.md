@@ -1,18 +1,17 @@
 # Architecture
 
-Status: the checked-in runtime implements the format-4 canonical/candidate,
-selector, atomic load, active revision/Cause graph, history, and impact core.
-REF manifests, scoped tags, atomic move, and tracked format-4 dogfood
-conversion are also implemented. Explicit path manifests are implemented;
-operator-contract usability and Git views remain separately sequenced.
+Status: the checked-in runtime implements the accepted format-5 typed-Blob,
+parentless Candidate, Cause-scoped revision, isolated format-4 extraction,
+atomic universal migration load, inspection, REF manifest, scoped tag, move,
+and recovery core. Git views remain separately sequenced.
 
 ## 1. Design center
 
 Sealgraph has one native semantic/storage model:
 
-- content-only immutable Seals;
-- exact Seal-to-Seal Cause Links;
-- one optional exact `parent_revision` edge;
+- immutable content and attachment Blobs;
+- typed immutable Material, Provenance, and Seal Blobs;
+- exact whole-record Cause Links containing observer-scoped revision evidence;
 - movable REF paths outside Seal bytes;
 - native SHA-256 loose objects under `.sealgraph`.
 
@@ -71,24 +70,26 @@ modify unrelated Git policy silently.
 
 ## 3. Package boundaries
 
-### `internal/domain`
+### `internal/domain` and `internal/domain/v5`
 
 Pure semantic types:
 
-- native `ObjectID` and `ContentRef`;
-- exact-target `Link` and `Attachment`;
-- content-only `SealPayload` with `parent_revision`;
-- candidate topology/publication state;
+- native `ObjectID` and portable REF/tag grammar;
+- format-5 `Attachment`, `CauseLink`, `Material`, `Provenance`, and `Seal`;
+- parentless Candidate semantic/publication state;
 - REF names and derived observation facts.
+
+The format-4 payload type remains reachable only by the isolated migration
+document verifier; ordinary repository APIs use only versioned format-5 types.
 
 No filesystem, Git, CLI, clock, environment, or current-REF lookup occurs
 here. A Seal contains no owner REF.
 
-### `internal/canonical`
+### `internal/canonical/v5`
 
-- deterministic format-4 Seal encoding;
+- deterministic Material, Provenance, Seal, and Candidate encoding;
 - exact member order and JSON escaping;
-- Link/attachment sort and duplicate rejection;
+- Cause/previous/message/attachment sorting and duplicate rejection;
 - canonical decode/re-encode byte equality;
 - fixed fixture hashes.
 
@@ -97,15 +98,20 @@ perform I/O.
 
 ### `internal/migration`
 
-- strict versioned logical dump parser/model and canonical round-trip;
-- deterministic dependency-first conversion ordering;
-- explicit records for material, old Seal identity, REF/tag targets, and
-  excluded loose objects.
+- strict `sealgraph/universal-blob-migration/v1` parser/model and canonical
+  round-trip;
+- migration-only canonical format-4 payload and old-ID verification;
+- deterministic Kahn dependency-first ordering and semantic classifications;
+- explicit records for object bytes, old Seals, REF/tag targets, materialized,
+  unobserved, collapsed, merged, and excluded state.
 
-It does not open repositories, mutate storage, read Git, or act as a legacy
-repository reader. `internal/repository` consumes the validated document
-through a separate absent-target transaction; legacy format-3 payload types
-exist only inside this migration-document boundary.
+The pure migration model and projector do not open repositories, mutate
+storage, or read Git. A separate `internal/migration/format4extract` package
+owns the only format-4 repository reader. It has no mutation entrypoint, never
+inspects Git, and is callable only by `sealgraph migrate extract` before
+ordinary format-5 repository dispatch. `internal/repository` consumes the
+validated document through a separate absent-target transaction. No ordinary
+format-5 operation can call the format-4 source reader.
 
 ### `internal/store`
 
@@ -121,16 +127,17 @@ path-safety, corruption, and hash-mismatch handling. A later read-only tree
 view exposes exact path existence, enumeration, and file bytes; it does not
 expose Git hash types or mutation.
 
-### `internal/revision`
+### Observed revision graph
 
-- active revision DAG from coherent current REF heads and parent ancestry;
-- parent cycle validation;
-- ancestor/descendant queries;
-- active leaves/tips and detached state;
-- explicit parent/fork admissibility.
+The repository observation builder, rather than an intrinsic-parent package,
+owns format-5 revision meaning:
 
-Parent edges mean revision derivation only. They are not Cause edges and do not
-express replacement or preference.
+- fixed-point loading from all heads through Cause targets and asserted
+  previous revisions;
+- exact observer/Provenance assertion-source retention;
+- structural union, active leaves, branching reachability, and detached state;
+- combined Cause/revision self-edge and cycle validation; and
+- repository-wide and assertion-scope-relative observations.
 
 ### `internal/graph`
 
@@ -139,17 +146,17 @@ express replacement or preference.
 - self-stale current heads;
 - reverse impact;
 - exact-Cause stale review frontier;
-- deterministic shortest and bounded all-path evidence.
+- deterministic first-match and bounded all-path evidence with revision proof.
 
 No stale, impact, frontier, or path result is canonical persisted state.
 
-### `internal/history`
+### History and comparison
 
-- `parent_revision` traversal independent of REF names;
-- Seal-to-Seal semantic diff;
-- exact-target Link add/remove/repoint/message events;
-- candidate comparison against `parent_revision`;
-- separate reporting of `expected_ref_head` relation.
+- branching traversal over observed Cause-scoped revision assertions;
+- exact Material/Provenance Seal-to-Seal comparison with two explicit inputs;
+- exact whole Cause-record before/after changes on every structural edge;
+- Candidate comparison against its explicit publication baseline; and
+- separate reporting of current and `expected_ref_head` relation.
 
 It does not implement Git reflog/history semantics or infer ownership from a
 selector spelling.
@@ -161,17 +168,17 @@ Coordinates:
 - candidate lifecycle;
 - content object writes and preservation of existing attachment objects;
 - exact selector resolution;
-- explicit parent selection and derivation;
+- whole-record Cause authoring with one coherent selector observation;
 - normal Cause-closure admission;
-- canonical Seal creation;
+- canonical Material, Provenance, and Seal creation;
 - one-REF CAS publication;
 - scoped immutable tag creation and single-manifest REF move;
 - coherent multi-REF observations;
-- disposable revision/Cause cache orchestration;
+- canonical-scan graph orchestration with optional disposable cache semantics;
 - local non-canonical recovery-journal orchestration and operation-specific
   exact-state restoration;
-- read-only format-3 logical dump capture, graph closure, and final complete
-  observation revalidation during the explicit migration slice.
+- absent-target universal-blob import, typed projection, semantic-loss receipt,
+  fsck/digest readback, and atomic namespace publication.
 
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.
@@ -224,6 +231,18 @@ Git, watch directories, expand globs, or perform automatic add/seal. The
 repository package coordinates binding changes with candidate mutation under
 the native writer guard.
 
+ADR 0024 generalizes source selection as a non-canonical adapter boundary.
+`WorktreePath` remains the standalone/default binding. A future
+`GitTreeEntry` binding is available only to the explicit Git entry point and
+records exact object format, commit, path, blob, and file-mode identity. Both
+adapters materialize exact bytes through `add`; neither is visible to `seal`,
+which remains Candidate-only.
+
+Portable source-occurrence provenance is separately sealed application content
+and may be named by an exact Cause Link. Local binding fields, Git commit
+ancestry, file-history heuristics, and working-file timestamps do not enter
+Seal identity or create Revision facts automatically.
+
 The Bash completion wrapper delegates parsing and candidate selection to a
 hidden read-only CLI protocol. Repository-aware completion reads only REF,
 candidate, and binding metadata; it does not bootstrap, open bound workfiles,
@@ -235,6 +254,8 @@ The Git adapter has no Sealgraph domain semantics. It supplies:
 
 - complete exact byte/path views of the worktree, prospective staged result
   tree, and immutable commit tree;
+- exact regular-blob bytes for an explicitly configured non-canonical
+  `GitTreeEntry` source binding;
 - merge stage 1/2/3 conflict entries associated with corresponding validated
   BASE/OURS/THEIRS complete trees;
 - typed physical Git identity internal to the adapter;
@@ -245,7 +266,7 @@ native reader and shared domain packages.
 
 ## 4. Native object store
 
-Format 4 retains:
+Format 5 retains:
 
 - immutable loose objects;
 - Git-compatible SHA-256 blob envelope and path where practical;
@@ -266,9 +287,9 @@ One Seal publication:
 
 1. acquires the repository-wide native writer guard;
 2. loads one exact candidate version;
-3. validates `parent_revision`, `expected_ref_head`, material, and complete
-   Cause admissibility;
-4. canonicalizes and writes one immutable Seal object;
+3. validates `expected_ref_head`, Material, Provenance, complete Cause
+   admissibility, and the prospective combined graph;
+4. canonicalizes and writes Material, Provenance, and Seal Blobs;
 5. revalidates required state;
 6. CAS-updates exactly one destination REF;
 7. clears only the unchanged candidate version;
@@ -280,20 +301,19 @@ reported, not deleted or activated.
 
 ## 6. Coherent observations and cache
 
-Multi-REF facts capture the complete current REF/head set, load and validate
-the required parent/Cause graph, buffer output, then revalidate the complete
-head set before emission. A change fails with no plausible partial stdout.
+Multi-REF facts capture exact REF-manifest bytes and the complete current
+REF/head set, build the fixed-point Cause/revision observation, buffer output,
+then revalidate the exact manifests before emission. Graph-dependent Candidate
+mutations apply the same capture/build/prospective-validate/revalidate pattern.
+A change fails with no plausible output or Candidate replacement.
 
 The active revision DAG is rooted by current REF heads only. Object existence,
 tag reachability, or Cause reachability does not publish a revision.
 
-The revision/Cause cache is derived and disposable. Its key binds repository
-and schema version plus a digest of the complete sorted REF/head observation.
-Missing, snapshot-mismatched, or invalid cache triggers canonical scan and
-atomic refresh. Missing and snapshot-mismatched cache are normal misses and do
-not warn. Invalid/unsafe cache or refresh failure may warn, but cache failure
-never repairs or overrides canonical state, and read-only Git views do not
-persist cache.
+Any revision/Cause cache is derived and disposable. It may answer only when
+bound to the complete observation and exactly equivalent to canonical scan.
+Missing, mismatched, or invalid cache state never repairs, overrides, or
+weakens canonical validation, and read-only Git views do not persist cache.
 
 ## 7. Git sidecar boundary
 
@@ -317,9 +337,9 @@ worktree, linked-worktree, index, tree, pack, and alternate matrix. No SDK type
 crosses into native domain APIs; there is no hand-written pack reader or silent
 Git CLI fallback.
 
-Importing arbitrary Git blobs/trees/commits/tags as generated material is
-deferred. Exact blob materialization can be added later without changing Seal
-format; zero-copy external references or type-specific projections require a
+Outside the exact `GitTreeEntry` source-binding path accepted by ADR 0024,
+importing arbitrary Git blobs/trees/commits/tags as generated material remains
+deferred. Zero-copy external references or type-specific projections require a
 separate persisted contract.
 
 ## 8. Extension discipline

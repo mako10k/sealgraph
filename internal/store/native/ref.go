@@ -49,6 +49,17 @@ func (s *RefStore) Snapshot(ctx context.Context, ref string) ([]byte, error) {
 	return encodeRefManifest(manifest)
 }
 
+// ManifestTags decodes tags from an already captured canonical manifest. It
+// deliberately does not reread the REF path, so callers can keep selector
+// resolution within one repository observation.
+func (s *RefStore) ManifestTags(data []byte) ([]store.Tag, error) {
+	manifest, err := decodeRefManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	return append([]store.Tag(nil), manifest.Tags...), nil
+}
+
 func (s *RefStore) PreviewUpdate(ctx context.Context, ref string, oldID, newID *domain.ObjectID) ([]byte, error) {
 	if err := validateRefUpdate(ctx, ref, oldID, newID); err != nil {
 		return nil, err
@@ -368,8 +379,18 @@ func (s *RefStore) writeManifest(ref string, manifest refManifest) error {
 	}
 	tempPath := temp.Name()
 	defer os.Remove(tempPath)
-	if _, err = temp.Write(data); err == nil {
+	if err = temp.Chmod(0o600); err == nil {
+		_, err = temp.Write(data)
+	}
+	if err == nil {
 		err = temp.Sync()
+	}
+	if err == nil {
+		var info os.FileInfo
+		info, err = temp.Stat()
+		if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm() != 0o600) {
+			err = fmt.Errorf("temporary REF %s manifest mode is %04o, expected 0600", ref, info.Mode().Perm())
+		}
 	}
 	closeErr := temp.Close()
 	if err == nil {
@@ -380,6 +401,9 @@ func (s *RefStore) writeManifest(ref string, manifest refManifest) error {
 	}
 	if err := os.Rename(tempPath, s.manifestPath(ref)); err != nil {
 		return fmt.Errorf("publish REF %s manifest atomically: %w", ref, err)
+	}
+	if err := verifyCreatedMode(s.manifestPath(ref), 0o600, "REF manifest"); err != nil {
+		return fmt.Errorf("verify REF %s manifest creation mode: %w", ref, err)
 	}
 	if err := syncDirectory(dir); err != nil {
 		return fmt.Errorf("REF %s manifest was published but directory durability failed: %w; inspect the REF before retrying", ref, err)
@@ -490,10 +514,13 @@ func ensureDirectoryChain(root, ref string) error {
 
 func ensureRealDirectory(path string) error {
 	info, err := os.Lstat(path)
+	created := false
 	if errors.Is(err, os.ErrNotExist) {
-		if err := os.Mkdir(path, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
-			return err
+		mkdirErr := os.Mkdir(path, 0o755)
+		if mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
+			return mkdirErr
 		}
+		created = mkdirErr == nil
 		info, err = os.Lstat(path)
 	}
 	if err != nil {
@@ -501,6 +528,14 @@ func ensureRealDirectory(path string) error {
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("%s is not a real directory", path)
+	}
+	if created {
+		if err := os.Chmod(path, 0o755); err != nil {
+			return fmt.Errorf("set new directory mode for %s: %w", path, err)
+		}
+		if err := verifyCreatedMode(path, 0o755, "REF directory"); err != nil {
+			return err
+		}
 	}
 	return nil
 }

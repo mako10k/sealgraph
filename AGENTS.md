@@ -31,7 +31,7 @@ Do not silently resolve a material specification conflict. Record it in an ADR o
 - No batch seal, recursive repair, automatic relink, or automatic stale repair.
 - Seals and content-addressed objects are immutable.
 - A movable REF points to the current seal (HEAD) for that logical REF.
-- A dependency link stores a concrete target seal ID. `--depend-on REF` resolves REF HEAD at command execution time; dynamic HEAD references are never persisted inside a seal.
+- A Cause Link stores one concrete target SealID plus its observer-scoped previous-revision assertions and messages. `--target REF` and `--previous REF` resolve HEAD at command execution time; dynamic HEAD references are never persisted.
 - Explicit historical links are valid. A normal non-draft seal defaults to requiring a HEAD-consistent dependency closure; draft/historical workflows may intentionally preserve older dependencies.
 - Staleness is derived from immutable seals plus current REF heads. Do not persist stale as canonical state.
 - Link targets are not copied into the dependent seal; their normalized identities are committed into the dependent seal hash.

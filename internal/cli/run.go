@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/history"
+	"github.com/mako10k/sealgraph/internal/migration/format4extract"
 	"github.com/mako10k/sealgraph/internal/pathmanifest"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
@@ -81,8 +81,6 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr), true
 	case "source":
 		return runSource(ctx, workDir, args[1:], stdout, stderr), true
-	case "derive":
-		return runDerive(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
 		return runLink(ctx, workDir, args[1:], stdout, stderr), true
 	case "unlink":
@@ -364,25 +362,6 @@ func printSources(stdout io.Writer, bindings []repository.SourceBinding) {
 	printSourcesHuman(stdout, bindings)
 }
 
-func sourceJSON(operation string, bindings []repository.SourceBinding) map[string]any {
-	items := make([]any, 0, len(bindings))
-	for _, binding := range bindings {
-		items = append(items, map[string]any{"ref": binding.REF, "path": binding.Path})
-	}
-	return map[string]any{"schema": "sealgraph/source/v1", "operation": operation, "bindings": items}
-}
-
-func sourceMutationJSON(operation, ref, before, after string) map[string]any {
-	var beforeValue, afterValue any
-	if before != "" {
-		beforeValue = before
-	}
-	if after != "" {
-		afterValue = after
-	}
-	return map[string]any{"schema": "sealgraph/source/v1", "operation": operation, "ref": ref, "before_path": beforeValue, "after_path": afterValue, "candidate": "UNCHANGED"}
-}
-
 func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "manifest":
@@ -405,14 +384,63 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 		return runGraph(ctx, workDir, args[1:], stdout, stderr)
 	case "fsck":
 		return runFsck(ctx, workDir, args[1:], stdout, stderr)
+	case "migrate":
+		return runMigrate(ctx, workDir, args[1:], stdout, stderr)
 	case "load":
 		return runLoad(ctx, workDir, args[1:], stdin, stdout, stderr)
+	case "load-receipt":
+		return runLoadReceipt(ctx, workDir, args[1:], stdout, stderr)
 	default:
 		if code, ok := gitMisuseDiagnostic(stderr, args); ok {
 			return code
 		}
 		return unknownCommandError(stderr, args[0])
 	}
+}
+
+func runMigrate(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		return usageError(stderr, "migrate requires extract")
+	}
+	if args[0] != "extract" {
+		return usageError(stderr, "unknown migrate operation %q; expected extract", args[0])
+	}
+	return runMigrateExtract(ctx, workDir, args[1:], stdout, stderr)
+}
+
+func runMigrateExtract(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("migrate extract", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var sourceFormat, format singleString
+	flags.Var(&sourceFormat, "source-format", "required source repository format")
+	flags.Var(&format, "format", "required migration document format")
+	if err := flags.Parse(args); err != nil {
+		return flagUsageError(stderr, "migrate extract", err)
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "migrate extract accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if !sourceFormat.set || sourceFormat.value != "4" {
+		return usageError(stderr, "migrate extract requires --source-format 4")
+	}
+	if !format.set || format.value != "universal-blob-v1" {
+		return usageError(stderr, "migrate extract requires --format universal-blob-v1")
+	}
+	result, err := format4extract.Extract(ctx, workDir)
+	if err != nil {
+		return commandError(stderr, "migrate extract", err)
+	}
+	written, err := stdout.Write(result.Document)
+	if err != nil || written != len(result.Document) {
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return commandError(stderr, "migrate extract", fmt.Errorf("write universal-blob-v1 document: %w", err))
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintln(stderr, warning)
+	}
+	return 0
 }
 
 func runManifest(workDir string, args []string, stdout, stderr io.Writer) int {
@@ -479,21 +507,54 @@ func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader
 		return usageError(stderr, "load accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
 	if !format.set {
-		return usageError(stderr, "load requires --format logical-v1")
+		return usageError(stderr, "load requires --format universal-blob-v1")
 	}
-	if format.value != "logical-v1" {
-		return usageError(stderr, "load format %q is unsupported; expected logical-v1", format.value)
+	if format.value != "universal-blob-v1" {
+		return usageError(stderr, "load format %q is unsupported; expected universal-blob-v1", format.value)
 	}
 	input, err := io.ReadAll(stdin)
 	if err != nil {
-		return commandError(stderr, "load", fmt.Errorf("read logical-v1 input: %w", err))
+		return commandError(stderr, "load", fmt.Errorf("read universal-blob-v1 input: %w", err))
 	}
-	output, err := repository.LoadLogicalV1(ctx, workDir, input)
+	result, err := repository.LoadUniversalBlobV1(ctx, workDir, input)
 	if err != nil {
 		return commandError(stderr, "load", err)
 	}
-	if _, err := stdout.Write(output); err != nil {
-		return commandError(stderr, "load", fmt.Errorf("write logical-v1 receipt: %w", err))
+	for _, warning := range result.Warnings {
+		fmt.Fprintln(stderr, warning)
+	}
+	if written, err := stdout.Write(result.Receipt); err != nil || written != len(result.Receipt) {
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return commandError(stderr, "load", fmt.Errorf("LOAD_PUBLISHED_RECEIPT_UNDELIVERED: target and durable receipt are valid; recover with load-receipt rather than retrying load: %w", err))
+	}
+	return 0
+}
+
+func runLoadReceipt(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("load-receipt", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var sourceDigest singleString
+	flags.Var(&sourceDigest, "source-document-sha256", "required source migration document digest")
+	if err := flags.Parse(args); err != nil {
+		return flagUsageError(stderr, "load-receipt", err)
+	}
+	if flags.NArg() != 0 {
+		return usageError(stderr, "load-receipt accepts no positional arguments; unexpected argument %q", flags.Arg(0))
+	}
+	if !sourceDigest.set || sourceDigest.value == "" {
+		return usageError(stderr, "load-receipt requires --source-document-sha256 HEX")
+	}
+	receipt, err := repository.RecoverUniversalLoadReceipt(ctx, workDir, sourceDigest.value)
+	if err != nil {
+		return commandError(stderr, "load-receipt", err)
+	}
+	if written, err := stdout.Write(receipt); err != nil || written != len(receipt) {
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return commandError(stderr, "load-receipt", fmt.Errorf("write recovered receipt: %w", err))
 	}
 	return 0
 }
@@ -502,9 +563,13 @@ type addCLIOptions struct {
 	ref         string
 	content     trackedString
 	contentFile trackedString
-	depends     stringList
-	parent      singleString
+	target      singleString
+	previous    stringList
+	messages    stringList
+	noPrevious  singleBool
 	root        singleBool
+	nonRoot     singleBool
+	clearCauses singleBool
 	draft       singleBool
 	bindSource  bool
 }
@@ -521,18 +586,18 @@ func runAdd(ctx context.Context, workDir string, args []string, stdin io.Reader,
 	if code != 0 {
 		return code
 	}
-	dependencies, err := parseDependencies(options.depends, "")
+	cause, err := parseCauseInput(options.target, options.previous, options.messages, options.noPrevious)
 	if err != nil {
-		return usageError(stderr, "%v", err)
+		return usageDiagnostic(stderr, "add", err.Error(), "construct one complete Cause record from the add command help; no selector was inferred")
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
 	if !options.content.set && (!options.contentFile.set || options.contentFile.value != "-") {
-		return runLocalSourceAdd(ctx, repo, options, dependencies, stdout, stderr)
+		return runLocalSourceAdd(ctx, repo, options, cause, stdout, stderr)
 	}
-	return runExplicitBytesAdd(ctx, repo, workDir, options, dependencies, stdin, stdout, stderr)
+	return runExplicitBytesAdd(ctx, repo, workDir, options, cause, stdin, stdout, stderr)
 }
 
 func parseAddCLIOptions(args []string, stderr io.Writer) (addCLIOptions, int) {
@@ -544,9 +609,13 @@ func parseAddCLIOptions(args []string, stderr io.Writer) (addCLIOptions, int) {
 	flags.SetOutput(io.Discard)
 	flags.Var(&options.content, "content", "exact content bytes supplied as a command argument")
 	flags.Var(&options.contentFile, "content-file", "read exact content bytes from a regular file, or '-' for stdin")
-	flags.Var(&options.depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
-	flags.Var(&options.parent, "parent", "exact revision parent for an absent destination REF")
+	flags.Var(&options.target, "target", "one exact Cause target selector")
+	flags.Var(&options.previous, "previous", "previous revision selector for that target (repeatable)")
+	flags.Var(&options.messages, "m", "Cause Link message (repeatable)")
+	flags.Var(&options.noPrevious, "no-previous", "explicitly assert no previous revision for the target")
 	flags.Var(&options.root, "root", "declare a provenance root")
+	flags.Var(&options.nonRoot, "non-root", "declare a non-root provenance generation")
+	flags.Var(&options.clearCauses, "clear-cause-links", "remove all Cause Links atomically with --root")
 	flags.Var(&options.draft, "draft", "mark the candidate draft")
 	flags.BoolVar(&options.bindSource, "bind-source", false, "persist the named local source after candidate update")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -561,26 +630,35 @@ func parseAddCLIOptions(args []string, stderr io.Writer) (addCLIOptions, int) {
 	if options.bindSource && (options.content.set || (options.contentFile.set && options.contentFile.value == "-")) {
 		return addCLIOptions{}, usageError(stderr, "add --bind-source requires a named file source and cannot be used with --content or --content-file -")
 	}
-	if options.parent.set {
-		if options.parent.value == "" {
-			return addCLIOptions{}, usageError(stderr, "add --parent requires a non-empty Seal selector")
+	for _, item := range []struct {
+		name  string
+		value singleBool
+	}{{"--root", options.root}, {"--non-root", options.nonRoot}, {"--clear-cause-links", options.clearCauses}} {
+		if item.value.set && !item.value.value {
+			return addCLIOptions{}, usageError(stderr, "add %s=false is invalid; omit the flag instead of negating its explicit declaration", item.name)
 		}
-		if _, err := repository.ParseSelector(options.parent.value); err != nil {
-			return addCLIOptions{}, usageError(stderr, "invalid add parent selector: %v", err)
-		}
+	}
+	if options.root.set && options.nonRoot.set {
+		return addCLIOptions{}, usageError(stderr, "add accepts exactly one of --root or --non-root")
+	}
+	if options.root.set && !options.clearCauses.value {
+		return addCLIOptions{}, usageError(stderr, "add --root requires --clear-cause-links")
+	}
+	if options.clearCauses.set && !options.root.value {
+		return addCLIOptions{}, usageError(stderr, "--clear-cause-links is valid only with --root")
 	}
 	return options, 0
 }
 
-func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options addCLIOptions, dependencies []repository.Dependency, stdout, stderr io.Writer) int {
+func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options addCLIOptions, cause *repository.CauseInput, stdout, stderr io.Writer) int {
 	path := ""
 	if options.contentFile.set {
 		path = options.contentFile.value
 	}
 	result, err := repo.AddLocalSource(ctx, repository.LocalSourceAddOptions{
 		REF: options.ref, Path: path, BindSource: options.bindSource, PreserveSemantics: !options.contentFile.set,
-		Dependencies: dependencies, Parent: options.parent.value,
-		Root: options.root.value, RootSet: options.root.set, Draft: options.draft.value, DraftSet: options.draft.set,
+		Cause: cause, Root: options.root.value, RootSet: options.root.set || options.nonRoot.set,
+		ClearCauseLinks: options.clearCauses.value, Draft: options.draft.value, DraftSet: options.draft.set,
 	})
 	if err != nil {
 		return commandError(stderr, "add", err)
@@ -593,8 +671,8 @@ func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options
 	if isHumanTerminal(stdout) {
 		printHumanReceipt(stdout, "CANDIDATE UPDATED",
 			humanField{"REF", candidate.REF},
-			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
-			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Content blob (prefix)", shortID(candidate.Content)},
+			humanField{"Causes", strconv.Itoa(len(candidate.CauseLinks))},
 			humanField{"Root boundary", yesNo(candidate.Root)},
 			humanField{"Draft", yesNo(candidate.Draft)},
 			humanField{"Source mode", result.SourceMode},
@@ -604,11 +682,11 @@ func runLocalSourceAdd(ctx context.Context, repo *repository.Repository, options
 		)
 		return 0
 	}
-	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=%s source_path=%s source_binding=%s next_source=%s\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft, result.SourceMode, quoteHumanString(result.SourcePath), result.SourceBinding, nextSource)
+	fmt.Fprintf(stdout, "CANDIDATE %s content=%s cause_links=%d root=%t draft=%t source_mode=%s source_path=%s source_binding=%s next_source=%s\n", candidate.REF, candidate.Content, len(candidate.CauseLinks), candidate.Root, candidate.Draft, result.SourceMode, quoteHumanString(result.SourcePath), result.SourceBinding, nextSource)
 	return 0
 }
 
-func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workDir string, options addCLIOptions, dependencies []repository.Dependency, stdin io.Reader, stdout, stderr io.Writer) int {
+func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workDir string, options addCLIOptions, cause *repository.CauseInput, stdin io.Reader, stdout, stderr io.Writer) int {
 	contentBytes := []byte(options.content.value)
 	if options.contentFile.set {
 		var err error
@@ -617,15 +695,17 @@ func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workD
 			return usageError(stderr, "invalid --content-file: %v", err)
 		}
 	}
-	candidate, err := repo.Add(ctx, repository.AddOptions{REF: options.ref, Content: contentBytes, Dependencies: dependencies, Parent: options.parent.value, Root: options.root.value, Draft: options.draft.value})
+	candidate, err := repo.Add(ctx, repository.AddOptions{REF: options.ref, Content: contentBytes, Cause: cause,
+		Root: options.root.value, RootSet: options.root.set || options.nonRoot.set, ClearCauseLinks: options.clearCauses.value,
+		Draft: options.draft.value, DraftSet: options.draft.set})
 	if err != nil {
 		return commandError(stderr, "add", err)
 	}
 	if isHumanTerminal(stdout) {
 		printHumanReceipt(stdout, "CANDIDATE UPDATED",
 			humanField{"REF", candidate.REF},
-			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
-			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Content blob (prefix)", shortID(candidate.Content)},
+			humanField{"Causes", strconv.Itoa(len(candidate.CauseLinks))},
 			humanField{"Root boundary", yesNo(candidate.Root)},
 			humanField{"Draft", yesNo(candidate.Draft)},
 			humanField{"Source mode", "explicit bytes"},
@@ -633,51 +713,7 @@ func runExplicitBytesAdd(ctx context.Context, repo *repository.Repository, workD
 		)
 		return 0
 	}
-	fmt.Fprintf(stdout, "CANDIDATE %s content=%s dependencies=%d root=%t draft=%t source_mode=explicit-bytes source_binding=NONE\n", candidate.REF, candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
-	return 0
-}
-
-func runDerive(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		return usageError(stderr, "derive requires exactly one destination REF")
-	}
-	ref := args[0]
-	flags := flag.NewFlagSet("derive", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	var source singleString
-	flags.Var(&source, "from", "required source Seal selector")
-	if err := flags.Parse(args[1:]); err != nil {
-		return flagUsageError(stderr, "derive", err)
-	}
-	if flags.NArg() != 0 {
-		return usageError(stderr, "derive accepts exactly one destination REF; unexpected argument %q", flags.Arg(0))
-	}
-	if !source.set || source.value == "" {
-		return usageError(stderr, "derive requires exactly one --from SOURCE selector")
-	}
-	if _, err := repository.ParseSelector(source.value); err != nil {
-		return usageError(stderr, "invalid derive source: %v", err)
-	}
-	repo, err := repository.OpenStandalone(workDir)
-	if err != nil {
-		return commandError(stderr, "derive", err)
-	}
-	candidate, err := repo.Derive(ctx, ref, source.value)
-	if err != nil {
-		return commandError(stderr, "derive", err)
-	}
-	if isHumanTerminal(stdout) {
-		printHumanReceipt(stdout, "CANDIDATE DERIVED",
-			humanField{"REF", candidate.REF},
-			humanField{"Parent revision (prefix)", shortOptionalID(candidate.ParentRevision)},
-			humanField{"Content blob (prefix)", shortID(candidate.Content.ID)},
-			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
-			humanField{"Root boundary", yesNo(candidate.Root)},
-			humanField{"Draft", yesNo(candidate.Draft)},
-		)
-		return 0
-	}
-	fmt.Fprintf(stdout, "CANDIDATE %s parent=%s content=%s dependencies=%d root=%t draft=%t\n", candidate.REF, formatOptionalObjectID(candidate.ParentRevision), candidate.Content.ID, len(candidate.Links), candidate.Root, candidate.Draft)
+	fmt.Fprintf(stdout, "CANDIDATE %s content=%s cause_links=%d root=%t draft=%t source_mode=explicit-bytes source_binding=NONE\n", candidate.REF, candidate.Content, len(candidate.CauseLinks), candidate.Root, candidate.Draft)
 	return 0
 }
 
@@ -717,39 +753,42 @@ func runLink(ctx context.Context, workDir string, args []string, stdout, stderr 
 	ref := args[0]
 	flags := flag.NewFlagSet("link", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var depends stringList
-	flags.Var(&depends, "depend-on", "dependency REF or REF@SEAL (repeatable)")
-	var message trackedString
-	flags.Var(&message, "m", "optional rationale for each dependency in this invocation")
+	var target singleString
+	var previous, messages stringList
+	var noPrevious singleBool
+	flags.Var(&target, "target", "exact Cause target selector")
+	flags.Var(&previous, "previous", "previous revision selector (repeatable)")
+	flags.Var(&messages, "m", "Cause Link message (repeatable)")
+	flags.Var(&noPrevious, "no-previous", "explicitly assert no previous revision")
 	if err := flags.Parse(args[1:]); err != nil {
 		return flagUsageError(stderr, "link", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "link accepts exactly one REF; unexpected argument %q", flags.Arg(0))
 	}
-	if len(depends) == 0 {
-		return usageError(stderr, "link requires at least one --depend-on")
-	}
-	dependencies, err := parseDependencies(depends, message.value)
+	cause, err := parseCauseInput(target, previous, messages, noPrevious)
 	if err != nil {
-		return usageError(stderr, "%v", err)
+		return usageDiagnostic(stderr, "link", err.Error(), "construct one complete Cause record from the link command help; no selector was inferred")
+	}
+	if cause == nil {
+		return usageError(stderr, "link requires exactly one --target and one of --previous or --no-previous")
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "link", err)
 	}
-	candidate, err := repo.Link(ctx, ref, dependencies)
+	candidate, err := repo.Link(ctx, ref, *cause)
 	if err != nil {
 		return commandError(stderr, "link", err)
 	}
 	if isHumanTerminal(stdout) {
 		printHumanReceipt(stdout, "CANDIDATE CAUSES UPDATED",
 			humanField{"REF", candidate.REF},
-			humanField{"Causes", strconv.Itoa(len(candidate.Links))},
+			humanField{"Causes", strconv.Itoa(len(candidate.CauseLinks))},
 		)
 		return 0
 	}
-	fmt.Fprintf(stdout, "CANDIDATE %s dependencies=%d\n", candidate.REF, len(candidate.Links))
+	fmt.Fprintf(stdout, "CANDIDATE %s cause_links=%d\n", candidate.REF, len(candidate.CauseLinks))
 	return 0
 }
 
@@ -760,36 +799,36 @@ func runUnlink(ctx context.Context, workDir string, args []string, stdout, stder
 	ref := args[0]
 	flags := flag.NewFlagSet("unlink", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var upstream singleString
-	flags.Var(&upstream, "upstream", "upstream REF or guarded REF@SEAL_OR_TAG")
+	var target singleString
+	flags.Var(&target, "target", "exact Cause target selector")
 	if err := flags.Parse(args[1:]); err != nil {
 		return flagUsageError(stderr, "unlink", err)
 	}
 	if flags.NArg() != 0 {
 		return usageError(stderr, "unlink accepts exactly one candidate REF; unexpected argument %q", flags.Arg(0))
 	}
-	if !upstream.set || upstream.value == "" {
-		return usageError(stderr, "unlink requires exactly one --upstream REF[@SEAL_OR_TAG]")
+	if !target.set || target.value == "" {
+		return usageError(stderr, "unlink requires exactly one --target TARGET_SELECTOR")
 	}
-	if _, err := repository.ParseSelector(upstream.value); err != nil {
-		return usageError(stderr, "invalid --upstream %q: %v", upstream.value, err)
+	if _, err := repository.ParseSelector(target.value); err != nil {
+		return usageError(stderr, "invalid --target %q: %v", target.value, err)
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "unlink", err)
 	}
-	candidate, err := repo.Unlink(ctx, ref, upstream.value)
+	candidate, err := repo.Unlink(ctx, ref, target.value)
 	if err != nil {
 		return commandError(stderr, "unlink", err)
 	}
 	if isHumanTerminal(stdout) {
 		printHumanReceipt(stdout, "CANDIDATE CAUSE REMOVED",
 			humanField{"REF", candidate.REF},
-			humanField{"Causes remaining", strconv.Itoa(len(candidate.Links))},
+			humanField{"Causes remaining", strconv.Itoa(len(candidate.CauseLinks))},
 		)
 		return 0
 	}
-	fmt.Fprintf(stdout, "CANDIDATE %s dependencies=%d\n", candidate.REF, len(candidate.Links))
+	fmt.Fprintf(stdout, "CANDIDATE %s cause_links=%d\n", candidate.REF, len(candidate.CauseLinks))
 	return 0
 }
 
@@ -1147,24 +1186,38 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
-	if len(args) != 1 {
+	flags := flag.NewFlagSet("log", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var allPaths singleBool
+	var maxPaths singleString
+	flags.Var(&allPaths, "all-paths", "show bounded maximal revision paths")
+	flags.Var(&maxPaths, "max-paths", "positive path limit; valid only with --all-paths")
+	if err := flags.Parse(args); err != nil {
+		return flagUsageError(stderr, "log", err)
+	}
+	if flags.NArg() != 1 {
 		return usageError(stderr, "log requires exactly one current logical REF")
 	}
-	if err := domain.ValidateREF(args[0]); err != nil {
+	ref := flags.Arg(0)
+	if err := domain.ValidateREF(ref); err != nil {
 		return usageError(stderr, "invalid log REF: %v", err)
+	}
+	limit, err := parseImpactLimit(allPaths.value, maxPaths)
+	if err != nil {
+		return usageError(stderr, "%v", err)
 	}
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "log", err)
 	}
-	entries, err := repo.Log(ctx, args[0])
+	result, err := repo.Log(ctx, ref, allPaths.value, limit)
 	if err != nil {
 		return commandError(stderr, "log", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "log", logJSON(args[0], entries))
+		return writeInspectionJSON(stdout, stderr, "log", logJSON(result))
 	}
-	printLogHuman(stdout, args[0], entries)
+	printLogHuman(stdout, result)
 	return 0
 }
 
@@ -1198,14 +1251,14 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 			return usageError(stderr, "invalid linklog upstream selector: %v", err)
 		}
 	}
-	entries, target, err := repo.LinkLog(ctx, args[0], upstream.value)
+	result, err := repo.LinkLog(ctx, args[0], upstream.value)
 	if err != nil {
 		return commandError(stderr, "linklog", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "linklog", linkLogJSON(args[0], target, entries))
+		return writeInspectionJSON(stdout, stderr, "linklog", linkLogJSON(result))
 	}
-	printLinkLogHuman(stdout, args[0], target, entries)
+	printLinkLogHuman(stdout, result)
 	return 0
 }
 
@@ -1214,8 +1267,8 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
-	if len(args) != 1 && len(args) != 2 {
-		return usageError(stderr, "compare requires one current REF or two Seal selectors")
+	if len(args) != 2 {
+		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: format-5 compare requires exactly two explicit Seal selectors")
 	}
 	for _, arg := range args {
 		if _, err := repository.ParseSelector(arg); err != nil {
@@ -1226,16 +1279,7 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return commandError(stderr, "compare", err)
 	}
-	var result history.SealDiff
-	if len(args) == 1 {
-		selector, _ := repository.ParseSelector(args[0])
-		if selector.Kind != repository.SelectorCurrentREF {
-			return usageError(stderr, "one-argument compare requires a current REF; provide two selectors for an explicit comparison")
-		}
-		result, err = repo.DiffCurrent(ctx, selector.REF)
-	} else {
-		result, err = repo.DiffSelectors(ctx, args[0], args[1])
-	}
+	result, err := repo.DiffSelectors(ctx, args[0], args[1])
 	if err != nil {
 		return commandError(stderr, "compare", err)
 	}
@@ -1244,13 +1288,6 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	}
 	printSealDiffHuman(stdout, result)
 	return 0
-}
-
-func formatOptionalObjectID(id *domain.ObjectID) string {
-	if id == nil {
-		return "-"
-	}
-	return id.String()
 }
 
 const contentPreviewLimit = 256
@@ -1316,7 +1353,7 @@ func runStatus(ctx context.Context, workDir string, args []string, stdout, stder
 		return commandError(stderr, "status", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v2", statuses, nil))
+		return writeInspectionJSON(stdout, stderr, "status", statusesJSON("sealgraph/status/v3", statuses, false, false))
 	}
 	printStatusesHuman(stdout, "SEALED_STATE", statuses)
 	return 0
@@ -1366,7 +1403,7 @@ func runStale(ctx context.Context, workDir string, args []string, stdout, stderr
 		return 0
 	}
 	if output.JSON && !refsOnly.value {
-		return writeInspectionJSON(stdout, stderr, "stale", statusesJSON("sealgraph/stale/v1", statuses, map[string]any{"frontier": frontier.value, "scan": scan.value}))
+		return writeInspectionJSON(stdout, stderr, "stale", statusesJSON("sealgraph/stale/v2", statuses, frontier.value, scan.value))
 	}
 	printStatusesHuman(stdout, "STALE_REVIEW_STATE", statuses)
 	return 0
@@ -1381,8 +1418,10 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	flags.SetOutput(io.Discard)
 	var allPaths singleBool
 	var maxPaths singleString
+	var assertedBy stringList
 	flags.Var(&allPaths, "all-paths", "show bounded distinct simple Cause paths")
 	flags.Var(&maxPaths, "max-paths", "positive path limit per downstream Seal; valid only with --all-paths")
+	flags.Var(&assertedBy, "asserted-by", "revision assertion observer selector (repeatable)")
 	if err := flags.Parse(args); err != nil {
 		return flagUsageError(stderr, "impact", err)
 	}
@@ -1405,14 +1444,14 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 	if err != nil {
 		return commandError(stderr, "impact", err)
 	}
-	source, impacts, err := repo.Impact(ctx, selector, allPaths.value, limit)
+	result, err := repo.Impact(ctx, selector, assertedBy, allPaths.value, limit)
 	if err != nil {
 		return commandError(stderr, "impact", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "impact", impactJSON(source, impacts, allPaths.value, limit))
+		return writeInspectionJSON(stdout, stderr, "impact", impactJSON(result))
 	}
-	printImpactsHuman(stdout, source, impacts, limit)
+	printImpactsHuman(stdout, result)
 	return 0
 }
 
@@ -1476,18 +1515,31 @@ func parseImpactLimit(allPaths bool, value singleString) (int, error) {
 	return parsed, nil
 }
 
-func parseDependencies(values []string, message string) ([]repository.Dependency, error) {
-	if values == nil {
+func parseCauseInput(target singleString, previous, messages []string, noPrevious singleBool) (*repository.CauseInput, error) {
+	if noPrevious.set && !noPrevious.value {
+		return nil, errors.New("--no-previous=false is invalid; omit it or assert explicit previous revisions")
+	}
+	if !target.set {
+		if len(previous) != 0 || len(messages) != 0 || noPrevious.set {
+			return nil, errors.New("--previous, --no-previous, and -m require exactly one --target")
+		}
 		return nil, nil
 	}
-	dependencies := make([]repository.Dependency, 0, len(values))
-	for _, value := range values {
-		if _, err := repository.ParseSelector(value); err != nil {
-			return nil, fmt.Errorf("invalid --depend-on %q: %w", value, err)
-		}
-		dependencies = append(dependencies, repository.Dependency{Selector: value, Message: message})
+	if target.value == "" {
+		return nil, errors.New("--target requires a non-empty selector")
 	}
-	return dependencies, nil
+	if _, err := repository.ParseSelector(target.value); err != nil {
+		return nil, fmt.Errorf("invalid --target %q: %w", target.value, err)
+	}
+	if noPrevious.value == (len(previous) != 0) {
+		return nil, errors.New("a target requires exactly one of at least one --previous or --no-previous")
+	}
+	for _, selector := range previous {
+		if _, err := repository.ParseSelector(selector); err != nil {
+			return nil, fmt.Errorf("invalid --previous %q: %w", selector, err)
+		}
+	}
+	return &repository.CauseInput{Target: target.value, Previous: append([]string(nil), previous...), Messages: append([]string(nil), messages...)}, nil
 }
 
 type trackedString struct {
@@ -1643,7 +1695,7 @@ func gitMisuseDiagnostic(stderr io.Writer, args []string) (int, bool) {
 		} else {
 			fmt.Fprintln(stderr, "reason: sealgraph comparison reports semantic material and provenance rather than a Git patch")
 		}
-		fmt.Fprintln(stderr, "hint: compare immutable Seals with `sealgraph compare SELECTOR [SELECTOR]`")
+		fmt.Fprintln(stderr, "hint: compare immutable Seals with `sealgraph compare FROM_SELECTOR TO_SELECTOR`")
 		fmt.Fprintln(stderr, "hint: compare candidate state with `sealgraph candidate compare REF`")
 		fmt.Fprintln(stderr, "hint: compare a bound workfile with `sealgraph source compare REF`")
 		fmt.Fprintln(stderr, "help: sealgraph help compare")
@@ -1738,12 +1790,12 @@ func domainNavigation(command, message string) (string, []string) {
 		return "the operation requires explicit mutable candidate state for that REF", []string{"create or update it with `sealgraph add` or `sealgraph link`, or inspect the intended REF first"}
 	case strings.Contains(message, "REF not found") || strings.Contains(message, "has no head or candidate"):
 		return "the selected logical REF has no current repository state", []string{"inspect current state with `sealgraph status` or select an existing REF or explicit Seal selector"}
-	case strings.Contains(message, "active current revision leaf") || strings.Contains(message, "non-draft Cause") || strings.Contains(message, "Cause closure"):
+	case strings.Contains(message, "active revision leaf") || strings.Contains(message, "non-draft Cause") || strings.Contains(message, "Cause closure"):
 		return "normal non-draft publication requires every reachable Cause to be a non-draft active revision leaf", []string{"inspect the named target with `sealgraph show @SEAL_ID` and current review state with `sealgraph stale --frontier`", "relink and review explicitly from upstream to downstream; if historical provenance is intentional, keep the candidate draft"}
 	case strings.Contains(message, "open standalone repository"):
 		return "this command requires a valid standalone .sealgraph repository", []string{"run `sealgraph init` only when initializing this directory; otherwise inspect and repair repository state explicitly"}
-	case strings.Contains(message, "outside the current parent ancestry"):
-		return "REF@hex is scoped to the REF's current parent_revision ancestry", []string{"use the reported unscoped @SEAL_TOKEN only when a sibling or detached Seal is intentionally selected"}
+	case strings.Contains(message, "outside the observed revision closure"):
+		return "REF@hex is scoped to revision assertions observed from the REF's current HEAD", []string{"use the unscoped @SEAL_TOKEN only when selecting a Seal outside that observed closure intentionally"}
 	case strings.Contains(message, "changed while deriving") || strings.Contains(message, "changed or became unreadable"):
 		return "the coherent repository observation changed before output could be committed", []string{"inspect current state and rerun the read-only command; no partial result is authoritative"}
 	default:

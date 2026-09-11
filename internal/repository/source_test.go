@@ -9,7 +9,7 @@ import (
 )
 
 func TestLocalSourceLifecycleIsExplicitAndNonCanonical(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	writeSourceFile(t, dir, "docs/one.md", "one")
 	writeSourceFile(t, dir, "docs/two.md", "two")
 	ctx := context.Background()
@@ -46,10 +46,10 @@ func TestLocalSourceLifecycleIsExplicitAndNonCanonical(t *testing.T) {
 }
 
 func TestContentlessAddPreservesSemanticsAndDoesNotSilentlyFallback(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	writeSourceFile(t, dir, "spec.md", "v1")
 	ctx := context.Background()
-	first, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true})
+	first, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true, ClearCauseLinks: true})
 	if err != nil || !first.Candidate.Root || first.SourceMode != "initial-ref-path" || first.SourceBinding != "BOUND" {
 		t.Fatalf("first=%+v err=%v", first, err)
 	}
@@ -70,14 +70,14 @@ func TestContentlessAddPreservesSemanticsAndDoesNotSilentlyFallback(t *testing.T
 }
 
 func TestExplicitFileCannotDisagreeWithExistingBinding(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	writeSourceFile(t, dir, "one.md", "one")
 	writeSourceFile(t, dir, "two.md", "two")
 	ctx := context.Background()
 	if _, err := repo.SourceBind(ctx, "spec", "one.md"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec", Path: "two.md", PreserveSemantics: false, Root: true, RootSet: true}); err == nil {
+	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec", Path: "two.md", PreserveSemantics: false, Root: true, RootSet: true, ClearCauseLinks: true}); err == nil {
 		t.Fatal("explicit file silently disagreed with existing binding")
 	}
 	if _, err := repo.candidates.Load("spec"); !errors.Is(err, ErrCandidateNotFound) {
@@ -86,10 +86,10 @@ func TestExplicitFileCannotDisagreeWithExistingBinding(t *testing.T) {
 }
 
 func TestStatusReportsWorkfileAgainstCandidateThenHead(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	writeSourceFile(t, dir, "spec.md", "v1")
 	ctx := context.Background()
-	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true}); err != nil {
+	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
 	statuses, err := repo.Status(ctx, "spec.md")
@@ -106,12 +106,12 @@ func TestStatusReportsWorkfileAgainstCandidateThenHead(t *testing.T) {
 	writeSourceFile(t, dir, "spec.md", "v2")
 	statuses, err = repo.Status(ctx, "spec.md")
 	if err != nil || statuses[0].Source.Relation != "WORKFILE_DIFFERS_FROM_HEAD" {
-		t.Fatalf("modified status=%+v err=%v", statuses, err)
+		t.Fatalf("modified status=%+v source=%+v err=%v", statuses, statuses[0].Source, err)
 	}
 }
 
 func TestSourceCompareUsesCandidateThenHeadAndSupportsBindingOnly(t *testing.T) {
-	dir, repo := newFormat4Repository(t)
+	dir, repo := newTestRepositoryWithDir(t)
 	writeSourceFile(t, dir, "spec.md", "v1")
 	writeSourceFile(t, dir, "only.md", "only")
 	ctx := context.Background()
@@ -122,7 +122,7 @@ func TestSourceCompareUsesCandidateThenHeadAndSupportsBindingOnly(t *testing.T) 
 	if err != nil || comparison.Baseline != "NONE" || comparison.Relation != "WORKFILE_ADDED" || comparison.BaselineContent != nil {
 		t.Fatalf("binding-only comparison=%+v err=%v", comparison, err)
 	}
-	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec", Path: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true}); err != nil {
+	if _, err := repo.AddLocalSource(ctx, LocalSourceAddOptions{REF: "spec", Path: "spec.md", BindSource: true, PreserveSemantics: true, Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
 	comparison, err = repo.SourceCompare(ctx, "spec")

@@ -49,7 +49,7 @@ func (s *ObjectStore) WriteBlob(ctx context.Context, data []byte) (domain.Object
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return domain.ObjectID{}, fmt.Errorf("inspect object %s: %w", id, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := ensureObjectFanout(filepath.Dir(path)); err != nil {
 		return domain.ObjectID{}, fmt.Errorf("create object directory: %w", err)
 	}
 	temp, err := os.CreateTemp(filepath.Dir(path), ".tmp-object-")
@@ -58,23 +58,10 @@ func (s *ObjectStore) WriteBlob(ctx context.Context, data []byte) (domain.Object
 	}
 	tempPath := temp.Name()
 	defer os.Remove(tempPath)
-	zw := zlib.NewWriter(temp)
-	if _, err = zw.Write(envelope(data)); err == nil {
-		err = zw.Close()
-	}
-	if err == nil {
-		err = temp.Sync()
-	}
-	closeErr := temp.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	if err := writeObjectTemp(temp, data); err != nil {
 		return domain.ObjectID{}, fmt.Errorf("write object %s: %w", id, err)
 	}
-	if err := os.Chmod(tempPath, 0o444); err != nil {
-		return domain.ObjectID{}, fmt.Errorf("make object %s immutable: %w", id, err)
-	}
+	published := false
 	if err := os.Link(tempPath, path); err != nil {
 		if !errors.Is(err, os.ErrExist) {
 			return domain.ObjectID{}, fmt.Errorf("publish object %s atomically: %w", id, err)
@@ -82,8 +69,74 @@ func (s *ObjectStore) WriteBlob(ctx context.Context, data []byte) (domain.Object
 		if _, readErr := s.ReadObject(ctx, id); readErr != nil {
 			return domain.ObjectID{}, fmt.Errorf("concurrent object %s is corrupt; inspect it explicitly: %w", id, readErr)
 		}
+	} else {
+		published = true
+	}
+	if published {
+		if err := s.validateObjectPath(path, true); err != nil {
+			return domain.ObjectID{}, fmt.Errorf("verify new object %s path: %w", id, err)
+		}
+		if err := verifyCreatedMode(path, 0o444, "object"); err != nil {
+			return domain.ObjectID{}, fmt.Errorf("verify object %s creation mode: %w", id, err)
+		}
 	}
 	return id, nil
+}
+
+func writeObjectTemp(temp *os.File, data []byte) error {
+	zw := zlib.NewWriter(temp)
+	_, err := zw.Write(envelope(data))
+	if err == nil {
+		err = zw.Close()
+	}
+	if err == nil {
+		err = temp.Chmod(0o444)
+	}
+	if err == nil {
+		err = temp.Sync()
+	}
+	if err == nil {
+		var info os.FileInfo
+		info, err = temp.Stat()
+		if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm() != 0o444) {
+			err = fmt.Errorf("temporary object mode is %04o, expected 0444", info.Mode().Perm())
+		}
+	}
+	closeErr := temp.Close()
+	if err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+func ensureObjectFanout(path string) error {
+	if err := os.Mkdir(path, 0o755); err == nil {
+		if err := os.Chmod(path, 0o755); err != nil {
+			return fmt.Errorf("set new fanout mode: %w", err)
+		}
+		return verifyCreatedMode(path, 0o755, "object fanout")
+	} else if !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("object fanout path %s is not a real directory", path)
+	}
+	return nil
+}
+
+func verifyCreatedMode(path string, expected fs.FileMode, label string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode().Perm() != expected {
+		return fmt.Errorf("new %s mode is %04o; expected %04o", label, info.Mode().Perm(), expected)
+	}
+	return nil
 }
 
 func (s *ObjectStore) ReadObject(ctx context.Context, id domain.ObjectID) (store.Object, error) {
@@ -103,6 +156,16 @@ func (s *ObjectStore) ReadObject(ctx context.Context, id domain.ObjectID) (store
 	}
 	if err != nil {
 		return store.Object{}, fmt.Errorf("read object %s: %w", id, err)
+	}
+	return DecodeLooseObject(id, compressed)
+}
+
+// DecodeLooseObject validates one captured loose-object byte sequence without
+// rereading its filesystem path. Fsck uses it to bind semantic validation to
+// the same physical observation whose size and digest it reports.
+func DecodeLooseObject(id domain.ObjectID, compressed []byte) (store.Object, error) {
+	if err := id.ValidateNative(); err != nil {
+		return store.Object{}, err
 	}
 	source := bytes.NewReader(compressed)
 	zr, err := zlib.NewReader(source)

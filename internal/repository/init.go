@@ -7,7 +7,23 @@ import (
 	"path/filepath"
 )
 
-const configBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
+const (
+	configBytes        = "repository_format = 5\nobject_format = sha256\nref_format = manifest-v1\n"
+	format4ConfigBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
+)
+
+const recommendedGitignore = `# Local runtime state; keep config, objects and REF manifests tracked.
+/index/
+/cache/
+/locks/
+/logs/
+
+# Temporary files used for atomic canonical writes.
+/objects/*/.tmp-object-*
+/refs/seals/**/.tmp-ref-*
+`
+
+const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary format-5 operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
 
 type InitOutcome string
 
@@ -57,14 +73,26 @@ func InitStandalone(workDir string) (InitResult, error) {
 			return InitResult{}, fmt.Errorf("prepare repository layout: %w", err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(staging, "config"), []byte(configBytes), 0o644); err != nil {
+	if err := writeSyncedFile(filepath.Join(staging, "config"), []byte(configBytes), 0o644); err != nil {
 		return InitResult{}, fmt.Errorf("write repository config: %w", err)
 	}
-	if err := os.Rename(staging, repositoryDir); err != nil {
+	if err := writeSyncedFile(filepath.Join(staging, ".gitignore"), []byte(recommendedGitignore), 0o644); err != nil {
+		return InitResult{}, fmt.Errorf("write recommended gitignore: %w", err)
+	}
+	if err := syncStagingTree(staging); err != nil {
+		return InitResult{}, fmt.Errorf("synchronize initialization staging tree: %w", err)
+	}
+	if err := verifyUniversalLoadModes(staging); err != nil {
+		return InitResult{}, fmt.Errorf("verify initialization creation modes: %w", err)
+	}
+	if err := renameNoReplace(staging, repositoryDir); err != nil {
 		if _, statErr := os.Lstat(repositoryDir); statErr == nil {
 			return InitResult{}, fmt.Errorf("%s appeared during initialization; retry to validate it: %w", repositoryDir, err)
 		}
 		return InitResult{}, fmt.Errorf("publish standalone repository atomically: %w", err)
+	}
+	if err := syncDirectoryForLoad(workDir); err != nil {
+		return InitResult{}, fmt.Errorf("standalone repository was published at %s but parent-directory durability is uncertain; inspect it before retrying: %w", repositoryDir, err)
 	}
 	return InitResult{Outcome: InitInitialized, RuntimeDirectories: []string{"index", "locks"}}, nil
 }
@@ -94,6 +122,9 @@ func validateCanonicalLayout(repositoryDir string) error {
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
+	if string(config) == format4ConfigBytes {
+		return errors.New(format4MigrationGuide)
+	}
 	if string(config) != configBytes {
 		return fmt.Errorf("unsupported or malformed config")
 	}
@@ -108,7 +139,7 @@ func validateCanonicalLayout(repositoryDir string) error {
 	}
 	for _, entry := range entries {
 		if entry.Name() != "seals" {
-			return fmt.Errorf("unexpected canonical refs entry %q; format 4 manifest-v1 stores tags inside refs/seals/<REF>/.ref", entry.Name())
+			return fmt.Errorf("unexpected canonical refs entry %q; format 5 manifest-v1 stores tags inside refs/seals/<REF>/.ref", entry.Name())
 		}
 	}
 	return nil
@@ -140,8 +171,22 @@ func bootstrapRuntimeLayout(repositoryDir string) ([]string, error) {
 			}
 			return nil, fmt.Errorf("create %s runtime directory: %w", relative, err)
 		}
+		if err := os.Chmod(path, 0o755); err != nil {
+			return nil, fmt.Errorf("set %s runtime directory creation mode: %w", relative, err)
+		}
+		info, err := os.Lstat(path)
+		if err != nil || !info.IsDir() || info.Mode().Perm() != 0o755 {
+			return nil, fmt.Errorf("verify %s runtime directory creation mode: mode=%v err=%v", relative, initMode(info), err)
+		}
 	}
 	return missing, nil
+}
+
+func initMode(info os.FileInfo) os.FileMode {
+	if info == nil {
+		return 0
+	}
+	return info.Mode()
 }
 
 func validateRealDirectory(path, relative string) error {

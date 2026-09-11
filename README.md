@@ -10,38 +10,37 @@ The core question is not only “what changed?” but:
 
 ## Status
 
-The checked-in standalone runtime now implements the format-4 native core and
-active revision graph: REF-independent Seal and Link identity, separated
-candidate revision/CAS state, exact selectors, atomic logical-v1 load,
-branching parents, active-leaf admission, stale/frontier, history, and bounded
-impact, plus collision-free REF manifests, immutable scoped tags, atomic REF
-move, tag-preserving logical load, exact file/stdin content ingestion, and a
+The checked-in standalone runtime implements the format-5 native core:
+Material/Provenance/Seal typed Blobs, parentless Candidates, whole-record Cause
+Links with observer-scoped branching revision assertions, exact selectors,
+atomic universal-blob import, active-leaf admission, stale/frontier, history,
+filtered impact proof, collision-free REF manifests, immutable scoped tags,
+atomic REF move, exact file/stdin content ingestion, and a
 deterministic explicit-path digest manifest builder. It also implements
 non-canonical local source bindings, content-only file refresh, and separate
 candidate/HEAD versus workfile/baseline status observations under ADR 0019.
 The beta candidate also includes read-only full-inventory `fsck` with
 versioned JSON output and explicit historical/detached inventory reporting.
-The prior format-3 dump remains available from commit `5b24d47` for explicit
-source export. The normative requirements are in
+Existing format-4 repositories are extracted by an isolated read-only command
+in the format-5 binary and imported into an absent format-5 target. The
+normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-ADR 0011, ADR 0012, and ADR 0013.
+ADRs 0023, 0025, 0026, and 0027.
 
-The tracked project `.sealgraph` is now format 4. It was converted explicitly
-through the commit-`5b24d47` read-only logical dump and the format-4 empty-target
-loader; it was not opened or rewritten in place by the new runtime. The
-conversion and same-material sibling receipt is recorded in
-[`docs/process/dogfooding-receipts/2026-08-17-format4-load.md`](docs/process/dogfooding-receipts/2026-08-17-format4-load.md).
+The runtime never opens format 4 as live state and never rewrites it in place.
+Migration retains the source and emits a complete old-to-new typed identity and
+semantic-change receipt.
 
 ## Standalone beta surface
 
 ```sh
 sealgraph init
-sealgraph add REQ-001 --root --content 'Authentication is required.'
+sealgraph add REQ-001 --root --clear-cause-links --content 'Authentication is required.'
 sealgraph seal REQ-001
 
 # Initial REF=path convenience plus an explicit local source binding:
-sealgraph add docs/requirements.md --root --bind-source
+sealgraph add docs/requirements.md --root --clear-cause-links --bind-source
 # After editing the bound file, refresh content without resetting semantics:
 sealgraph add docs/requirements.md
 sealgraph source show docs/requirements.md
@@ -52,8 +51,12 @@ sealgraph mv REQ-001 requirements/REQ-001
 sealgraph ref drop obsolete/REQ-000
 sealgraph recover show
 
-# Explicit conversion into a different directory with no .sealgraph target:
-sealgraph load --format logical-v1 < repository.dump.json
+# First use the format-5 binary in the retained format-4 source repository:
+sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json
+# Then use the same binary in a different directory with no .sealgraph:
+sealgraph load --format universal-blob-v1 < repository.dump.json
+# If publication succeeded but receipt stdout delivery failed:
+sealgraph load-receipt --source-document-sha256 HEX
 ```
 
 Inspection output is an aligned, terminal-width-aware human view with
@@ -104,14 +107,11 @@ Review is intentionally explicit and sequential. Each affected REF must be
 relinked/reviewed and publish one new revision. There is no recursive repair
 command.
 
-A format-4 Seal commits to:
+A format-5 Seal joins:
 
-- content blob identity,
-- attachments,
-- exact upstream target seal identities,
-- optional exact parent revision identity,
-- root/draft semantics,
-- canonical format/version metadata.
+- a Material Blob containing content and attachments; and
+- a Provenance Blob containing root/draft and exact Cause records, including
+  target, observer-scoped previous-revision assertions, and messages.
 
 REF paths, selector spelling, tags, publication expectation, actor, and time do
 not enter Seal identity. Multiple REFs may point to the same Seal.
@@ -147,10 +147,8 @@ and does not inspect Git.
 sealgraph init
 sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
 sealgraph add
-sealgraph add --parent
-sealgraph derive
-sealgraph link
-sealgraph unlink
+sealgraph link REF --target TARGET (--previous PREVIOUS ... | --no-previous)
+sealgraph unlink REF --target TARGET
 sealgraph tag
 sealgraph mv
 sealgraph ref drop REF
@@ -165,16 +163,18 @@ sealgraph linklog
 sealgraph compare
 sealgraph status
 sealgraph stale [--frontier] [--refs-only] [--scan]
-sealgraph impact [--all-paths] [--max-paths N]
+sealgraph impact [--asserted-by OBSERVER ...] [--all-paths] [--max-paths N]
 sealgraph graph
-sealgraph load --format logical-v1
+sealgraph migrate extract --source-format 4 --format universal-blob-v1
+sealgraph load --format universal-blob-v1
+sealgraph load-receipt --source-document-sha256 HEX
 ```
 
-The format-4 binary consumes, but never directly opens, a format-3 migration
-source. Load requires an absent `.sealgraph`, stages and validates the complete
-repository, publishes it with atomic no-replace semantics, and emits every
-old-to-new SealID mapping while preserving rewritten tags inside REF
-manifests.
+The format-5 binary opens a format-4 source only through the isolated read-only
+`migrate extract` command. Load consumes only the emitted document, requires an
+absent `.sealgraph`, stages and validates the complete typed repository,
+publishes it with durable atomic no-replace semantics, and emits every
+old-to-new Seal/Material/Provenance mapping plus semantic changes.
 
 `manifest` is a read-only deterministic path/size/SHA-256 claim builder. It
 uses only explicit relative files and an explicit source identity, performs no

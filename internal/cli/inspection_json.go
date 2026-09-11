@@ -1,21 +1,19 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/graph"
-	"github.com/mako10k/sealgraph/internal/history"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
-type inspectionOutput struct {
-	JSON     bool
-	Explicit bool
-}
+type inspectionOutput struct{ JSON, Explicit bool }
 
 func extractInspectionFormat(args []string, stdout io.Writer) ([]string, inspectionOutput, error) {
 	result := make([]string, 0, len(args))
@@ -52,161 +50,314 @@ func extractInspectionFormat(args []string, stdout io.Writer) ([]string, inspect
 }
 
 func writeInspectionJSON(stdout, stderr io.Writer, command string, value any) int {
-	data, err := json.Marshal(value)
-	if err != nil {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
 		return commandError(stderr, command, fmt.Errorf("encode JSON output: %w", err))
 	}
-	data = append(data, '\n')
-	if _, err := stdout.Write(data); err != nil {
+	if _, err := stdout.Write(literalizeInspectionUnicodeSeparators(buffer.Bytes())); err != nil {
 		return commandError(stderr, command, fmt.Errorf("write JSON output: %w", err))
 	}
 	return 0
 }
 
-func idValue(id *domain.ObjectID) any {
-	if id == nil {
-		return nil
-	}
-	return id.String()
-}
-func contentJSON(ref domain.ContentRef) map[string]any {
-	return map[string]any{"store": ref.Store, "type": ref.Type, "object_id": ref.ID.String()}
-}
-func attachmentJSON(value domain.Attachment) map[string]any {
-	return map[string]any{"name": value.Name, "media_type": value.MediaType, "blob": contentJSON(value.Blob)}
-}
-func linkJSON(value domain.Link) map[string]any {
-	return map[string]any{"target_seal_id": value.TargetSeal.String(), "message": value.Message}
-}
-func payloadJSON(payload domain.SealPayload) map[string]any {
-	attachments := make([]any, 0, len(payload.Attachments))
-	for _, value := range payload.Attachments {
-		attachments = append(attachments, attachmentJSON(value))
-	}
-	links := make([]any, 0, len(payload.Links))
-	for _, value := range payload.Links {
-		links = append(links, linkJSON(value))
-	}
-	return map[string]any{"parent_revision": idValue(payload.ParentRevision), "content": contentJSON(payload.Content), "root": payload.Root, "draft": payload.Draft, "attachments": attachments, "links": links}
-}
-
-func showJSON(result repository.ShowResult) map[string]any {
-	value := payloadJSON(result.Payload)
-	value["schema"] = "sealgraph/show/v1"
-	value["seal_id"] = result.ID.String()
-	value["current_refs"] = stringsOrEmpty(result.REFNames)
-	value["content_bytes"] = len(result.Content)
-	return value
-}
-
-func candidateShowJSON(inspection repository.CandidateInspection) map[string]any {
-	candidate := inspection.Candidate
-	value := map[string]any{
-		"schema":              "sealgraph/candidate-show/v1",
-		"ref":                 candidate.REF,
-		"parent_revision":     idValue(candidate.ParentRevision),
-		"expected_ref_head":   idValue(candidate.ExpectedREFHead),
-		"current_ref_head":    idValue(inspection.CurrentHead),
-		"expected_head_state": inspection.ExpectedHeadState,
-		"content":             contentJSON(candidate.Content),
-		"content_bytes":       len(inspection.Content),
-		"root":                candidate.Root,
-		"draft":               candidate.Draft,
-	}
-	attachments := make([]any, 0, len(candidate.Attachments))
-	for _, attachment := range candidate.Attachments {
-		attachments = append(attachments, attachmentJSON(attachment))
-	}
-	links := make([]any, 0, len(candidate.Links))
-	for _, link := range candidate.Links {
-		links = append(links, linkJSON(link))
-	}
-	value["attachments"] = attachments
-	value["links"] = links
-	return value
-}
-
-func candidateCompareJSON(result repository.CandidateDiffResult) map[string]any {
-	diff := result.Diff
-	attachments := make([]any, 0, len(diff.Attachments))
-	for _, change := range diff.Attachments {
-		attachments = append(attachments, attachmentChangeJSON(change))
-	}
-	links := make([]any, 0, len(diff.Links))
-	for _, change := range diff.Links {
-		links = append(links, linkChangeJSON(change))
-	}
-	var beforeContent any
-	if !diff.Initial {
-		beforeContent = contentJSON(diff.Content.Before)
-	}
-	return map[string]any{
-		"schema":      "sealgraph/candidate-compare/v1",
-		"candidate":   candidateShowJSON(result.Inspection),
-		"initial":     diff.Initial,
-		"content":     map[string]any{"changed": diff.Initial || diff.Content.Changed, "before": beforeContent, "after": contentJSON(diff.Content.After)},
-		"attachments": attachments,
-		"links":       links,
-		"root":        map[string]any{"changed": diff.Initial || diff.Root.Changed, "before": optionalInitialValue(diff.Initial, diff.Root.Before), "after": diff.Root.After},
-		"draft":       map[string]any{"changed": diff.Initial || diff.Draft.Changed, "before": optionalInitialValue(diff.Initial, diff.Draft.Before), "after": diff.Draft.After},
-	}
-}
-
-func optionalInitialValue(initial bool, value any) any {
-	if initial {
-		return nil
-	}
-	return value
-}
-
-func stringsOrEmpty(values []string) []string { return append([]string{}, values...) }
-
-func statusJSON(value repository.RefStatus) map[string]any {
-	direct := make([]string, 0, len(value.StaleDirect))
-	for _, id := range value.StaleDirect {
-		direct = append(direct, id.String())
-	}
-	transitive := make([][]string, 0, len(value.StaleTransitive))
-	for _, path := range value.StaleTransitive {
-		ids := make([]string, 0, len(path))
-		for _, id := range path {
-			ids = append(ids, id.String())
+// encoding/json always escapes U+2028 and U+2029 for JavaScript compatibility.
+// Format-5 inspection JSON instead uses the canonical Sealgraph string rule:
+// every non-control scalar is emitted as its shortest literal UTF-8 sequence.
+func literalizeInspectionUnicodeSeparators(data []byte) []byte {
+	result := make([]byte, 0, len(data))
+	inString := false
+	for index := 0; index < len(data); {
+		current := data[index]
+		if !inString {
+			result = append(result, current)
+			index++
+			if current == '"' {
+				inString = true
+			}
+			continue
 		}
-		transitive = append(transitive, ids)
+		if current == '"' {
+			result = append(result, current)
+			index++
+			inString = false
+			continue
+		}
+		if current != '\\' {
+			result = append(result, current)
+			index++
+			continue
+		}
+		if bytes.HasPrefix(data[index:], []byte(`\u2028`)) {
+			result = append(result, []byte("\u2028")...)
+			index += len(`\u2028`)
+			continue
+		}
+		if bytes.HasPrefix(data[index:], []byte(`\u2029`)) {
+			result = append(result, []byte("\u2029")...)
+			index += len(`\u2029`)
+			continue
+		}
+		result = append(result, current)
+		index++
+		if index < len(data) {
+			result = append(result, data[index])
+			index++
+		}
 	}
-	candidateRelation := "NO_CANDIDATE"
-	if value.Unsealed {
-		candidateRelation = "UNSEALED"
-	}
-	var source any
-	if value.Source != nil {
-		source = map[string]any{"path": value.Source.Path, "baseline": value.Source.Baseline, "relation": value.Source.Relation}
-	}
-	return map[string]any{"ref": value.REF, "head_seal_id": idValue(value.Head), "candidate_to_head": candidateRelation, "draft": value.Draft, "stale": map[string]any{"self": value.StaleSelf, "direct_target_seal_ids": direct, "transitive_paths": transitive}, "sealed_state_labels": sealedStatusLabels(value.Labels()), "local_source": source}
+	return result
 }
 
-func sourceCompareJSON(value repository.SourceCompareResult) map[string]any {
-	var baseline any
-	if value.BaselineContent != nil {
-		baseline = contentJSON(*value.BaselineContent)
-	}
-	return map[string]any{"schema": "sealgraph/source-compare/v1", "ref": value.REF, "path": value.Path, "baseline": value.Baseline, "baseline_content": baseline, "workfile_content": map[string]any{"store": domain.NativeStore, "type": domain.BlobType, "object_id": value.WorkfileID.String(), "bytes": value.WorkfileBytes}, "relation": value.Relation}
+type contentV1 struct {
+	Store    string `json:"store"`
+	Type     string `json:"type"`
+	ObjectID string `json:"object_id"`
 }
 
-func recoveryInspectionsJSON(values []repository.RecoveryInspection) map[string]any {
-	items := make([]any, 0, len(values))
+func contentJSON(ref domain.ContentRef) contentV1 {
+	return contentV1{Store: ref.Store, Type: ref.Type, ObjectID: ref.ID.String()}
+}
+
+type attachmentJSONV5 struct {
+	Name      string `json:"name"`
+	MediaType string `json:"media_type"`
+	Blob      string `json:"blob"`
+}
+type causeLinkJSONV5 struct {
+	TargetSeal string   `json:"target_seal"`
+	Previous   []string `json:"previous_revision_seal_of_target_seal"`
+	Messages   []string `json:"messages"`
+}
+type assertionJSONV5 struct {
+	ObserverSeal       string   `json:"observer_seal"`
+	ObserverProvenance string   `json:"observer_provenance"`
+	TargetSeal         string   `json:"target_seal"`
+	Previous           []string `json:"previous_revision_seal_of_target_seal"`
+	Messages           []string `json:"messages"`
+}
+type revisionObservationJSON struct {
+	TargetSeal         string            `json:"target_seal"`
+	PreviousStates     []string          `json:"previous_states"`
+	Assertions         []assertionJSONV5 `json:"assertions"`
+	StructuralPrevious []string          `json:"structural_previous_seals"`
+}
+type scopedRevisionObservationJSON struct {
+	TargetSeal         string            `json:"target_seal"`
+	PreviousStates     []string          `json:"in_scope_previous_states"`
+	Assertions         []assertionJSONV5 `json:"in_scope_assertions"`
+	StructuralPrevious []string          `json:"structural_previous_seals"`
+}
+type revisionEdgeJSON struct {
+	TargetSeal string            `json:"target_seal"`
+	Previous   string            `json:"previous_revision_seal"`
+	Sources    []assertionJSONV5 `json:"assertion_sources"`
+}
+type sealViewJSON struct {
+	SealID        string             `json:"seal_id"`
+	MaterialID    string             `json:"material_id"`
+	ProvenanceID  string             `json:"provenance_id"`
+	ContentBlobID string             `json:"content_blob_id"`
+	ContentBytes  int                `json:"content_bytes"`
+	Attachments   []attachmentJSONV5 `json:"attachments"`
+	Root          bool               `json:"root"`
+	Draft         bool               `json:"draft"`
+	CauseLinks    []causeLinkJSONV5  `json:"cause_links"`
+}
+type candidateViewJSON struct {
+	REF                     string             `json:"ref"`
+	ExpectedREFHead         *string            `json:"expected_ref_head"`
+	ProspectiveSealID       string             `json:"prospective_seal_id"`
+	ProspectiveMaterialID   string             `json:"prospective_material_id"`
+	ProspectiveProvenanceID string             `json:"prospective_provenance_id"`
+	ContentBlobID           string             `json:"content_blob_id"`
+	ContentBytes            int                `json:"content_bytes"`
+	Attachments             []attachmentJSONV5 `json:"attachments"`
+	Root                    bool               `json:"root"`
+	Draft                   bool               `json:"draft"`
+	CauseLinks              []causeLinkJSONV5  `json:"cause_links"`
+}
+
+func idsJSON(ids []domain.ObjectID) []string {
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, id.String())
+	}
+	return result
+}
+func attachmentsJSON(values []domainv5.Attachment) []attachmentJSONV5 {
+	result := make([]attachmentJSONV5, 0, len(values))
 	for _, value := range values {
-		transitions := make([]any, 0, len(value.Transitions))
-		for _, transition := range value.Transitions {
-			transitions = append(transitions, map[string]any{"ref": transition.REF, "current": transition.Current})
-		}
-		items = append(items, map[string]any{"operation_id": value.ID, "kind": value.Kind, "journal_state": value.Journal, "status": value.Status, "transitions": transitions, "error": value.Corrupt})
+		result = append(result, attachmentJSONV5{Name: value.Name, MediaType: value.MediaType, Blob: value.Blob.String()})
 	}
-	return map[string]any{"schema": "sealgraph/recover/v1", "operations": items}
+	return result
+}
+func causeLinksJSON(values []domainv5.CauseLink) []causeLinkJSONV5 {
+	result := make([]causeLinkJSONV5, 0, len(values))
+	for _, value := range values {
+		result = append(result, causeLinkJSONV5{TargetSeal: value.TargetSeal.String(), Previous: idsJSON(value.PreviousRevisionSealOfTargetSeal), Messages: append([]string{}, value.Messages...)})
+	}
+	return result
+}
+func assertionsJSON(values []domainv5.AssertionSource) []assertionJSONV5 {
+	result := make([]assertionJSONV5, 0, len(values))
+	for _, value := range values {
+		result = append(result, assertionJSONV5{ObserverSeal: value.ObserverSeal.String(), ObserverProvenance: value.ObserverProvenance.String(), TargetSeal: value.CauseLink.TargetSeal.String(), Previous: idsJSON(value.CauseLink.PreviousRevisionSealOfTargetSeal), Messages: append([]string{}, value.CauseLink.Messages...)})
+	}
+	return result
+}
+func revisionJSON(value domainv5.RevisionObservation) revisionObservationJSON {
+	return revisionObservationJSON{TargetSeal: value.TargetSeal.String(), PreviousStates: append([]string{}, value.PreviousStates...), Assertions: assertionsJSON(value.Assertions), StructuralPrevious: idsJSON(value.StructuralPrevious)}
+}
+func scopedRevisionJSON(value repository.ScopedRevisionObservation) scopedRevisionObservationJSON {
+	return scopedRevisionObservationJSON{TargetSeal: value.TargetSeal.String(), PreviousStates: append([]string{}, value.PreviousStates...), Assertions: assertionsJSON(value.Assertions), StructuralPrevious: idsJSON(value.StructuralPrevious)}
+}
+func edgeJSON(value repository.RevisionEdge) revisionEdgeJSON {
+	return revisionEdgeJSON{TargetSeal: value.Target.String(), Previous: value.Previous.String(), Sources: assertionsJSON(value.Sources)}
+}
+func sealView(value domainv5.ResolvedSeal) sealViewJSON {
+	return sealViewJSON{SealID: value.ID.String(), MaterialID: value.Seal.Material.String(), ProvenanceID: value.Seal.Provenance.String(), ContentBlobID: value.Material.Content.String(), ContentBytes: value.ContentBytes, Attachments: attachmentsJSON(value.Material.Attachments), Root: value.Provenance.Root, Draft: value.Provenance.Draft, CauseLinks: causeLinksJSON(value.Provenance.CauseLinks)}
+}
+func candidateView(value repository.CandidateInspection) candidateViewJSON {
+	var expected *string
+	if value.Candidate.ExpectedREFHead != nil {
+		text := value.Candidate.ExpectedREFHead.String()
+		expected = &text
+	}
+	return candidateViewJSON{REF: value.Candidate.REF, ExpectedREFHead: expected, ProspectiveSealID: value.Prospective.ID.String(), ProspectiveMaterialID: value.Prospective.Seal.Material.String(), ProspectiveProvenanceID: value.Prospective.Seal.Provenance.String(), ContentBlobID: value.Candidate.Content.String(), ContentBytes: len(value.Content), Attachments: attachmentsJSON(value.Candidate.Attachments), Root: value.Candidate.Root, Draft: value.Candidate.Draft, CauseLinks: causeLinksJSON(value.Candidate.CauseLinks)}
 }
 
-func sealedStatusLabels(labels []string) []string {
-	result := append([]string(nil), labels...)
+type showDocument struct {
+	Schema      string                  `json:"schema"`
+	Seal        sealViewJSON            `json:"seal"`
+	CurrentREFs []string                `json:"current_refs"`
+	Revision    revisionObservationJSON `json:"revision_observation"`
+}
+
+func showJSON(result repository.ShowResult) showDocument {
+	return showDocument{Schema: "sealgraph/show/v2", Seal: sealView(result.Resolved), CurrentREFs: append([]string{}, result.REFNames...), Revision: revisionJSON(result.Revision)}
+}
+
+type candidateShowDocument struct {
+	Schema            string                                `json:"schema"`
+	Candidate         candidateViewJSON                     `json:"candidate"`
+	CurrentREFHead    *string                               `json:"current_ref_head"`
+	ExpectedHeadState repository.CandidateExpectedHeadState `json:"expected_head_state"`
+}
+
+func candidateShowJSON(value repository.CandidateInspection) candidateShowDocument {
+	var current *string
+	if value.CurrentHead != nil {
+		text := value.CurrentHead.String()
+		current = &text
+	}
+	return candidateShowDocument{Schema: "sealgraph/candidate-show/v2", Candidate: candidateView(value), CurrentREFHead: current, ExpectedHeadState: value.ExpectedHeadState}
+}
+
+type changeJSON struct {
+	Changed bool `json:"changed"`
+	Before  any  `json:"before"`
+	After   any  `json:"after"`
+}
+type changesJSON struct {
+	MaterialID    changeJSON `json:"material_id"`
+	ProvenanceID  changeJSON `json:"provenance_id"`
+	ContentBlobID changeJSON `json:"content_blob_id"`
+	Attachments   changeJSON `json:"attachments"`
+	Root          changeJSON `json:"root"`
+	Draft         changeJSON `json:"draft"`
+	CauseLinks    changeJSON `json:"cause_links"`
+}
+
+func changed(before, after any) changeJSON {
+	return changeJSON{Changed: !reflect.DeepEqual(before, after), Before: before, After: after}
+}
+func compareChanges(before *domainv5.ResolvedSeal, after domainv5.ResolvedSeal) changesJSON {
+	var material, provenance, content, attachments, root, draft, links any
+	if before != nil {
+		material = before.Seal.Material.String()
+		provenance = before.Seal.Provenance.String()
+		content = before.Material.Content.String()
+		attachments = attachmentsJSON(before.Material.Attachments)
+		root = before.Provenance.Root
+		draft = before.Provenance.Draft
+		links = causeLinksJSON(before.Provenance.CauseLinks)
+	}
+	return changesJSON{MaterialID: changed(material, after.Seal.Material.String()), ProvenanceID: changed(provenance, after.Seal.Provenance.String()), ContentBlobID: changed(content, after.Material.Content.String()), Attachments: changed(attachments, attachmentsJSON(after.Material.Attachments)), Root: changed(root, after.Provenance.Root), Draft: changed(draft, after.Provenance.Draft), CauseLinks: changed(links, causeLinksJSON(after.Provenance.CauseLinks))}
+}
+
+type baselineJSON struct {
+	Label string `json:"label"`
+	State string `json:"state"`
+	Seal  any    `json:"seal"`
+}
+type candidateCompareDocument struct {
+	Schema            string                                `json:"schema"`
+	REF               string                                `json:"ref"`
+	CurrentREFHead    *string                               `json:"current_ref_head"`
+	ExpectedHeadState repository.CandidateExpectedHeadState `json:"expected_head_state"`
+	Baseline          baselineJSON                          `json:"baseline"`
+	Prospective       candidateViewJSON                     `json:"prospective"`
+	Changes           changesJSON                           `json:"changes"`
+}
+
+func candidateCompareJSON(value repository.CandidateDiffResult) candidateCompareDocument {
+	show := candidateShowJSON(value.Inspection)
+	baseline := baselineJSON{Label: "PUBLICATION_BASELINE", State: "ABSENT"}
+	if value.Baseline != nil {
+		baseline.State = "PRESENT"
+		baseline.Seal = sealView(*value.Baseline)
+	}
+	return candidateCompareDocument{Schema: "sealgraph/candidate-compare/v2", REF: value.Inspection.Candidate.REF, CurrentREFHead: show.CurrentREFHead, ExpectedHeadState: value.Inspection.ExpectedHeadState, Baseline: baseline, Prospective: candidateView(value.Inspection), Changes: compareChanges(value.Baseline, value.Inspection.Prospective)}
+}
+
+type compareDocument struct {
+	Schema  string       `json:"schema"`
+	From    sealViewJSON `json:"from"`
+	To      sealViewJSON `json:"to"`
+	Changes changesJSON  `json:"changes"`
+}
+
+func compareJSON(value repository.SealComparison) compareDocument {
+	return compareDocument{Schema: "sealgraph/compare/v2", From: sealView(value.From), To: sealView(value.To), Changes: compareChanges(&value.From, value.To)}
+}
+
+type staleJSON struct {
+	Self       bool       `json:"self"`
+	Direct     []string   `json:"direct_target_seal_ids"`
+	Transitive [][]string `json:"transitive_paths"`
+}
+type localSourceJSON struct {
+	Path     string `json:"path"`
+	Baseline string `json:"baseline"`
+	Relation string `json:"relation"`
+}
+type statusRecordJSON struct {
+	REF         string           `json:"ref"`
+	Head        *string          `json:"head_seal_id"`
+	Candidate   string           `json:"candidate_to_head"`
+	Draft       bool             `json:"draft"`
+	Stale       staleJSON        `json:"stale"`
+	Labels      []string         `json:"sealed_state_labels"`
+	LocalSource *localSourceJSON `json:"local_source"`
+}
+type staleStatusRecordJSON struct {
+	REF    string    `json:"ref"`
+	Head   string    `json:"head_seal_id"`
+	Draft  bool      `json:"draft"`
+	Stale  staleJSON `json:"stale"`
+	Labels []string  `json:"sealed_state_labels"`
+}
+
+func statusStale(value repository.RefStatus) staleJSON {
+	paths := make([][]string, 0, len(value.StaleTransitive))
+	for _, path := range value.StaleTransitive {
+		paths = append(paths, idsJSON(path))
+	}
+	return staleJSON{Self: value.StaleSelf, Direct: idsJSON(value.StaleDirect), Transitive: paths}
+}
+func labels(value repository.RefStatus) []string {
+	result := value.Labels()
 	for i := range result {
 		if result[i] == "CLEAN" {
 			result[i] = "SEALED_STATE_CLEAN"
@@ -214,112 +365,315 @@ func sealedStatusLabels(labels []string) []string {
 	}
 	return result
 }
-func statusesJSON(schema string, statuses []repository.RefStatus, extra map[string]any) map[string]any {
-	items := make([]any, 0, len(statuses))
-	for _, status := range statuses {
-		items = append(items, statusJSON(status))
+func statusRecord(value repository.RefStatus) statusRecordJSON {
+	var head *string
+	if value.Head != nil {
+		text := value.Head.String()
+		head = &text
 	}
-	result := map[string]any{"schema": schema, "statuses": items}
-	for key, value := range extra {
-		result[key] = value
+	candidate := "NO_CANDIDATE"
+	if value.Unsealed {
+		candidate = "UNSEALED"
 	}
-	return result
+	var source *localSourceJSON
+	if value.Source != nil {
+		source = &localSourceJSON{Path: value.Source.Path, Baseline: value.Source.Baseline, Relation: value.Source.Relation}
+	}
+	return statusRecordJSON{REF: value.REF, Head: head, Candidate: candidate, Draft: value.Draft, Stale: statusStale(value), Labels: labels(value), LocalSource: source}
+}
+func staleRecord(value repository.RefStatus) staleStatusRecordJSON {
+	return staleStatusRecordJSON{REF: value.REF, Head: value.Head.String(), Draft: value.Draft, Stale: statusStale(value), Labels: labels(value)}
 }
 
-func graphJSON(nodes []repository.GraphNode) map[string]any {
-	items := make([]any, 0, len(nodes))
+type statusDocument struct {
+	Schema   string             `json:"schema"`
+	Statuses []statusRecordJSON `json:"statuses"`
+}
+type staleDocument struct {
+	Schema   string                  `json:"schema"`
+	Frontier bool                    `json:"frontier"`
+	Scan     bool                    `json:"scan"`
+	Statuses []staleStatusRecordJSON `json:"statuses"`
+}
+
+func statusesJSON(schema string, statuses []repository.RefStatus, frontier, scan bool) any {
+	if schema == "sealgraph/status/v3" {
+		items := make([]statusRecordJSON, 0, len(statuses))
+		for _, value := range statuses {
+			items = append(items, statusRecord(value))
+		}
+		return statusDocument{Schema: schema, Statuses: items}
+	}
+	items := make([]staleStatusRecordJSON, 0, len(statuses))
+	for _, value := range statuses {
+		items = append(items, staleRecord(value))
+	}
+	return staleDocument{Schema: schema, Frontier: frontier, Scan: scan, Statuses: items}
+}
+
+type graphCauseJSON struct {
+	Target string                   `json:"target_seal_id"`
+	State  repository.RevisionState `json:"revision_state"`
+}
+type graphNodeJSON struct {
+	SealID   string                   `json:"seal_id"`
+	State    repository.RevisionState `json:"revision_state"`
+	REFs     []string                 `json:"refs"`
+	Revision revisionObservationJSON  `json:"revision_observation"`
+	Causes   []graphCauseJSON         `json:"causes"`
+}
+type graphDocument struct {
+	Schema string          `json:"schema"`
+	Nodes  []graphNodeJSON `json:"nodes"`
+}
+
+func graphJSON(nodes []repository.GraphNode) graphDocument {
+	items := make([]graphNodeJSON, 0, len(nodes))
 	for _, node := range nodes {
-		links := make([]any, 0, len(node.Links))
-		for _, link := range node.Links {
-			links = append(links, map[string]any{"target_seal_id": link.Target.String(), "state": string(link.State)})
+		causes := make([]graphCauseJSON, 0, len(node.Causes))
+		for _, cause := range node.Causes {
+			causes = append(causes, graphCauseJSON{Target: cause.Target.String(), State: cause.State})
 		}
-		items = append(items, map[string]any{"seal_id": node.ID.String(), "state": string(node.State), "refs": stringsOrEmpty(node.REFs), "parent_revision": idValue(node.Parent), "causes": links})
+		items = append(items, graphNodeJSON{SealID: node.Resolved.ID.String(), State: node.State, REFs: append([]string{}, node.REFs...), Revision: revisionJSON(node.Revision), Causes: causes})
 	}
-	return map[string]any{"schema": "sealgraph/graph/v1", "nodes": items}
+	return graphDocument{Schema: "sealgraph/graph/v2", Nodes: items}
 }
-func impactJSON(source domain.ObjectID, impacts []graph.Impact, allPaths bool, limit int) map[string]any {
-	items := make([]any, 0, len(impacts))
-	for _, impact := range impacts {
-		paths := make([][]string, 0, len(impact.Paths))
+
+type proofJSON struct {
+	SealIDs      []string                        `json:"seal_ids"`
+	Edges        []revisionEdgeJSON              `json:"edges"`
+	Observations []scopedRevisionObservationJSON `json:"target_observations"`
+}
+type impactPathJSON struct {
+	CauseSealIDs []string  `json:"cause_seal_ids"`
+	Matched      string    `json:"matched_revision_seal_id"`
+	Proof        proofJSON `json:"revision_proof"`
+}
+type impactRecordJSON struct {
+	Head      string           `json:"head_seal_id"`
+	REFs      []string         `json:"refs"`
+	Paths     []impactPathJSON `json:"paths"`
+	Truncated bool             `json:"paths_truncated"`
+}
+type impactDocument struct {
+	Schema    string             `json:"schema"`
+	Source    string             `json:"source_seal_id"`
+	Scope     string             `json:"assertion_scope"`
+	Observers []string           `json:"asserted_by_observer_seal_ids"`
+	AllPaths  bool               `json:"all_paths"`
+	MaxPaths  any                `json:"max_paths"`
+	Impacts   []impactRecordJSON `json:"impacts"`
+}
+
+func proofValue(value repository.RevisionProof) proofJSON {
+	edges := make([]revisionEdgeJSON, 0, len(value.Edges))
+	for _, edge := range value.Edges {
+		edges = append(edges, edgeJSON(edge))
+	}
+	observations := make([]scopedRevisionObservationJSON, 0, len(value.Observations))
+	for _, observation := range value.Observations {
+		observations = append(observations, scopedRevisionJSON(observation))
+	}
+	return proofJSON{SealIDs: idsJSON(value.SealIDs), Edges: edges, Observations: observations}
+}
+func impactJSON(value repository.ImpactResult) impactDocument {
+	items := make([]impactRecordJSON, 0, len(value.Impacts))
+	for _, impact := range value.Impacts {
+		paths := make([]impactPathJSON, 0, len(impact.Paths))
 		for _, path := range impact.Paths {
-			ids := make([]string, 0, len(path))
-			for _, id := range path {
-				ids = append(ids, id.String())
-			}
-			paths = append(paths, ids)
+			paths = append(paths, impactPathJSON{CauseSealIDs: idsJSON(path.CauseSealIDs), Matched: path.MatchedRevision.String(), Proof: proofValue(path.Proof)})
 		}
-		items = append(items, map[string]any{"head_seal_id": impact.Head.String(), "refs": stringsOrEmpty(impact.REFs), "paths": paths, "paths_truncated": impact.Truncated})
+		items = append(items, impactRecordJSON{Head: impact.Head.String(), REFs: append([]string{}, impact.REFs...), Paths: paths, Truncated: impact.Truncated})
 	}
-	result := map[string]any{"schema": "sealgraph/impact/v1", "source_seal_id": source.String(), "all_paths": allPaths, "impacts": items}
-	if allPaths {
-		result["max_paths"] = limit
-	} else {
-		result["max_paths"] = nil
+	var max any
+	if value.AllPaths {
+		max = value.MaxPaths
 	}
-	return result
-}
-func entryJSON(entry history.Entry) map[string]any {
-	value := payloadJSON(entry.Payload)
-	value["seal_id"] = entry.ID.String()
-	return value
-}
-func logJSON(ref string, entries []history.Entry) map[string]any {
-	items := make([]any, 0, len(entries))
-	for _, entry := range entries {
-		items = append(items, entryJSON(entry))
-	}
-	return map[string]any{"schema": "sealgraph/log/v1", "ref": ref, "entries": items}
+	return impactDocument{Schema: "sealgraph/impact/v2", Source: value.Source.String(), Scope: value.AssertionScope, Observers: idsJSON(value.ObserverSealIDs), AllPaths: value.AllPaths, MaxPaths: max, Impacts: items}
 }
 
-func linkChangeJSON(change history.LinkChange) map[string]any {
-	return map[string]any{"kind": string(change.Kind), "target_seal_id": change.TargetSeal.String(), "before_seal_id": idValue(change.BeforeSeal), "after_seal_id": idValue(change.AfterSeal), "before_message": change.BeforeMessage, "after_message": change.AfterMessage}
+type logEntryJSON struct {
+	MinimumDepth int                     `json:"minimum_depth"`
+	Seal         sealViewJSON            `json:"seal"`
+	Revision     revisionObservationJSON `json:"revision_observation"`
+	Edges        []revisionEdgeJSON      `json:"outgoing_revision_edges"`
 }
-func linkLogJSON(ref, upstream string, entries []history.LinkLogEntry) map[string]any {
-	items := make([]any, 0, len(entries))
-	for _, entry := range entries {
-		changes := make([]any, 0, len(entry.Changes))
+type logPathJSON struct {
+	SealIDs []string           `json:"seal_ids"`
+	Edges   []revisionEdgeJSON `json:"edges"`
+}
+type logDocument struct {
+	Schema    string         `json:"schema"`
+	REF       string         `json:"ref"`
+	Head      string         `json:"head_seal_id"`
+	AllPaths  bool           `json:"all_paths"`
+	MaxPaths  any            `json:"max_paths"`
+	Entries   []logEntryJSON `json:"entries"`
+	Paths     []logPathJSON  `json:"paths"`
+	Truncated bool           `json:"paths_truncated"`
+}
+
+func logJSON(value repository.LogResult) logDocument {
+	entries := make([]logEntryJSON, 0, len(value.Entries))
+	for _, entry := range value.Entries {
+		edges := make([]revisionEdgeJSON, 0, len(entry.OutgoingEdges))
+		for _, edge := range entry.OutgoingEdges {
+			edges = append(edges, edgeJSON(edge))
+		}
+		entries = append(entries, logEntryJSON{MinimumDepth: entry.MinimumDepth, Seal: sealView(entry.Resolved), Revision: revisionJSON(entry.Revision), Edges: edges})
+	}
+	paths := make([]logPathJSON, 0, len(value.Paths))
+	for _, path := range value.Paths {
+		edges := make([]revisionEdgeJSON, 0, len(path.Edges))
+		for _, edge := range path.Edges {
+			edges = append(edges, edgeJSON(edge))
+		}
+		paths = append(paths, logPathJSON{SealIDs: idsJSON(path.SealIDs), Edges: edges})
+	}
+	var max any
+	if value.AllPaths {
+		max = value.MaxPaths
+	}
+	return logDocument{Schema: "sealgraph/log/v2", REF: value.REF, Head: value.Head.String(), AllPaths: value.AllPaths, MaxPaths: max, Entries: entries, Paths: paths, Truncated: value.Truncated}
+}
+
+type causeChangeJSON struct {
+	Target string `json:"target_seal"`
+	Before any    `json:"before"`
+	After  any    `json:"after"`
+}
+type linkLogEntryJSON struct {
+	Depth       int                     `json:"minimum_newer_depth"`
+	Newer       string                  `json:"newer_seal_id"`
+	Previous    string                  `json:"previous_seal_id"`
+	Sources     []assertionJSONV5       `json:"supporting_assertions"`
+	Observation revisionObservationJSON `json:"target_revision_observation"`
+	Changes     []causeChangeJSON       `json:"changes"`
+}
+type linkLogDocument struct {
+	Schema   string             `json:"schema"`
+	REF      string             `json:"ref"`
+	Head     string             `json:"head_seal_id"`
+	Upstream any                `json:"upstream_seal_id"`
+	Entries  []linkLogEntryJSON `json:"entries"`
+}
+
+func linkLogJSON(value repository.LinkLogResult) linkLogDocument {
+	entries := make([]linkLogEntryJSON, 0, len(value.Entries))
+	for _, entry := range value.Entries {
+		changes := make([]causeChangeJSON, 0, len(entry.Changes))
 		for _, change := range entry.Changes {
-			changes = append(changes, linkChangeJSON(change))
+			var before, after any
+			if change.Before != nil {
+				before = causeLinksJSON([]domainv5.CauseLink{*change.Before})[0]
+			}
+			if change.After != nil {
+				after = causeLinksJSON([]domainv5.CauseLink{*change.After})[0]
+			}
+			changes = append(changes, causeChangeJSON{Target: change.Target.String(), Before: before, After: after})
 		}
-		items = append(items, map[string]any{"seal_id": entry.Entry.ID.String(), "parent_revision": idValue(entry.Entry.Payload.ParentRevision), "changes": changes})
+		entries = append(entries, linkLogEntryJSON{Depth: entry.MinimumNewerDepth, Newer: entry.Newer.String(), Previous: entry.Previous.String(), Sources: assertionsJSON(entry.SupportingAssertions), Observation: revisionJSON(entry.TargetRevision), Changes: changes})
 	}
-	var target any
-	if upstream != "" {
-		target = upstream
+	var upstream any
+	if value.Upstream != nil {
+		upstream = value.Upstream.String()
 	}
-	return map[string]any{"schema": "sealgraph/linklog/v1", "ref": ref, "upstream_seal_id": target, "entries": items}
+	return linkLogDocument{Schema: "sealgraph/linklog/v2", REF: value.REF, Head: value.Head.String(), Upstream: upstream, Entries: entries}
 }
 
-func attachmentChangeJSON(change history.AttachmentChangeRecord) map[string]any {
-	var before, after any
-	if change.Before != nil {
-		before = attachmentJSON(*change.Before)
-	}
-	if change.After != nil {
-		after = attachmentJSON(*change.After)
-	}
-	return map[string]any{"kind": string(change.Kind), "name": change.Name, "before": before, "after": after}
-}
-func compareJSON(diff history.SealDiff) map[string]any {
-	attachments := make([]any, 0, len(diff.Attachments))
-	for _, change := range diff.Attachments {
-		attachments = append(attachments, attachmentChangeJSON(change))
-	}
-	links := make([]any, 0, len(diff.Links))
-	for _, change := range diff.Links {
-		links = append(links, linkChangeJSON(change))
-	}
-	return map[string]any{"schema": "sealgraph/compare/v1", "from_seal_id": diff.From.String(), "to_seal_id": diff.To.String(), "content": map[string]any{"changed": diff.Content.Changed, "before": contentJSON(diff.Content.Before), "after": contentJSON(diff.Content.After)}, "attachments": attachments, "links": links, "root": map[string]any{"changed": diff.Root.Changed, "before": diff.Root.Before, "after": diff.Root.After}, "draft": map[string]any{"changed": diff.Draft.Changed, "before": diff.Draft.Before, "after": diff.Draft.After}, "parent_revision": map[string]any{"changed": diff.Parent.Changed, "before": idValue(diff.Parent.Before), "after": idValue(diff.Parent.After)}}
+type fsckDocument struct {
+	Schema       string   `json:"schema"`
+	Result       string   `json:"result"`
+	Blobs        int      `json:"blobs"`
+	Seals        int      `json:"seals"`
+	Materials    int      `json:"materials"`
+	Provenances  int      `json:"provenances"`
+	REFs         int      `json:"refs"`
+	Tags         int      `json:"tags"`
+	Active       int      `json:"active_seals"`
+	Historical   []string `json:"historical_or_detached_seal_ids"`
+	Unreferenced []string `json:"unreferenced_blob_ids"`
 }
 
-func fsckJSON(report repository.FsckReport) map[string]any {
-	detached := make([]string, 0, len(report.HistoricalOrDetachedSeals))
-	for _, id := range report.HistoricalOrDetachedSeals {
-		detached = append(detached, id.String())
+func fsckJSON(value repository.FsckReport) fsckDocument {
+	return fsckDocument{Schema: "sealgraph/fsck/v2", Result: "ok", Blobs: value.Blobs, Seals: value.Seals, Materials: value.Materials, Provenances: value.Provenances, REFs: value.REFs, Tags: value.Tags, Active: value.ActiveSeals, Historical: idsJSON(value.HistoricalOrDetachedSeals), Unreferenced: idsJSON(value.UnreferencedBlobs)}
+}
+
+func sourceCompareJSON(value repository.SourceCompareResult) any {
+	var baseline any
+	if value.BaselineContent != nil {
+		baseline = contentJSON(*value.BaselineContent)
 	}
-	unreferenced := make([]string, 0, len(report.UnreferencedObjects))
-	for _, id := range report.UnreferencedObjects {
-		unreferenced = append(unreferenced, id.String())
+	return struct {
+		Schema          string `json:"schema"`
+		REF             string `json:"ref"`
+		Path            string `json:"path"`
+		Baseline        string `json:"baseline"`
+		BaselineContent any    `json:"baseline_content"`
+		WorkfileContent any    `json:"workfile_content"`
+		Relation        string `json:"relation"`
+	}{"sealgraph/source-compare/v1", value.REF, value.Path, value.Baseline, baseline, struct {
+		Store    string `json:"store"`
+		Type     string `json:"type"`
+		ObjectID string `json:"object_id"`
+		Bytes    int    `json:"bytes"`
+	}{domain.NativeStore, domain.BlobType, value.WorkfileID.String(), value.WorkfileBytes}, value.Relation}
+}
+func sourceJSON(operation string, bindings []repository.SourceBinding) any {
+	type item struct {
+		REF  string `json:"ref"`
+		Path string `json:"path"`
 	}
-	return map[string]any{"schema": "sealgraph/fsck/v1", "result": "ok", "objects": report.Objects, "seals": report.Seals, "material_objects": report.MaterialObjects, "refs": report.REFs, "tags": report.Tags, "active_seals": report.ActiveSeals, "historical_or_detached_seal_ids": detached, "unreferenced_object_ids": unreferenced}
+	items := make([]item, 0, len(bindings))
+	for _, binding := range bindings {
+		items = append(items, item{binding.REF, binding.Path})
+	}
+	return struct {
+		Schema    string `json:"schema"`
+		Operation string `json:"operation"`
+		Bindings  []item `json:"bindings"`
+	}{"sealgraph/source/v1", operation, items}
+}
+func sourceMutationJSON(operation, ref, before, after string) any {
+	var beforeValue, afterValue any
+	if before != "" {
+		beforeValue = before
+	}
+	if after != "" {
+		afterValue = after
+	}
+	return struct {
+		Schema    string `json:"schema"`
+		Operation string `json:"operation"`
+		REF       string `json:"ref"`
+		Before    any    `json:"before_path"`
+		After     any    `json:"after_path"`
+		Candidate string `json:"candidate"`
+	}{"sealgraph/source/v1", operation, ref, beforeValue, afterValue, "UNCHANGED"}
+}
+func recoveryInspectionsJSON(values []repository.RecoveryInspection) any {
+	type transition struct {
+		REF     string `json:"ref"`
+		Current string `json:"current"`
+	}
+	type item struct {
+		ID          string       `json:"operation_id"`
+		Kind        string       `json:"kind"`
+		Journal     string       `json:"journal_state"`
+		Status      string       `json:"status"`
+		Transitions []transition `json:"transitions"`
+		Error       string       `json:"error"`
+	}
+	items := make([]item, 0, len(values))
+	for _, value := range values {
+		transitions := make([]transition, 0, len(value.Transitions))
+		for _, current := range value.Transitions {
+			transitions = append(transitions, transition{current.REF, current.Current})
+		}
+		items = append(items, item{value.ID, value.Kind, string(value.Journal), value.Status, transitions, value.Corrupt})
+	}
+	return struct {
+		Schema     string `json:"schema"`
+		Operations []item `json:"operations"`
+	}{"sealgraph/recover/v1", items}
 }

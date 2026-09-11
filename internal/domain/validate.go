@@ -100,35 +100,3 @@ func NormalizeSeal(payload SealPayload) (SealPayload, error) {
 	payload.Links = links
 	return payload, nil
 }
-
-func ValidateCandidate(candidate Candidate) error {
-	if candidate.Schema != CandidateSchema {
-		return fmt.Errorf("candidate schema is %q; expected %q", candidate.Schema, CandidateSchema)
-	}
-	if err := ValidateREF(candidate.REF); err != nil {
-		return fmt.Errorf("invalid candidate REF %q: %w", candidate.REF, err)
-	}
-	if candidate.ParentRevision != nil {
-		if err := candidate.ParentRevision.ValidateNative(); err != nil {
-			return fmt.Errorf("invalid candidate parent revision: %w", err)
-		}
-	}
-	if candidate.ExpectedREFHead != nil {
-		if err := candidate.ExpectedREFHead.ValidateNative(); err != nil {
-			return fmt.Errorf("invalid candidate expected REF head: %w", err)
-		}
-	}
-	if err := candidate.Content.ValidateNativeBlob(); err != nil {
-		return fmt.Errorf("invalid candidate content: %w", err)
-	}
-	if candidate.Attachments == nil || candidate.Links == nil {
-		return fmt.Errorf("candidate attachments and links must be JSON arrays, not null")
-	}
-	if _, err := NormalizeAttachments(candidate.Attachments); err != nil {
-		return err
-	}
-	if _, err := NormalizeLinks(candidate.Links); err != nil {
-		return err
-	}
-	return nil
-}

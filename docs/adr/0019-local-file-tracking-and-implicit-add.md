@@ -4,6 +4,10 @@ Status: Accepted
 
 Date: 2026-08-21
 
+ADR 0024 retains this standalone `WorktreePath` binding unchanged and extends
+the source-adapter design with a separately invoked non-canonical Git tree-entry
+binding. It does not make Git discovery part of this ADR's standalone surface.
+
 ## Context
 
 The format-4 runtime can import exact bytes with `add --content-file`, but a

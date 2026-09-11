@@ -11,10 +11,9 @@ import (
 )
 
 const (
-	NativeStore     = "native"
-	BlobType        = "blob"
-	SealSchema      = "sealgraph/seal/v4"
-	CandidateSchema = "sealgraph/candidate/v4"
+	NativeStore = "native"
+	BlobType    = "blob"
+	SealSchema  = "sealgraph/seal/v4"
 )
 
 // ObjectID is a full native SHA-256 object name. The repository config fixes
@@ -116,21 +115,6 @@ type SealPayload struct {
 	Links          []Link       `json:"links"`
 	Root           bool         `json:"root"`
 	Draft          bool         `json:"draft"`
-}
-
-// Candidate is mutable working state. ParentRevision is immutable derivation
-// topology for the next Seal. ExpectedREFHead is separate publication CAS
-// state for the destination REF.
-type Candidate struct {
-	Schema          string       `json:"schema"`
-	REF             string       `json:"ref"`
-	ParentRevision  *ObjectID    `json:"parent_revision"`
-	ExpectedREFHead *ObjectID    `json:"expected_ref_head"`
-	Content         ContentRef   `json:"content"`
-	Attachments     []Attachment `json:"attachments"`
-	Links           []Link       `json:"links"`
-	Root            bool         `json:"root"`
-	Draft           bool         `json:"draft"`
 }
 
 // ValidateREF applies Git check-ref-format-compatible rules to the logical REF

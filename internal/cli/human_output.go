@@ -10,8 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mako10k/sealgraph/internal/domain"
-	"github.com/mako10k/sealgraph/internal/graph"
-	"github.com/mako10k/sealgraph/internal/history"
+	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
@@ -335,19 +334,21 @@ func printShowHuman(output io.Writer, result repository.ShowResult) {
 	printer := newHumanPrinter(output)
 	printer.heading("SEAL")
 	printer.fields(0,
-		humanField{"Seal ID (prefix)", shortID(result.ID)},
+		humanField{"Seal ID (prefix)", shortID(result.Resolved.ID)},
+		humanField{"Material ID (prefix)", shortID(result.Resolved.Seal.Material)},
+		humanField{"Provenance ID (prefix)", shortID(result.Resolved.Seal.Provenance)},
 		humanField{"Current REF(s)", humanList(result.REFNames)},
-		humanField{"Parent revision", shortOptionalID(result.Payload.ParentRevision)},
-		humanField{"Root boundary", yesNo(result.Payload.Root)},
-		humanField{"Draft", yesNo(result.Payload.Draft)},
+		humanField{"Observed previous state", strings.Join(result.Revision.PreviousStates, ", ")},
+		humanField{"Root boundary", yesNo(result.Resolved.Provenance.Root)},
+		humanField{"Draft", yesNo(result.Resolved.Provenance.Draft)},
 	)
 	fmt.Fprintln(output)
-	printHumanContent(printer, result.Payload.Content, result.Content)
-	printHumanAttachments(printer, result.Payload.Attachments)
-	printHumanLinks(printer, result.Payload.Links)
+	printHumanContent(printer, result.Resolved.Material.Content, result.Content)
+	printHumanAttachments(printer, result.Resolved.Material.Attachments)
+	printHumanLinks(printer, result.Resolved.Provenance.CauseLinks)
 }
 
-func printHumanContent(printer humanPrinter, ref domain.ContentRef, content []byte) {
+func printHumanContent(printer humanPrinter, id domain.ObjectID, content []byte) {
 	preview := content
 	truncated := len(content) > contentPreviewLimit
 	if truncated {
@@ -359,13 +360,13 @@ func printHumanContent(printer humanPrinter, ref domain.ContentRef, content []by
 	}
 	printer.heading("CONTENT")
 	printer.fields(2,
-		humanField{"Blob ID (prefix)", shortID(ref.ID)},
+		humanField{"Blob ID (prefix)", shortID(id)},
 		humanField{"Size", fmt.Sprintf("%d bytes", len(content))},
 		humanField{label, quoteHumanBytes(preview)},
 	)
 }
 
-func printHumanAttachments(printer humanPrinter, attachments []domain.Attachment) {
+func printHumanAttachments(printer humanPrinter, attachments []domainv5.Attachment) {
 	fmt.Fprintln(printer.output)
 	printer.heading(fmt.Sprintf("ATTACHMENTS (%d)", len(attachments)))
 	if len(attachments) == 0 {
@@ -374,12 +375,12 @@ func printHumanAttachments(printer humanPrinter, attachments []domain.Attachment
 	}
 	rows := make([][]string, 0, len(attachments))
 	for _, attachment := range attachments {
-		rows = append(rows, []string{quoteHumanString(attachment.Name), quoteHumanString(attachment.MediaType), shortID(attachment.Blob.ID)})
+		rows = append(rows, []string{quoteHumanString(attachment.Name), quoteHumanString(attachment.MediaType), shortID(attachment.Blob)})
 	}
 	printer.table(2, []string{"NAME", "MEDIA TYPE", "BLOB ID (PREFIX)"}, rows)
 }
 
-func printHumanLinks(printer humanPrinter, links []domain.Link) {
+func printHumanLinks(printer humanPrinter, links []domainv5.CauseLink) {
 	fmt.Fprintln(printer.output)
 	printer.heading(fmt.Sprintf("CAUSES (%d)", len(links)))
 	if len(links) == 0 {
@@ -388,9 +389,9 @@ func printHumanLinks(printer humanPrinter, links []domain.Link) {
 	}
 	rows := make([][]string, 0, len(links))
 	for _, link := range links {
-		rows = append(rows, []string{shortID(link.TargetSeal), quoteHumanString(link.Message)})
+		rows = append(rows, []string{shortID(link.TargetSeal), fmt.Sprintf("%d", len(link.PreviousRevisionSealOfTargetSeal)), fmt.Sprintf("%d", len(link.Messages))})
 	}
-	printer.table(2, []string{"SEAL ID (PREFIX)", "MESSAGE"}, rows)
+	printer.table(2, []string{"TARGET SEAL", "PREVIOUS", "MESSAGES"}, rows)
 }
 
 func printCandidateInspectionHuman(output io.Writer, inspection repository.CandidateInspection) {
@@ -399,9 +400,9 @@ func printCandidateInspectionHuman(output io.Writer, inspection repository.Candi
 	printer.heading("CANDIDATE")
 	printer.fields(0,
 		humanField{"REF", candidate.REF},
-		humanField{"Parent revision", shortOptionalID(candidate.ParentRevision)},
 		humanField{"Expected REF head", shortOptionalID(candidate.ExpectedREFHead)},
 		humanField{"Current REF head", shortOptionalID(inspection.CurrentHead)},
+		humanField{"Prospective Seal", shortID(inspection.Prospective.ID)},
 		humanField{"Publication check", strings.ToLower(strings.ReplaceAll(string(inspection.ExpectedHeadState), "_", " "))},
 		humanField{"Root boundary", yesNo(candidate.Root)},
 		humanField{"Draft", yesNo(candidate.Draft)},
@@ -409,7 +410,7 @@ func printCandidateInspectionHuman(output io.Writer, inspection repository.Candi
 	fmt.Fprintln(output)
 	printHumanContent(printer, candidate.Content, inspection.Content)
 	printHumanAttachments(printer, candidate.Attachments)
-	printHumanLinks(printer, candidate.Links)
+	printHumanLinks(printer, candidate.CauseLinks)
 }
 
 func printSourcesHuman(output io.Writer, bindings []repository.SourceBinding) {
@@ -497,37 +498,37 @@ func printGraphHuman(output io.Writer, nodes []repository.GraphNode) {
 	}
 	rows := make([][]string, 0, len(nodes)*2)
 	for _, node := range nodes {
-		rows = append(rows, []string{"Seal", shortID(node.ID), humanGraphState(string(node.State)), humanList(node.REFs), shortOptionalID(node.Parent)})
-		for _, link := range node.Links {
-			rows = append(rows, []string{"  Cause", shortID(link.Target), humanGraphState(string(link.State)), "", ""})
+		rows = append(rows, []string{"Seal", shortID(node.Resolved.ID), humanGraphState(string(node.State)), humanList(node.REFs)})
+		for _, link := range node.Causes {
+			rows = append(rows, []string{"  Cause", shortID(link.Target), humanGraphState(string(link.State)), ""})
 		}
 	}
-	printer.table(0, []string{"RELATION", "SEAL ID (PREFIX)", "STATE", "CURRENT REF(S)", "PARENT"}, rows)
+	printer.table(0, []string{"RELATION", "SEAL ID (PREFIX)", "STATE", "CURRENT REF(S)"}, rows)
 }
 
 func humanGraphState(value string) string {
 	return strings.ToLower(strings.ReplaceAll(value, "_", " "))
 }
 
-func printImpactsHuman(output io.Writer, source domain.ObjectID, impacts []graph.Impact, limit int) {
+func printImpactsHuman(output io.Writer, result repository.ImpactResult) {
 	printer := newHumanPrinter(output)
 	printer.heading("STRUCTURAL_IMPACT")
-	printer.fields(0, humanField{"Source Seal ID (prefix)", shortID(source)})
-	if len(impacts) == 0 {
+	printer.fields(0, humanField{"Source Seal ID (prefix)", shortID(result.Source)}, humanField{"Revision assertions", strings.ToLower(strings.ReplaceAll(result.AssertionScope, "_", " "))})
+	if len(result.Impacts) == 0 {
 		printer.note("No current downstream Seals are impacted.")
 		return
 	}
-	rows := make([][]string, 0, len(impacts))
-	for _, impact := range impacts {
+	rows := make([][]string, 0, len(result.Impacts))
+	for _, impact := range result.Impacts {
 		rows = append(rows, []string{shortID(impact.Head), humanList(impact.REFs), strconv.Itoa(len(impact.Paths))})
 	}
 	fmt.Fprintln(output)
 	printer.table(0, []string{"DOWNSTREAM SEAL", "CURRENT REF(S)", "PATHS"}, rows)
-	for _, impact := range impacts {
+	for _, impact := range result.Impacts {
 		fmt.Fprintf(output, "\n  %s\n", shortID(impact.Head))
 		for index, path := range impact.Paths {
 			fmt.Fprintf(output, "    Path %d\n", index+1)
-			for depth, id := range path {
+			for depth, id := range path.CauseSealIDs {
 				marker := "starts at"
 				if depth != 0 {
 					marker = "causes"
@@ -536,33 +537,34 @@ func printImpactsHuman(output io.Writer, source domain.ObjectID, impacts []graph
 			}
 		}
 		if impact.Truncated {
-			fmt.Fprintf(output, "    Additional paths omitted (maximum %d).\n", limit)
+			fmt.Fprintf(output, "    Additional paths omitted (maximum %d).\n", result.MaxPaths)
 		}
 	}
 }
 
-func printLogHuman(output io.Writer, ref string, entries []history.Entry) {
+func printLogHuman(output io.Writer, result repository.LogResult) {
 	printer := newHumanPrinter(output)
 	printer.heading("REVISION HISTORY")
-	printer.fields(0, humanField{"REF", ref}, humanField{"Revisions", strconv.Itoa(len(entries))})
-	for index, entry := range entries {
+	printer.fields(0, humanField{"REF", result.REF}, humanField{"Revisions", strconv.Itoa(len(result.Entries))})
+	for index, entry := range result.Entries {
 		label := fmt.Sprintf("Revision %d", index+1)
 		if index == 0 {
 			label += " (current)"
 		}
 		fmt.Fprintf(output, "\n%s\n", label)
 		printer.fields(2,
-			humanField{"Seal ID (prefix)", shortID(entry.ID)},
-			humanField{"Parent revision", shortOptionalID(entry.Payload.ParentRevision)},
-			humanField{"Content blob", shortID(entry.Payload.Content.ID)},
-			humanField{"Root boundary", yesNo(entry.Payload.Root)},
-			humanField{"Draft", yesNo(entry.Payload.Draft)},
+			humanField{"Seal ID (prefix)", shortID(entry.Resolved.ID)},
+			humanField{"Minimum depth", strconv.Itoa(entry.MinimumDepth)},
+			humanField{"Content blob", shortID(entry.Resolved.Material.Content)},
+			humanField{"Previous edges", strconv.Itoa(len(entry.OutgoingEdges))},
+			humanField{"Root boundary", yesNo(entry.Resolved.Provenance.Root)},
+			humanField{"Draft", yesNo(entry.Resolved.Provenance.Draft)},
 		)
-		printHumanLinksIndented(printer, entry.Payload.Links, 2)
+		printHumanLinksIndented(printer, entry.Resolved.Provenance.CauseLinks, 2)
 	}
 }
 
-func printHumanLinksIndented(printer humanPrinter, links []domain.Link, indent int) {
+func printHumanLinksIndented(printer humanPrinter, links []domainv5.CauseLink, indent int) {
 	fmt.Fprintf(printer.output, "%sCauses (%d)\n", strings.Repeat(" ", indent), len(links))
 	if len(links) == 0 {
 		fmt.Fprintf(printer.output, "%sNone\n", strings.Repeat(" ", indent+2))
@@ -570,50 +572,43 @@ func printHumanLinksIndented(printer humanPrinter, links []domain.Link, indent i
 	}
 	rows := make([][]string, 0, len(links))
 	for _, link := range links {
-		rows = append(rows, []string{shortID(link.TargetSeal), quoteHumanString(link.Message)})
+		rows = append(rows, []string{shortID(link.TargetSeal), strconv.Itoa(len(link.PreviousRevisionSealOfTargetSeal)), strconv.Itoa(len(link.Messages))})
 	}
-	printer.table(indent+2, []string{"SEAL ID (PREFIX)", "MESSAGE"}, rows)
+	printer.table(indent+2, []string{"TARGET SEAL", "PREVIOUS", "MESSAGES"}, rows)
 }
 
-func printLinkLogHuman(output io.Writer, ref, upstream string, entries []history.LinkLogEntry) {
+func printLinkLogHuman(output io.Writer, result repository.LinkLogResult) {
 	printer := newHumanPrinter(output)
 	printer.heading("CAUSE LINK HISTORY")
-	fields := []humanField{{"REF", ref}, {"Revisions", strconv.Itoa(len(entries))}}
-	if upstream != "" {
-		fields = append(fields, humanField{"Upstream Seal ID (prefix)", abbreviateIDText(upstream)})
+	fields := []humanField{{"REF", result.REF}, {"Revision edges", strconv.Itoa(len(result.Entries))}}
+	if result.Upstream != nil {
+		fields = append(fields, humanField{"Upstream Seal ID (prefix)", shortID(*result.Upstream)})
 	}
 	printer.fields(0, fields...)
-	for index, entry := range entries {
-		fmt.Fprintf(output, "\nRevision %d\n", index+1)
+	for index, entry := range result.Entries {
+		fmt.Fprintf(output, "\nRevision edge %d\n", index+1)
 		printer.fields(2,
-			humanField{"Seal ID (prefix)", shortID(entry.Entry.ID)},
-			humanField{"Parent revision", shortOptionalID(entry.Entry.Payload.ParentRevision)},
+			humanField{"Newer Seal", shortID(entry.Newer)},
+			humanField{"Previous Seal", shortID(entry.Previous)},
+			humanField{"Supporting observers", strconv.Itoa(len(entry.SupportingAssertions))},
+			humanField{"Cause changes", strconv.Itoa(len(entry.Changes))},
 		)
-		printHumanLinkChanges(printer, entry.Changes, 2)
 	}
 }
 
-func abbreviateIDText(value string) string {
-	if len(value) <= shortIDLength {
-		return value
-	}
-	return value[:shortIDLength]
-}
-
-func printSealDiffHuman(output io.Writer, diff history.SealDiff) {
+func printSealDiffHuman(output io.Writer, diff repository.SealComparison) {
 	printer := newHumanPrinter(output)
 	printer.heading("SEAL COMPARISON")
-	printer.fields(0, humanField{"From Seal ID (prefix)", shortID(diff.From)}, humanField{"To Seal ID (prefix)", shortID(diff.To)})
+	printer.fields(0, humanField{"From Seal ID (prefix)", shortID(diff.From.ID)}, humanField{"To Seal ID (prefix)", shortID(diff.To.ID)})
 	rows := [][]string{
-		humanValueChangeRow("Content blob", diff.Content.Changed, shortID(diff.Content.Before.ID), shortID(diff.Content.After.ID)),
-		humanValueChangeRow("Root boundary", diff.Root.Changed, yesNo(diff.Root.Before), yesNo(diff.Root.After)),
-		humanValueChangeRow("Draft", diff.Draft.Changed, yesNo(diff.Draft.Before), yesNo(diff.Draft.After)),
-		humanValueChangeRow("Parent revision", diff.Parent.Changed, shortOptionalID(diff.Parent.Before), shortOptionalID(diff.Parent.After)),
+		humanValueChangeRow("Material", !diff.From.Seal.Material.Equal(diff.To.Seal.Material), shortID(diff.From.Seal.Material), shortID(diff.To.Seal.Material)),
+		humanValueChangeRow("Provenance", !diff.From.Seal.Provenance.Equal(diff.To.Seal.Provenance), shortID(diff.From.Seal.Provenance), shortID(diff.To.Seal.Provenance)),
+		humanValueChangeRow("Content blob", !diff.From.Material.Content.Equal(diff.To.Material.Content), shortID(diff.From.Material.Content), shortID(diff.To.Material.Content)),
+		humanValueChangeRow("Root boundary", diff.From.Provenance.Root != diff.To.Provenance.Root, yesNo(diff.From.Provenance.Root), yesNo(diff.To.Provenance.Root)),
+		humanValueChangeRow("Draft", diff.From.Provenance.Draft != diff.To.Provenance.Draft, yesNo(diff.From.Provenance.Draft), yesNo(diff.To.Provenance.Draft)),
 	}
 	fmt.Fprintln(output)
 	printer.table(0, []string{"FIELD", "RESULT", "BEFORE", "AFTER"}, rows)
-	printHumanAttachmentChanges(printer, diff.Attachments)
-	printHumanLinkChanges(printer, diff.Links, 0)
 }
 
 func humanValueChangeRow(field string, changed bool, before, after string) []string {
@@ -626,97 +621,57 @@ func humanValueChangeRow(field string, changed bool, before, after string) []str
 
 func printCandidateDiffHuman(output io.Writer, result repository.CandidateDiffResult) {
 	printer := newHumanPrinter(output)
-	inspection, diff := result.Inspection, result.Diff
+	inspection := result.Inspection
 	candidate := inspection.Candidate
 	printer.heading("CANDIDATE COMPARISON")
 	printer.fields(0,
 		humanField{"REF", candidate.REF},
-		humanField{"Compared with", shortOptionalID(candidate.ParentRevision)},
+		humanField{"Compared with", shortOptionalID(candidate.ExpectedREFHead)},
 		humanField{"Expected REF head", shortOptionalID(candidate.ExpectedREFHead)},
 		humanField{"Current REF head", shortOptionalID(inspection.CurrentHead)},
 		humanField{"Publication check", strings.ToLower(strings.ReplaceAll(string(inspection.ExpectedHeadState), "_", " "))},
 	)
-	contentBefore := "none"
-	if !diff.Initial {
-		contentBefore = shortID(diff.Content.Before.ID)
+	contentBefore, materialBefore, provenanceBefore := "none", "none", "none"
+	rootBefore, draftBefore := "none", "none"
+	if result.Baseline != nil {
+		contentBefore = shortID(result.Baseline.Material.Content)
+		materialBefore = shortID(result.Baseline.Seal.Material)
+		provenanceBefore = shortID(result.Baseline.Seal.Provenance)
+		rootBefore = yesNo(result.Baseline.Provenance.Root)
+		draftBefore = yesNo(result.Baseline.Provenance.Draft)
 	}
 	rows := [][]string{
-		humanValueChangeRow("Content blob", diff.Initial || diff.Content.Changed, contentBefore, shortID(diff.Content.After.ID)),
-		humanValueChangeRow("Root boundary", diff.Initial || diff.Root.Changed, initialBool(diff.Initial, diff.Root.Before), yesNo(diff.Root.After)),
-		humanValueChangeRow("Draft", diff.Initial || diff.Draft.Changed, initialBool(diff.Initial, diff.Draft.Before), yesNo(diff.Draft.After)),
+		humanValueChangeRow("Material", result.Baseline == nil || materialBefore != shortID(inspection.Prospective.Seal.Material), materialBefore, shortID(inspection.Prospective.Seal.Material)),
+		humanValueChangeRow("Provenance", result.Baseline == nil || provenanceBefore != shortID(inspection.Prospective.Seal.Provenance), provenanceBefore, shortID(inspection.Prospective.Seal.Provenance)),
+		humanValueChangeRow("Content blob", result.Baseline == nil || contentBefore != shortID(candidate.Content), contentBefore, shortID(candidate.Content)),
+		humanValueChangeRow("Root boundary", result.Baseline == nil || rootBefore != yesNo(candidate.Root), rootBefore, yesNo(candidate.Root)),
+		humanValueChangeRow("Draft", result.Baseline == nil || draftBefore != yesNo(candidate.Draft), draftBefore, yesNo(candidate.Draft)),
 	}
 	fmt.Fprintln(output)
 	printer.table(0, []string{"FIELD", "RESULT", "BEFORE", "CANDIDATE"}, rows)
-	printHumanAttachmentChanges(printer, diff.Attachments)
-	printHumanLinkChanges(printer, diff.Links, 0)
-}
-
-func initialBool(initial, value bool) string {
-	if initial {
-		return "none"
-	}
-	return yesNo(value)
-}
-
-func printHumanAttachmentChanges(printer humanPrinter, changes []history.AttachmentChangeRecord) {
-	fmt.Fprintln(printer.output)
-	printer.heading("ATTACHMENT CHANGES")
-	if len(changes) == 0 {
-		printer.note("None")
-		return
-	}
-	rows := make([][]string, 0, len(changes))
-	for _, change := range changes {
-		before, after := "none", "none"
-		if change.Before != nil {
-			before = shortID(change.Before.Blob.ID)
-		}
-		if change.After != nil {
-			after = shortID(change.After.Blob.ID)
-		}
-		rows = append(rows, []string{string(change.Kind), quoteHumanString(change.Name), before, after})
-	}
-	printer.table(2, []string{"CHANGE", "NAME", "BEFORE BLOB", "AFTER BLOB"}, rows)
-}
-
-func printHumanLinkChanges(printer humanPrinter, changes []history.LinkChange, indent int) {
-	fmt.Fprintln(printer.output)
-	fmt.Fprintf(printer.output, "%sCAUSE CHANGES\n", strings.Repeat(" ", indent))
-	if len(changes) == 0 {
-		fmt.Fprintf(printer.output, "%sNone\n", strings.Repeat(" ", indent+2))
-		return
-	}
-	rows := make([][]string, 0, len(changes))
-	for _, change := range changes {
-		before, after, message := shortOptionalID(change.BeforeSeal), shortOptionalID(change.AfterSeal), change.AfterMessage
-		if message == "" {
-			message = change.BeforeMessage
-		}
-		rows = append(rows, []string{string(change.Kind), shortID(change.TargetSeal), before, after, quoteHumanString(message)})
-	}
-	printer.table(indent+2, []string{"CHANGE", "TARGET", "BEFORE", "AFTER", "MESSAGE"}, rows)
 }
 
 func printFsckHuman(output io.Writer, report repository.FsckReport) {
 	printer := newHumanPrinter(output)
 	printer.heading("REPOSITORY CHECK: OK")
 	rows := [][]string{
-		{"Objects", strconv.Itoa(report.Objects)},
+		{"Blobs", strconv.Itoa(report.Blobs)},
 		{"Seals", strconv.Itoa(report.Seals)},
-		{"Material objects", strconv.Itoa(report.MaterialObjects)},
+		{"Materials", strconv.Itoa(report.Materials)},
+		{"Provenances", strconv.Itoa(report.Provenances)},
 		{"REFs", strconv.Itoa(report.REFs)},
 		{"Tags", strconv.Itoa(report.Tags)},
 		{"Active Seals", strconv.Itoa(report.ActiveSeals)},
 		{"Historical or detached Seals", strconv.Itoa(len(report.HistoricalOrDetachedSeals))},
-		{"Unreferenced objects", strconv.Itoa(len(report.UnreferencedObjects))},
+		{"Unreferenced Blobs", strconv.Itoa(len(report.UnreferencedBlobs))},
 	}
 	printer.table(0, []string{"INVENTORY", "COUNT"}, rows)
-	ids := make([][]string, 0, len(report.HistoricalOrDetachedSeals)+len(report.UnreferencedObjects))
+	ids := make([][]string, 0, len(report.HistoricalOrDetachedSeals)+len(report.UnreferencedBlobs))
 	for _, id := range report.HistoricalOrDetachedSeals {
 		ids = append(ids, []string{"Historical or detached Seal", shortID(id)})
 	}
-	for _, id := range report.UnreferencedObjects {
-		ids = append(ids, []string{"Unreferenced object", shortID(id)})
+	for _, id := range report.UnreferencedBlobs {
+		ids = append(ids, []string{"Unreferenced Blob", shortID(id)})
 	}
 	if len(ids) != 0 {
 		fmt.Fprintln(output)
