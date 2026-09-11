@@ -10,7 +10,8 @@ The core question is not only “what changed?” but:
 
 ## Status
 
-The checked-in standalone runtime implements the format-5 native core:
+The checked-in standalone runtime implements the format-5 native core and its
+format-6 Cause Link metadata successor:
 Material/Provenance/Seal typed Blobs, parentless Candidates, whole-record Cause
 Links with observer-scoped branching revision assertions, exact selectors,
 atomic universal-blob import, active-leaf admission, stale/frontier, history,
@@ -22,11 +23,15 @@ candidate/HEAD versus workfile/baseline status observations under ADR 0019.
 The beta candidate also includes read-only full-inventory `fsck` with
 versioned JSON output and explicit historical/detached inventory reporting.
 Existing format-4 repositories are extracted by an isolated read-only command
-in the format-5 binary and imported into an absent format-5 target. The
+and imported into an absent format-5 target. New repositories also initialize
+as format 5; an explicit config-only migration upgrades one validated format-5
+repository to format 6 without rewriting retained records. Format 6 preserves
+strict historical format-5 reads and writes new Seal v6, Provenance v2, and
+Candidate v6 records with bounded, namespaced, canonical JSON Link metadata. The
 normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-ADRs 0023, 0025, 0026, and 0027.
+ADRs 0023, 0025, 0026, 0027, 0029, 0030, and 0031.
 
 The runtime never opens format 4 as live state and never rewrites it in place.
 Migration retains the source and emits a complete old-to-new typed identity and
@@ -57,6 +62,15 @@ sealgraph migrate extract --source-format 4 --format universal-blob-v1 > reposit
 sealgraph load --format universal-blob-v1 < repository.dump.json
 # If publication succeeded but receipt stdout delivery failed:
 sealgraph load-receipt --source-document-sha256 HEX
+
+# Upgrade one validated format-5 repository in place by changing config only:
+sealgraph migrate repository --from 5 --to 6
+# Then set or remove one metadata namespace on one exact Candidate Cause Link:
+sealgraph link-metadata set DESIGN --target REQ-001 \
+  --namespace example.org/review --no-schema \
+  --value-json '{"status":"approved"}'
+sealgraph link-metadata remove DESIGN --target REQ-001 \
+  --namespace example.org/review
 ```
 
 Inspection output is an aligned, terminal-width-aware human view with
@@ -107,11 +121,15 @@ Review is intentionally explicit and sequential. Each affected REF must be
 relinked/reviewed and publish one new revision. There is no recursive repair
 command.
 
-A format-5 Seal joins:
+A format-5 or format-6 Seal joins:
 
 - a Material Blob containing content and attachments; and
 - a Provenance Blob containing root/draft and exact Cause records, including
   target, observer-scoped previous-revision assertions, and messages.
+
+Format 6 additionally commits each Cause Link's sorted metadata entries to Seal
+identity. The core validates their namespace, optional schema identifier, and
+canonical JSON shape, but does not assign domain meaning to them.
 
 REF paths, selector spelling, tags, publication expectation, actor, and time do
 not enter Seal identity. Multiple REFs may point to the same Seal.
@@ -131,6 +149,8 @@ sealgraph --help
 sealgraph help add
 sealgraph add --help
 sealgraph help candidate show
+sealgraph help link-metadata set
+sealgraph help migrate repository
 sealgraph help selectors
 sealgraph help concepts
 sealgraph help usecases
@@ -149,6 +169,8 @@ sealgraph manifest --source SOURCE --file PATH [--file PATH ...]
 sealgraph add
 sealgraph link REF --target TARGET (--previous PREVIOUS ... | --no-previous)
 sealgraph unlink REF --target TARGET
+sealgraph link-metadata set REF --target TARGET --namespace NAMESPACE (--schema SCHEMA | --no-schema) (--value-json JSON | --value-file PATH_OR_DASH)
+sealgraph link-metadata remove REF --target TARGET --namespace NAMESPACE
 sealgraph tag
 sealgraph mv
 sealgraph ref drop REF
@@ -166,15 +188,23 @@ sealgraph stale [--frontier] [--refs-only] [--scan]
 sealgraph impact [--asserted-by OBSERVER ...] [--all-paths] [--max-paths N]
 sealgraph graph
 sealgraph migrate extract --source-format 4 --format universal-blob-v1
+sealgraph migrate repository --from 5 --to 6
 sealgraph load --format universal-blob-v1
 sealgraph load-receipt --source-document-sha256 HEX
 ```
 
-The format-5 binary opens a format-4 source only through the isolated read-only
+The binary opens a format-4 source only through the isolated read-only
 `migrate extract` command. Load consumes only the emitted document, requires an
 absent `.sealgraph`, stages and validates the complete typed repository,
 publishes it with durable atomic no-replace semantics, and emits every
 old-to-new Seal/Material/Provenance mapping plus semantic changes.
+
+`migrate repository --from 5 --to 6` validates and snapshots the complete
+format-5 repository, atomically changes only its config, then reopens and fscks
+format 6. It performs no record rewrite, downgrade, format inference, or batch
+migration. After migration, legacy authoring commands preserve metadata already
+present on an exact Cause target; metadata changes remain explicit through
+`link-metadata set` and `link-metadata remove`.
 
 `manifest` is a read-only deterministic path/size/SHA-256 claim builder. It
 uses only explicit relative files and an explicit source identity, performs no
