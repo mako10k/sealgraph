@@ -256,6 +256,7 @@ func TestCLIUsageAndUnknownNavigation(t *testing.T) {
 		{[]string{"impact", "--max-paths", "10", "root"}, []string{"--max-paths is valid only with --all-paths", "use `sealgraph impact --all-paths --max-paths 10 root`", "help: sealgraph help impact"}},
 		{[]string{"show", "root", "--raw-content", "--format", "json"}, []string{"mutually exclusive", "usage: sealgraph show", "help: sealgraph help show"}},
 		{[]string{"show", "@latest"}, []string{"invalid selector", "4 to 64 lower-case hexadecimal", "help: sealgraph help show"}},
+		{[]string{"compare", "root"}, []string{"SECOND_SELECTOR_REQUIRED", "compare requires exactly two explicit Seal selectors", "help: sealgraph help compare"}},
 		{[]string{"add", "spec", "--content", "x", "--non-root=false", "--target", "@abcd", "--no-previous"}, []string{"--non-root=false is invalid", "help: sealgraph help add"}},
 		{[]string{"link", "spec", "--target", "@abcd", "--no-previous=false"}, []string{"--no-previous=false is invalid", "help: sealgraph help link"}},
 	}

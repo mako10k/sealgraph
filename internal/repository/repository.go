@@ -1,6 +1,6 @@
-// Package repository coordinates the standalone format-5 runtime. Format-4
-// repositories are rejected at the config boundary and are never interpreted
-// by ordinary runtime readers.
+// Package repository coordinates the standalone format-5 and format-6 runtime.
+// Format-4 repositories are rejected at the config boundary and are never
+// interpreted by ordinary runtime readers.
 package repository
 
 import (
@@ -62,7 +62,7 @@ func newRepositoryFormat(dir string, format int) *Repository {
 	}
 }
 
-// CauseInput is one complete format-5 Cause Link authoring record. Selectors
+// CauseInput is one complete Cause Link authoring record. Selectors
 // are resolved before Candidate persistence; an empty Previous slice is the
 // explicit --no-previous assertion.
 type CauseInput struct {

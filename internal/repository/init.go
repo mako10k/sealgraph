@@ -24,7 +24,7 @@ const recommendedGitignore = `# Local runtime state; keep config, objects and RE
 /refs/seals/**/.tmp-ref-*
 `
 
-const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary format-5 operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
+const format4MigrationGuide = "FORMAT4_REQUIRES_MIGRATION: ordinary repository operations cannot open format-4 repositories; extract read-only with 'sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json', then from an absent target import with 'sealgraph load --format universal-blob-v1 < repository.dump.json'; no in-place migration or general compatibility reader is available"
 
 type InitOutcome string
 

@@ -1441,7 +1441,7 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 		return usageError(stderr, "%v", err)
 	}
 	if len(args) != 2 {
-		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: format-5 compare requires exactly two explicit Seal selectors")
+		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: compare requires exactly two explicit Seal selectors")
 	}
 	for _, arg := range args {
 		if _, err := repository.ParseSelector(arg); err != nil {
