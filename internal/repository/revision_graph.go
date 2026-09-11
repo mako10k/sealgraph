@@ -184,20 +184,33 @@ func (graph *observedGraph) staleFacts(head domain.ObjectID) (bool, []domain.Obj
 	}
 	paths := [][]domain.ObjectID{}
 	for _, target := range graph.causes[head.String()] {
-		graph.firstStalePaths(target, []domain.ObjectID{target}, &paths)
+		paths = append(paths, graph.firstStalePaths(target)...)
 	}
 	sortPaths(paths)
 	return self, direct, paths
 }
 
-func (graph *observedGraph) firstStalePaths(current domain.ObjectID, path []domain.ObjectID, result *[][]domain.ObjectID) {
+func (graph *observedGraph) firstStalePaths(current domain.ObjectID) [][]domain.ObjectID {
+	if paths, ok := graph.stalePaths[current.String()]; ok {
+		return paths
+	}
 	if !graph.isActiveLeaf(current) {
-		*result = append(*result, append([]domain.ObjectID(nil), path...))
-		return
+		paths := [][]domain.ObjectID{{current}}
+		graph.stalePaths[current.String()] = paths
+		return paths
 	}
+	paths := [][]domain.ObjectID{}
 	for _, next := range graph.causes[current.String()] {
-		graph.firstStalePaths(next, append(path, next), result)
+		for _, suffix := range graph.firstStalePaths(next) {
+			path := make([]domain.ObjectID, 1, len(suffix)+1)
+			path[0] = current
+			path = append(path, suffix...)
+			paths = append(paths, path)
+		}
 	}
+	sortPaths(paths)
+	graph.stalePaths[current.String()] = paths
+	return paths
 }
 
 func sortPaths(paths [][]domain.ObjectID) {
@@ -222,7 +235,7 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 		return nil, "", err
 	}
 	result := []RefStatus{}
-	staleHeads := make(map[string]domain.ObjectID)
+	staleHeads := make(map[string]bool)
 	for _, ref := range observation.names {
 		head := observation.heads[ref]
 		value := graph.nodes[head.String()]
@@ -230,13 +243,14 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 		if self || len(direct) > 0 || len(transitive) > 0 {
 			copy := head
 			result = append(result, RefStatus{REF: ref, Head: &copy, Draft: value.Provenance.Draft, StaleSelf: self, StaleDirect: direct, StaleTransitive: transitive})
-			staleHeads[ref] = head
+			staleHeads[head.String()] = true
 		}
 	}
 	if frontier {
 		filtered := result[:0]
+		blocked := make(map[string]bool)
 		for _, status := range result {
-			if graph.isFrontier(*status.Head, staleHeads) {
+			if graph.isFrontier(*status.Head, staleHeads, blocked) {
 				filtered = append(filtered, status)
 			}
 		}
@@ -249,26 +263,31 @@ func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatu
 	return result, "", nil
 }
 
-func (graph *observedGraph) isFrontier(head domain.ObjectID, stale map[string]domain.ObjectID) bool {
-	targets := make(map[string]bool)
-	for _, id := range stale {
-		targets[id.String()] = true
-	}
-	stack := append([]domain.ObjectID(nil), graph.causes[head.String()]...)
-	seen := make(map[string]bool)
-	for len(stack) > 0 {
-		id := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if seen[id.String()] {
-			continue
-		}
-		seen[id.String()] = true
-		if targets[id.String()] {
+func (graph *observedGraph) isFrontier(head domain.ObjectID, stale, blocked map[string]bool) bool {
+	for _, target := range graph.causes[head.String()] {
+		if graph.reachesStaleHead(target, stale, blocked) {
 			return false
 		}
-		stack = append(stack, graph.causes[id.String()]...)
 	}
 	return true
+}
+
+func (graph *observedGraph) reachesStaleHead(current domain.ObjectID, stale, memo map[string]bool) bool {
+	key := current.String()
+	if stale[key] {
+		return true
+	}
+	if blocked, ok := memo[key]; ok {
+		return blocked
+	}
+	for _, next := range graph.causes[key] {
+		if graph.reachesStaleHead(next, stale, memo) {
+			memo[key] = true
+			return true
+		}
+	}
+	memo[key] = false
+	return false
 }
 
 type RevisionState string

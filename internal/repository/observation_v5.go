@@ -18,6 +18,7 @@ type observedGraph struct {
 	children   map[string][]domain.ObjectID
 	assertions map[string][]domainv5.AssertionSource
 	active     map[string]bool
+	stalePaths map[string][][]domain.ObjectID
 }
 
 func (r *Repository) buildObservation(ctx context.Context, operation string) (headObservation, *observedGraph, error) {
@@ -37,6 +38,7 @@ func (r *Repository) buildObservedGraph(ctx context.Context, heads map[string]do
 		nodes: make(map[string]domainv5.ResolvedSeal), heads: cloneHeads(heads), refs: make(map[string][]string),
 		causes: make(map[string][]domain.ObjectID), revisions: make(map[string][]domain.ObjectID),
 		children: make(map[string][]domain.ObjectID), assertions: make(map[string][]domainv5.AssertionSource), active: make(map[string]bool),
+		stalePaths: make(map[string][][]domain.ObjectID),
 	}
 	queue := make([]domain.ObjectID, 0, len(heads))
 	for ref, head := range heads {
