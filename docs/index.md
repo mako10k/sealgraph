@@ -46,8 +46,17 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0029-extensible-cause-link-metadata.md`](adr/0029-extensible-cause-link-metadata.md)
 - [`adr/0030-format6-link-metadata-storage-and-migration.md`](adr/0030-format6-link-metadata-storage-and-migration.md)
 - [`adr/0031-format6-link-metadata-cli-and-output.md`](adr/0031-format6-link-metadata-cli-and-output.md)
+- [`adr/0032-content-origin-trace-and-directional-observation.md`](adr/0032-content-origin-trace-and-directional-observation.md) — 履歴上 Accepted: Issue #17 R1 の範囲 Trace と方向別観測（[承認記録](process/adr-0032-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0036 で改訂。
+- [`adr/0033-origin-trace-storage-and-migration.md`](adr/0033-origin-trace-storage-and-migration.md) — Accepted: 保存形式と移行（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。
+- [`adr/0034-origin-trace-correspondence.md`](adr/0034-origin-trace-correspondence.md) — 履歴上 Accepted: R1 の対応判定（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0037 で改訂。
+- [`adr/0035-origin-trace-cli-and-observation-output.md`](adr/0035-origin-trace-cli-and-observation-output.md) — 履歴上 Accepted: R1 の CLI と観測出力（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0038 で改訂。
+- [`adr/0036-origin-trace-r2-presence-and-directional-observation.md`](adr/0036-origin-trace-r2-presence-and-directional-observation.md) — Accepted: 原文残存・方向別観測。ADR 0032 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0037-origin-trace-r2-search-and-estimation.md`](adr/0037-origin-trace-r2-search-and-estimation.md) — Accepted: 完全一致探索と独立した変更後範囲推定。ADR 0034 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0038-origin-trace-r2-cli-and-observation-output.md`](adr/0038-origin-trace-r2-cli-and-observation-output.md) — Accepted: 軽い比較と任意の推定を分ける CLI/schema。ADR 0035 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
 
 ## Agent-auditable design
+
+- Issue #17 は [R2 差分要件](process/issue-17-origin-trace-requirement-r2-candidate-2026-09-17.md)を Accepted（[承認記録](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md)）。原文の完全一致確認と変更後範囲推定を分離する。[独立レビュー](process/issue-17-r2-c2-independent-review-2026-09-17.md)は採用判断の入力。[行指向の旧指示](process/issue-17-line-oriented-direction-2026-09-17.md)と[当時の詳細候補](process/issue-17-line-oriented-comparison-candidate-2026-09-17.md)は撤回後の履歴であり、今後の実装根拠にしない。旧 ADR 0032/0034/0035 の比較関連部分と[旧実装計画](process/issue-17-origin-trace-implementation-plan-2026-09-17.md)は R2 と不整合。ADR 0036～0038 と[新計画 P2](process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md)は[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)の exact snapshots で Accepted。[R2 と４文書の Seal 実行記録](process/issue-17-r2-downstream-seal-2026-09-17.md)に ID と読み戻し結果を示す。
 
 - [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
@@ -62,6 +71,12 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`proposals/link-metadata-and-sealgraphql.md`](proposals/link-metadata-and-sealgraphql.md)
 
 ## Planning
+
+- [`process/issue-17-origin-trace.pert`](process/issue-17-origin-trace.pert) — Issue #17 専用PERT旧投影（保存承認済み、比較関連部分は R2 と不整合。次作業の選択に使わない）。
+
+- [`process/issue-17-origin-trace-implementation-plan-2026-09-17.md`](process/issue-17-origin-trace-implementation-plan-2026-09-17.md) — Issue #17 の旧 P1 候補（行指向・全最適比較を含む履歴）。
+- [`process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md`](process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) — Issue #17 の R2 実装計画 P2、Accepted（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`process/issue-17-r2-wip-handoff-2026-09-17.md`](process/issue-17-r2-wip-handoff-2026-09-17.md) — 2026-09-17 の保存範囲と次回再開点。
 
 - [`process/implementation-plan.md`](process/implementation-plan.md)
 - [`process/backlog.md`](process/backlog.md)

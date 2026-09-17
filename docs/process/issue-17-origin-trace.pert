@@ -1,0 +1,238 @@
+# Existing .pert plans should normally be maintained through perttool commands; direct DSL editing bypasses goal/DAG owner-confirmation checks.
+project SEALGRAPH_ISSUE17:
+  version 5
+  title "Issue #17 範囲Traceと方向別観測"
+  description "P1のIssue17専用投影。全見積りはscopeからの未計測三点仮説。velocity/納期なし。resourceは同時作業1の仮定。未承認の仕様と未設定の対象環境をblockedとして保持。statusは詳細側試用後に再検討。実装・移行・配布の実行承認ではない。"
+  duration_unit point
+  finish FINISH
+
+milestone START:
+  title "実装計画P1が保存されている"
+  state reached
+
+resource WRITER:
+  title "作業担当1枠（計算用の仮定）"
+  capacity 1
+
+milestone CONTRACTS:
+  title "詳細契約の採用版が確定"
+  state reached
+
+milestone ENVIRONMENT:
+  title "対象環境と検証条件が確定"
+  state planned
+
+milestone READY:
+  title "S0 実装前提が揃った"
+  state planned
+
+milestone TYPES:
+  title "S1 後継型とclosure検証"
+  state planned
+
+milestone AUTHOR:
+  title "S2 Trace作成とSeal公開"
+  state planned
+
+milestone COMPARATOR:
+  title "S3 固定二版の範囲比較"
+  state planned
+
+milestone SELF_READY:
+  title "自身比較の前提"
+  state planned
+
+milestone SELF:
+  title "S4 自身のTrace比較"
+  state planned
+
+milestone DIRECTIONS:
+  title "S5 方向別の詳細観測"
+  state planned
+
+milestone TRIAL:
+  title "S6 詳細側の試用結果"
+  state planned
+
+milestone STATUS_DECISION:
+  title "status保留の継続または再検討方針を記録"
+  state planned
+
+milestone TRANSPORT:
+  title "S7 転送と移行の検証"
+  state planned
+
+milestone INTEGRATION:
+  title "全体適合確認の前提"
+  state planned
+
+milestone DOCS:
+  title "S8 文書と公開操作が整合"
+  state planned
+
+milestone FINISH:
+  title "S8 全体の適合証拠が揃った（配布・実データ移行は別）"
+  state planned
+
+task CONTRACT_REVIEW START -> CONTRACTS:
+  title "S0 詳細契約の採用版を確定"
+  description "ADR0033-35の差分と未決事項を提示し、所有者の採否を記録。工数は資料整理分のみで判断待ち時間を含まない。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md"
+
+task ENVIRONMENT_REVIEW START -> ENVIRONMENT:
+  title "S0 対象環境・資源条件と見積もりを整える"
+  description "対象データ、platform、budget、測定条件と合格基準を確定し、仮ポイントを見直す。外部回答待ち時間は工数外。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status blocked
+  requires:
+    WRITER 1
+  blocked_reason "workload/platform/性能条件が未設定"
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S0; ADR0032 A4"
+
+task FORMAT_TYPES READY -> TYPES:
+  title "S1 型・codec・closure・歴史reader"
+  description "canonical IDs、空/全被覆/overflow/コピー不一致、旧v5/v6不変を検証。物理Blobの意味は維持。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 9p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S1; AC1/AC2/AC11; ADR0033"
+
+task TRACE_AUTHOR TYPES -> AUTHOR:
+  title "S2 Trace作成からSeal/表示まで"
+  description "recipeとcontentのatomic更新、originのexact公開、CAS/readback、仮設5/6からの移行、Trace clear/guardとinspection。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 9p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S2; AC1/AC2/AC3/AC11"
+
+task RANGE_COMPARATOR READY -> COMPARATOR:
+  title "S3 行指向の全最適対応と宣言を実装"
+  description "所有者指示により行指向へ変更。行対応を保存済みbyte範囲へ投影し、行途中の抜粋、反復行、変更・削除・境界、宣言競合、改訂budgetを検証。詳細改訂の採用前には開始しない。三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 5p
+    most_likely 8p
+    pessimistic 16p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-line-oriented-direction-2026-09-17.md; docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S3; AC4/AC5"
+
+task SELF_COMPARE SELF_READY -> SELF:
+  title "S4 binding・宣言と自身比較を接続"
+  description "source_key binding、固定二版の宣言、ReadStable、Candidate/HEADの別基準、NO_TRACE/対象なし/未調査を表示。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S4; AC4/AC5/AC8"
+
+task DIRECTION_COMPARE SELF -> DIRECTIONS:
+  title "S5 exact Causeの方向別集計・詳細表示"
+  description "local factsだけを集計。direct/indirect併存、経路、scope/budget、head競合、human/JSON、STALE不変。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S5; AC6/AC7/AC8/AC9/AC10/AC11"
+
+task DETAIL_TRIAL DIRECTIONS -> TRIAL:
+  title "S6 詳細側の作成・変更・追跡を試用"
+  description "仮設文書で自身/上流/下流を実際に表示。入力、版、予算、操作と結果を記録。公開完了とは扱わない。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S6; AC1-AC11"
+
+task STATUS_REVISIT TRIAL -> STATUS_DECISION:
+  title "S6 試用結果からstatus保留を再評価"
+  description "必要性が見えたら表示範囲と副作用を所有者へ提示。未判定なら保留を記録。status実装をこのtaskに含めない。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 1p
+    pessimistic 3p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S6; ADR0035 section8 owner decision"
+
+task NATIVE_TRANSPORT AUTHOR -> TRANSPORT:
+  title "S7 native snapshotと移行異常系"
+  description "全Blob/opaque orphan/typed closure、exact旧ID、local除外、absent load、公開後出力失敗、legacy transport維持。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S7; ADR0032 sections3.3/10; ADR0033/35"
+
+task NORMATIVE_SYNC INTEGRATION -> DOCS:
+  title "S8 規範文書・help・completionの整合"
+  description "各sliceの文書更新を集約し採用契約との整合を確認。format4/5/6の説明と新schemaを混同しない。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S8; docs/requirements architecture storage-format cli"
+
+task FULL_VERIFICATION DOCS -> FINISH:
+  title "S8 全体検証・独立レビュー・証拠整理"
+  description "gofmt/vet/test/npm ci/clone/complexity/deadcodeとcompletion、必要なrace。AC対応と残課題を記録。実repo移行とreleaseなし。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 2p
+    most_likely 3p
+    pessimistic 6p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S8; AGENTS validation; AC1-AC11"
+
+gate READY_CONTRACT CONTRACTS -> READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate READY_ENV ENVIRONMENT -> READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_AUTHOR AUTHOR -> SELF_READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_COMPARATOR COMPARATOR -> SELF_READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_TRIAL STATUS_DECISION -> INTEGRATION:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_TRANSFER TRANSPORT -> INTEGRATION:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"

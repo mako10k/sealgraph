@@ -8,6 +8,10 @@ contract, format/runtime slices, and normative sync are complete. `PLAN.pert`
 is the current perttool projection. Attachment mutation and the separately
 gated Git sidecar remain future work.
 
+## Issue #17 planning
+
+The Japanese [Issue #17 R2 implementation plan P2](issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) records the accepted work sequence, exact-presence search, separate changed-range estimation, and detailed-surface trial before revisiting status integration. It does not change the completed format-6 baseline or start implementation. The [earlier P1 plan](issue-17-origin-trace-implementation-plan-2026-09-17.md) remains historical and is not the current execution guide.
+
 ## Current format-6 Link metadata frontier
 
 Proceed in this order; do not partially mix formats:
