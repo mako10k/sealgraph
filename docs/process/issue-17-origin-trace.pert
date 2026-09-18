@@ -141,7 +141,7 @@ task SELF_COMPARE SELF_READY -> SELF:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P4; R2/R3 AC4/5/8/12/13/16; ADR0038"
@@ -153,7 +153,7 @@ task DIRECTION_COMPARE SELF -> DIRECTIONS:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P5; R1/R2 AC6-11; ADR0036/0038"
@@ -265,7 +265,7 @@ task ESTIMATE_COMPARE SELF -> ESTIMATE:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P6; R2 AC14; ADR0037/0038"
@@ -342,3 +342,35 @@ work_event SELF_COMPARE_START_20260918:
   kind start
   occurred_at 2026-09-18T16:21:53+09:00
   planned_value 5.5p
+
+work_event SELF_COMPARE_FINISH_20260918:
+  model 1
+  task SELF_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:26:16+09:00
+
+work_event DIRECTION_COMPARE_START_20260918:
+  model 1
+  task DIRECTION_COMPARE
+  kind start
+  occurred_at 2026-09-18T17:26:30+09:00
+  planned_value 5.5p
+
+work_event DIRECTION_COMPARE_FINISH_20260918:
+  model 1
+  task DIRECTION_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:27:17+09:00
+
+work_event ESTIMATE_COMPARE_START_20260918:
+  model 1
+  task ESTIMATE_COMPARE
+  kind start
+  occurred_at 2026-09-18T17:27:48+09:00
+  planned_value 5.5p
+
+work_event ESTIMATE_COMPARE_FINISH_20260918:
+  model 1
+  task ESTIMATE_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:29:11+09:00
