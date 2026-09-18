@@ -32,7 +32,7 @@ milestone TYPES:
 
 milestone AUTHOR:
   title "S2 Trace作成とSeal公開"
-  state planned
+  state reached
 
 milestone COMPARATOR:
   title "P3 原文残存のbyte比較器"
@@ -40,7 +40,7 @@ milestone COMPARATOR:
 
 milestone SELF_READY:
   title "自身比較の前提"
-  state planned
+  state reached
 
 milestone SELF:
   title "S4 自身のTrace比較"
