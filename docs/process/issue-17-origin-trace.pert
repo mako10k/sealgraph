@@ -298,7 +298,7 @@ task MIGRATE_FORMAT7 TYPES -> MIGRATION:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-p3-migration-addendum-2026-09-18.md; Accepted ADR0033 §2.7/0035 §4.3"
@@ -457,3 +457,10 @@ milestone MIGRATION:
 
 gate JOIN_MIGRATION MIGRATION -> INTEGRATION:
   reason "NORMATIVE_SYNCとFULL_VERIFICATIONはformat 5/6→7の明示移行実装も含めて照合する。実repo移行の許可ではない。"
+
+work_event MIGRATE_FORMAT7_START_20260918:
+  model 1
+  task MIGRATE_FORMAT7
+  kind start
+  occurred_at 2026-09-18T20:00:58+09:00
+  planned_value 5.5p
