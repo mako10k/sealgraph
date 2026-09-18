@@ -201,7 +201,7 @@ task NORMATIVE_SYNC INTEGRATION -> DOCS:
     optimistic 1p
     most_likely 2p
     pessimistic 4p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; ADR0038/0040"
@@ -471,3 +471,10 @@ work_event MIGRATE_FORMAT7_FINISH_20260918:
   task MIGRATE_FORMAT7
   kind finish
   occurred_at 2026-09-18T20:14:00+09:00
+
+work_event NORMATIVE_SYNC_START_20260918:
+  model 1
+  task NORMATIVE_SYNC
+  kind start
+  occurred_at 2026-09-18T20:24:00+09:00
+  planned_value 13/6p
