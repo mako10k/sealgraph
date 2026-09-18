@@ -189,15 +189,21 @@ does not create, repair, migrate, or republish repository state.
 
 ```sh
 sealgraph migrate repository --from 5 --to 6 [--format human|json]
+sealgraph migrate repository --from 5 --to 7 [--format human|json]
+sealgraph migrate repository --from 6 --to 7 [--format human|json]
 ```
 
 Both exact format options are required once. The command validates and captures
-the current format-5 repository, atomically replaces only config, reopens and
-fscks format 6, and verifies that retained objects, REF manifests, and Candidate
-bytes are unchanged. It never infers a format, rewrites history, downgrades,
-batches paths, or retries a possibly committed migration. Success emits
-`sealgraph/repository-migrate/v1`; committed output failure reports
+the current source repository, atomically replaces only config, reopens and
+fscks the target format, and verifies that retained objects, REF manifests, and
+Candidate bytes are unchanged. It never infers a format, rewrites history,
+downgrades, batches paths, or retries a possibly committed migration. The 5 to
+6 transition emits `sealgraph/repository-migrate/v1`; transitions to format 7
+emit `sealgraph/repository-migrate/v2` with the retained v5/v6 Seal and
+Candidate inventories. Committed output failure reports
 `MIGRATION_COMMITTED_OUTPUT_UNDELIVERED` and directs the operator to `fsck`.
+For a format 7 repository, JSON fsck output is `sealgraph/fsck/v4` and appends
+the `origin_maps` and `source_snapshots` inventory counts.
 
 ## 3. Candidate authoring
 

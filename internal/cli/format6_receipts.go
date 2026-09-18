@@ -57,6 +57,17 @@ type repositoryMigrationReceipt struct {
 	RetainedCandidatesV5  int    `json:"retained_candidates_v5"`
 }
 
+type repositoryMigration7Receipt struct {
+	Schema               string `json:"schema"`
+	FromFormat           int    `json:"from_format"`
+	ToFormat             int    `json:"to_format"`
+	Result               string `json:"result"`
+	RetainedSealsV5      int    `json:"retained_seals_v5"`
+	RetainedSealsV6      int    `json:"retained_seals_v6"`
+	RetainedCandidatesV5 int    `json:"retained_candidates_v5"`
+	RetainedCandidatesV6 int    `json:"retained_candidates_v6"`
+}
+
 func writeCommittedMigrationJSON(stdout, stderr io.Writer, value repositoryMigrationReceipt) int {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
@@ -78,4 +89,26 @@ func writeCommittedMigrationBytes(stdout, stderr io.Writer, data []byte) int {
 		return 3
 	}
 	return 0
+}
+
+func writeCommittedMigration7JSON(stdout, stderr io.Writer, value repositoryMigration7Receipt) int {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return commandError(stderr, "migrate repository", fmt.Errorf("encode committed migration receipt: %w", err))
+	}
+	return writeCommittedMigration7Bytes(stdout, stderr, literalizeInspectionUnicodeSeparators(buffer.Bytes()))
+}
+
+func writeCommittedMigration7Bytes(stdout, stderr io.Writer, data []byte) int {
+	written, err := stdout.Write(data)
+	if err == nil && written == len(data) {
+		return 0
+	}
+	if err == nil {
+		err = io.ErrShortWrite
+	}
+	fmt.Fprintf(stderr, "error: sealgraph migrate repository: MIGRATION_COMMITTED_OUTPUT_UNDELIVERED: repository is already format 7; do not retry migration: %v\n", err)
+	return 3
 }

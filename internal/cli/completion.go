@@ -83,9 +83,9 @@ func completionForOption(prior []string) (string, []string, bool) {
 	case "--view":
 		return "plain", []string{"snapshot", "current", "both"}, true
 	case "--from":
-		return "plain", []string{"5"}, true
+		return "plain", []string{"5", "6"}, true
 	case "--to":
-		return "plain", []string{"6"}, true
+		return "plain", []string{"6", "7"}, true
 	default:
 		return "", nil, false
 	}

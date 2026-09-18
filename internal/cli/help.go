@@ -235,16 +235,16 @@ var commandHelpRegistry = map[string]commandHelp{
 	"graph": inspectionHelp("graph", "Inspect observed Cause and Cause-scoped revision edges.", "sealgraph graph [--format human|json]", nil),
 	"fsck":  inspectionHelp("fsck", "Validate the complete standalone object, REF/tag, material, revision, and Cause inventory without repair.", "sealgraph fsck [--format human|json]", nil),
 	"migrate": {
-		Path: "migrate", Summary: "Run an explicitly isolated one-way repository migration step.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1", "sealgraph migrate repository --from 5 --to 6 [--format human|json]"}, Subcommands: []string{"extract", "repository"}, Details: []string{"Each migration command accepts one exact source/target contract. No downgrade, inference, force, or batch path exists."}, Related: []string{"migrate extract", "migrate repository", "load"},
+		Path: "migrate", Summary: "Run an explicitly isolated one-way repository migration step.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1", "sealgraph migrate repository --from 5 --to 6 [--format human|json]", "sealgraph migrate repository --from 5 --to 7 [--format human|json]", "sealgraph migrate repository --from 6 --to 7 [--format human|json]"}, Subcommands: []string{"extract", "repository"}, Details: []string{"Each migration command accepts one exact source/target contract. No downgrade, inference, force, or batch path exists."}, Related: []string{"migrate extract", "migrate repository", "load"},
 	},
 	"migrate extract": {
 		Path: "migrate extract", Summary: "Read one retained format-4 source and emit a canonical migration document.", Usage: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Arguments: []string{"No positional arguments; the source is exactly .sealgraph below the current directory."}, Options: []helpOption{{"--source-format 4", "required exactly once; no other source format is accepted"}, {"--format universal-blob-v1", "required exactly once; no other document format is accepted"}}, Details: []string{"This is the only migration command that opens format 4. It has no source mutation operation, never inspects Git, rejects every Candidate or corrupt/unrecognized canonical entry, validates two equal complete source captures, and writes the document only after both captures agree."}, Examples: []string{"sealgraph migrate extract --source-format 4 --format universal-blob-v1 > repository.dump.json"}, Related: []string{"load", "init", "fsck"},
 	},
 	"migrate repository": {
-		Path: "migrate repository", Summary: "Atomically change one validated repository config from format 5 to format 6 without rewriting retained records.",
-		Usage:   []string{"sealgraph migrate repository --from 5 --to 6 [--format human|json]"},
-		Options: []helpOption{{"--from 5", "required exactly once"}, {"--to 6", "required exactly once"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
-		Details: []string{"The command validates and snapshots format-5 state, atomically replaces only config, then reopens and fscks format 6. If receipt delivery fails after commit, do not rerun migration; use fsck."},
+		Path: "migrate repository", Summary: "Atomically change one validated repository config to its explicit successor without rewriting retained records.",
+		Usage:   []string{"sealgraph migrate repository --from 5 --to 6 [--format human|json]", "sealgraph migrate repository --from 5 --to 7 [--format human|json]", "sealgraph migrate repository --from 6 --to 7 [--format human|json]"},
+		Options: []helpOption{{"--from 5|6", "required exactly once; source must match the repository"}, {"--to 6|7", "required exactly once; only accepted successor pairs are allowed"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"The command validates and snapshots the source state, atomically replaces only config, then reopens and fscks the target format. If receipt delivery fails after commit, do not rerun migration; use fsck."},
 		Related: []string{"fsck", "migrate extract"},
 	},
 	"load": {

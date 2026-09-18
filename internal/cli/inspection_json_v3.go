@@ -497,8 +497,34 @@ type fsckDocumentV3 struct {
 	Unreferenced  []string `json:"unreferenced_blob_ids"`
 }
 
+type fsckDocumentV4 struct {
+	Schema          string   `json:"schema"`
+	Result          string   `json:"result"`
+	Blobs           int      `json:"blobs"`
+	Seals           int      `json:"seals"`
+	SealsV5         int      `json:"seals_v5"`
+	SealsV6         int      `json:"seals_v6"`
+	Materials       int      `json:"materials"`
+	Provenances     int      `json:"provenances"`
+	ProvenancesV1   int      `json:"provenances_v1"`
+	ProvenancesV2   int      `json:"provenances_v2"`
+	CandidatesV5    int      `json:"candidates_v5"`
+	CandidatesV6    int      `json:"candidates_v6"`
+	REFs            int      `json:"refs"`
+	Tags            int      `json:"tags"`
+	Active          int      `json:"active_seals"`
+	Historical      []string `json:"historical_or_detached_seal_ids"`
+	Unreferenced    []string `json:"unreferenced_blob_ids"`
+	OriginMaps      int      `json:"origin_maps"`
+	SourceSnapshots int      `json:"source_snapshots"`
+}
+
 func fsckJSONV3(value repository.FsckReport) fsckDocumentV3 {
 	return fsckDocumentV3{"sealgraph/fsck/v3", "ok", value.Blobs, value.Seals, value.SealsV5, value.SealsV6, value.Materials, value.Provenances, value.ProvenancesV1, value.ProvenancesV2, value.CandidatesV5, value.CandidatesV6, value.REFs, value.Tags, value.ActiveSeals, idsJSON(value.HistoricalOrDetachedSeals), idsJSON(value.UnreferencedBlobs)}
+}
+
+func fsckJSONV4(value repository.FsckReport) fsckDocumentV4 {
+	return fsckDocumentV4{"sealgraph/fsck/v4", "ok", value.Blobs, value.Seals, value.SealsV5, value.SealsV6, value.Materials, value.Provenances, value.ProvenancesV1, value.ProvenancesV2, value.CandidatesV5, value.CandidatesV6, value.REFs, value.Tags, value.ActiveSeals, idsJSON(value.HistoricalOrDetachedSeals), idsJSON(value.UnreferencedBlobs), value.OriginMaps, value.SourceSnapshots}
 }
 
 func formatAwareJSON(format int, v2, v3 any) any {
