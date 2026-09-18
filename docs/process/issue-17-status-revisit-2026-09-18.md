@@ -3,6 +3,7 @@
 - 日付：2026-09-18。
 - 上位判断：[Accepted ADR 0035](../adr/0035-origin-trace-cli-and-observation-output.md) §4.2・§8 と [ADR 0038](../adr/0038-origin-trace-r2-cli-and-observation-output.md) §4 は、Trace 状態の `status` 表示を一旦保留し、詳細側の試用後に必要性が見えれば戻す。STALE、`source compare`、Cause の意味は変更しない。
 - この記録の範囲：[Accepted P3](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) P8 と [正本 PERT](issue-17-origin-trace.pert) の `STATUS_REVISIT`。新しい表示・flag・schema・性能閾値を採用または実装する決定ではない。
+- PERT 実績：`STATUS_REVISIT` は 2026-09-18 19:42:05 JST に開始し、19:44:37 JST に終了した。経過 2 分 32 秒は作業の経過時間であり、投入工数の測定値ではない。`STATUS_DECISION` は「既存保留を継続」とする本記録によって到達した。
 
 ## 観測
 
