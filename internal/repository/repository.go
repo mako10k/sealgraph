@@ -121,6 +121,9 @@ func (r *Repository) Add(ctx context.Context, options AddOptions) (domainv5.Cand
 }
 
 func (r *Repository) addLocked(ctx context.Context, options AddOptions) (domainv5.Candidate, error) {
+	if r.format == 7 {
+		return domainv5.Candidate{}, fmt.Errorf("format-7 Candidate authoring is not available in the FORMAT_TYPES phase")
+	}
 	if err := domain.ValidateREF(options.REF); err != nil {
 		return domainv5.Candidate{}, err
 	}

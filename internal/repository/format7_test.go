@@ -269,3 +269,19 @@ func TestFormat7RejectsCrossGenerationPair(t *testing.T) {
 		t.Fatal("fsck accepted v7 Seal paired with v1 Provenance")
 	}
 }
+
+func TestFormat7RejectedAddLeavesNoOrphanContent(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	ctx := context.Background()
+	before, err := repo.objects.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("unpublished"), Root: true, RootSet: true}); err == nil {
+		t.Fatal("format-7 add unexpectedly succeeded")
+	}
+	after, err := repo.objects.List(ctx)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("rejected add changed object inventory: before=%d after=%d err=%v", len(before), len(after), err)
+	}
+}
