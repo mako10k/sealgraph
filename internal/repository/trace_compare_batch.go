@@ -26,6 +26,12 @@ type TraceOwnSourceObservation struct {
 // TraceCompareOwnBatch observes every source_key once, then compares all
 // explicitly selected baselines against those same bytes.
 func (r *Repository) TraceCompareOwnBatch(ctx context.Context, selections []TraceOwnBaseline) ([]TraceCompareOwnResult, []TraceOwnSourceObservation, error) {
+	return r.traceCompareOwnBatch(ctx, selections, nil)
+}
+
+type traceOwnBatchEnrichment func([]TraceCompareOwnResult, []LoadedTraceOrigin, traceOwnBatchSourceState) error
+
+func (r *Repository) traceCompareOwnBatch(ctx context.Context, selections []TraceOwnBaseline, enrich traceOwnBatchEnrichment) ([]TraceCompareOwnResult, []TraceOwnSourceObservation, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -41,6 +47,11 @@ func (r *Repository) TraceCompareOwnBatch(ctx context.Context, selections []Trac
 	results, err := compareTraceOwnBatch(ctx, states, origins, sourceState.traceOwnSourceState)
 	if err != nil {
 		return nil, nil, err
+	}
+	if enrich != nil {
+		if err := enrich(results, origins, sourceState); err != nil {
+			return nil, nil, err
+		}
 	}
 	for _, state := range states {
 		if err := r.recheckTraceOwnState(ctx, state, sourceState.paths, sourceState.bound, sourceState.readFailed, sourceState.current); err != nil {
