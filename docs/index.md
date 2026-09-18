@@ -54,7 +54,7 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0037-origin-trace-r2-search-and-estimation.md`](adr/0037-origin-trace-r2-search-and-estimation.md) — Accepted: 完全一致探索と独立した変更後範囲推定。ADR 0034 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
 - [`adr/0038-origin-trace-r2-cli-and-observation-output.md`](adr/0038-origin-trace-r2-cli-and-observation-output.md) — Accepted: 軽い比較と任意の推定を分ける CLI/schema。ADR 0035 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
 - [`adr/0039-origin-trace-derived-occurrence-positions.md`](adr/0039-origin-trace-derived-occurrence-positions.md) — Accepted: 全文からの一致位置導出と件数上限付き提示の後継設計判断（[承認・非 draft Seal 記録](process/issue-17-adr-0039-acceptance-2026-09-18.md)）。旧 [draft Seal](process/issue-17-adr-0039-proposed-seal-2026-09-18.md) は履歴。後継要件・公開契約との整合は未確定。
-- [`adr/0040-origin-trace-occurrence-listing-and-paging.md`](adr/0040-origin-trace-occurrence-listing-and-paging.md) — Proposed: Accepted R3 と ADR 0039 に基づく一致位置一覧の CLI、版固定ページング、新しい出力 schema。[独立レビュー](process/issue-17-adr-0040-independent-review-2026-09-18.md)済み。採用・Seal は未決。
+- [`adr/0040-origin-trace-occurrence-listing-and-paging.md`](adr/0040-origin-trace-occurrence-listing-and-paging.md) — Proposed: Accepted R3 と ADR 0039 に基づく一致位置一覧の CLI、版固定ページング、新しい出力 schema。[初回独立レビュー](process/issue-17-adr-0040-independent-review-2026-09-18.md)と[baseline 選択の差分レビュー](process/issue-17-adr-0040-selector-rereview-2026-09-18.md)あり。採用・Seal は未決。
 
 ## Agent-auditable design
 

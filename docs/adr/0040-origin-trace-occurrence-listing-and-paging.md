@@ -21,12 +21,13 @@ ADR 0039 はこの方向を Accepted とした一方、一覧の操作名、ど�
 一つの選択 baseline の一つの External run に対し、次の**読取専用**操作を提案する。
 
 ```sh
-sealgraph trace occurrences (--ref REF | --seal SELECTOR) \
+sealgraph trace occurrences \
+  (--ref REF --baseline candidate|head | --seal SELECTOR) \
   --run-index N --view snapshot|current|both \
   [--limit N] [--cursor TOKEN] [--format human|json]
 ```
 
-`--ref` と `--seal` は ADR 0035/0038 と同じ排他的選択とする。`--ref` は Candidate があればそれを対象にし、なければ当該 REF の HEAD Seal を対象にする。`--seal` は解決した exact Seal を対象にする。結果は選んだ baseline の種別と exact identity を示す。REF に Candidate も HEAD もない場合、または選択 baseline に OriginMap がない場合は、空の一致集合を装わず理由付きで失敗する。
+`--ref` と `--seal` は ADR 0035/0038 と同じ排他的選択とする。ただし本操作は一つの baseline の一つの run を列挙するため、`--ref` には `--baseline candidate|head` を必須とする。`candidate` は指定 REF の Candidate、`head` は指定 REF の現在の HEAD Seal を選ぶ。指定した側が存在しなければ、もう一方へ暗黙に切り替えず理由付きで失敗する。`--seal` は解決した exact Seal を対象にし、`--baseline` との併用を拒否する。`--baseline` のない `--ref` も拒否する。ADR 0035/0038 の `trace show/compare --ref` は Candidate と HEAD を区別して扱う既存契約のままであり、本操作で一方を選ぶことを引数で明示する。結果は選んだ baseline の種別と exact identity を示す。選択 baseline に OriginMap がない場合は、空の一致集合を装わず理由付きで失敗する。
 
 `--run-index` は OriginMap の `runs` 配列における 0 始まりの index で、Untraced run を含めて数える。指定先が存在しないか External run でなければ理由付きで失敗する。External run の SourceSnapshot 全文を S、run の記録開始位置を p、正の長さを L、`P=S[p:p+L]` とする。OriginMap と SourceSnapshot の構造・copy 一致は一覧の前に検証する。P は Seal 全体やファイル全体ではなく、その run の exact bytes である。
 
@@ -44,7 +45,7 @@ sealgraph trace occurrences (--ref REF | --seal SELECTOR) \
 
 結果は定めた view/開始位置順の連続した prefix を返す。返却上限に達した場合、次の一致の有無まで確認し、存在すれば `has_more=true` と `next_cursor` を返す。存在しなければ `has_more=false`、`next_cursor=null`。上限に達していない場合も残りの有無を確定してから完了ページとする。最終ページに達して初めて、取得済みの全ページを合わせた一覧が対象版の全集合となる。単一ページの `READY` は全集合の完了を意味しない。
 
-`--cursor` はこの操作だけが発行する opaque な継続識別子とする。具体的な byte encoding は公開契約に含めない。識別子は、baseline の exact SealID または Candidate digest と OriginMapID、run index と P、view、`limit`、snapshot BlobID、current を含む場合は binding record と安定して観測した F の exact BlobID/byte 長、最後に返した `(view,start)` に結び付く。次ページでは同じ選択と引数を再評価し、現在ファイルを再読取して同じ exact bytes か確認する。入力・binding・baseline・現在版が変わった場合、`PAGE_CONTEXT_CHANGED` として成功ページを返さず、最初から取得し直すよう案内する。改変・不正な cursor は `PAGE_TOKEN_INVALID` とする。cursor だけから source の存在や内容を信用しない。
+`--cursor` はこの操作だけが発行する opaque な継続識別子とする。具体的な byte encoding は公開契約に含めない。識別子は、排他的な選択組 `(REF, --baseline candidate|head)` または `(--seal SELECTOR)`、baseline の exact SealID または Candidate digest と OriginMapID、run index と P、view、`limit`、snapshot BlobID、current を含む場合は binding record と安定して観測した F の exact BlobID/byte 長、最後に返した `(view,start)` に結び付く。次ページでは同じ選択と引数を再評価し、現在ファイルを再読取して同じ exact bytes か確認する。選択した Candidate または HEAD、binding、現在版が変わった場合、`PAGE_CONTEXT_CHANGED` として成功ページを返さず、最初から取得し直すよう案内する。選択していない Candidate または HEAD の変更だけでは cursor を失効させない。改変・不正な cursor は `PAGE_TOKEN_INVALID` とする。cursor だけから source の存在や内容を信用しない。
 
 この方式では、current の旧 bytes を canonical Blob や永続 cache に追加保存しない。各ページで F の安定読取りと byte identity の検証を繰り返す費用がある。実装は１ページの位置を得るため、全位置をメモリへ列挙する必要はない。多数ページの時間・I/O、`limit=100` の使いやすさは未測定であり、実測後に必要なら別判断で調整する。
 
@@ -62,7 +63,7 @@ page: limit, entries, state, has_more, next_cursor, reason
 entry: view, start, length
 ```
 
-`selection.kind` は `ref|seal`。`baseline.kind` は `candidate|seal` とし、該当しない `seal_id` または `candidate_digest` は null。`origin_map_id` と `source_snapshot_id` は exact typed IDs。`pattern_sha256` は P の raw SHA-256 であり、native BlobID と区別する。`snapshot_blob_id` は ADR 0033 の SourceSnapshot.content。`current_blob_id` は安定して読めた F の native content BlobID、`current_byte_length` はその byte 長で、current を読まない view または読取り不能時は null。`binding_digest` はその source_key の local binding record の exact bytes に対する SHA-256、snapshot-only では null。`entries` は zero or more の `{view,start,length}`。どの entry も歴史的同一性や意味の一致を表さない。
+`selection.kind` は `ref|seal`。`selection.requested` は `--ref` の REF または `--seal` の SELECTOR。`baseline.kind` は `--baseline candidate` のとき `candidate`、`--baseline head` または `--seal` のとき `seal` とし、該当しない `seal_id` または `candidate_digest` は null。`selection.baseline` にこの record を置くため、要求した側と解決した exact identity を一緒に読める。`origin_map_id` と `source_snapshot_id` は exact typed IDs。`pattern_sha256` は P の raw SHA-256 であり、native BlobID と区別する。`snapshot_blob_id` は ADR 0033 の SourceSnapshot.content。`current_blob_id` は安定して読めた F の native content BlobID、`current_byte_length` はその byte 長で、current を読まない view または読取り不能時は null。`binding_digest` はその source_key の local binding record の exact bytes に対する SHA-256、snapshot-only では null。`entries` は zero or more の `{view,start,length}`。どの entry も歴史的同一性や意味の一致を表さない。
 
 `page.state` は `READY|INCOMPLETE`。`READY` では全 entry は定めた順序の連続 prefix で、`has_more` は boolean、`next_cursor` は `has_more=true` のときだけ non-null、`reason` は null。`INCOMPLETE` では、得られた entry は検証済みの prefix だけであり、`has_more=null`、`next_cursor=null`、`reason` は `SOURCE_READ_FAILED|OBSERVATION_UNSTABLE|SEARCH_INTERRUPTED` の一つ。entry が空でも対象版で一致が無いとは主張しない。途中結果から継続するのではなく、新しい初回要求で再観測する。プロセス中断など成功 JSON document を組み立てられない場合は ADR 0038 と同様に成功結果を出さない。構造不正と cursor 不整合は成功 `INCOMPLETE` へ置き換えずコマンドエラーとする。
 
@@ -106,7 +107,7 @@ Cause は Seal 全体の exact SealID を指し、ファイル差異だけで既
 
 純粋な byte 部分列列挙はファイル/REF/CLI を直接読まない比較器に置き、repository は OriginMap/SourceSnapshot、Candidate または Seal、source binding と安定した現在全文の読取りを担当する。CLI は選択・cursor・JSON/human 表示を担当する。byte 列を各ページで最初から読み直す方式や、一ページの探索開始位置を使う方式は、上記の順序・版・結果意味を保てば実装選択とする。新しい canonical オブジェクト、全位置フィールド、永続 cache、Git 自動検出を追加しない。
 
-確認例は `B="aaaa",P="aa"` の重複開始位置 0/1/2 を `limit=1` で３ページに分ける場合、`both` の snapshot/current 境界、`|B|<|P|`、末尾 q=`|B|-|P|`、F/binding/Candidate/REF HEAD のページ間変更、source 読取り失敗、検索中断、元ファイル変更後の snapshot 列挙を含む。各期待は Accepted R3 の AC と本 ADR の採用後の節に結び付け、実装結果を要件の根拠にしない。性能の workload・platform・閾値は未決であり、実測を数値保証へ自動変換しない。
+確認例は `B="aaaa",P="aa"` の重複開始位置 0/1/2 を `limit=1` で３ページに分ける場合、`both` の snapshot/current 境界、`|B|<|P|`、末尾 q=`|B|-|P|`、`--ref` の Candidate と HEAD で run 配列が異なる場合と一方がない場合、`--baseline` の欠落・`--seal` との併用、F/binding/選択 baseline のページ間変更と非選択 baseline の変更、source 読取り失敗、検索中断、元ファイル変更後の snapshot 列挙を含む。各期待は Accepted R3 の AC と本 ADR の採用後の節に結び付け、実装結果を要件の根拠にしない。性能の workload・platform・閾値は未決であり、実測を数値保証へ自動変換しない。
 
 レビュー対象は本書全文。独立レビューでは、① R3 の存在判定と一覧が混ざらないか、② 両 view とページの順序・版束縛が AC16～AC21 を満たすか、③ cursor と未完了の結果が「全位置」を誤って主張しないか、④ ADR 0033/0036～0039 の Accepted 境界や public schema の所有を侵さないかを照合する。Status は Proposed で、独立レビューの結果が所有者の採否を代行しない。
 
