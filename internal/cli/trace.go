@@ -150,26 +150,46 @@ type traceMutationReceipt struct {
 }
 
 type traceStoredSourceJSON struct {
-	SourceKey     string `json:"source_key"`
-	SnapshotID    string `json:"snapshot_id"`
-	ContentBlobID string `json:"content_blob_id"`
-	ByteLength    uint64 `json:"byte_length"`
+	SourceKey     string  `json:"source_key"`
+	SnapshotID    string  `json:"snapshot_id"`
+	ContentBlobID string  `json:"content_blob_id"`
+	ByteLength    uint64  `json:"byte_length"`
+	InputFile     *string `json:"input_file"`
 }
 
 func writeTraceSetReceipt(output inspectionOutput, stdout, stderr io.Writer, ref string, result repository.TraceSetResult) int {
 	before, after := fmt.Sprintf("%x", result.BeforeCandidateSHA256), fmt.Sprintf("%x", result.AfterCandidateSHA256)
 	stored := make([]repository.StoredTraceSource, len(result.StoredSources))
 	copy(stored, result.StoredSources)
-	sort.Slice(stored, func(i, j int) bool { return stored[i].SnapshotID.String() < stored[j].SnapshotID.String() })
+	sort.Slice(stored, func(i, j int) bool {
+		left, right := stored[i], stored[j]
+		if left.SnapshotID.String() != right.SnapshotID.String() {
+			return left.SnapshotID.String() < right.SnapshotID.String()
+		}
+		if left.New != right.New {
+			return !left.New
+		}
+		return left.DisplayPath < right.DisplayPath
+	})
 	entries := make([]traceStoredSourceJSON, len(stored))
 	for i, source := range stored {
 		entries[i] = traceStoredSourceJSON{SourceKey: source.SourceKey, SnapshotID: source.SnapshotID.String(), ContentBlobID: source.BlobID.String(), ByteLength: source.ByteCount}
+		if source.New {
+			entries[i].InputFile = &stored[i].DisplayPath
+		}
 	}
-	receipt := traceMutationReceipt{Schema: "sealgraph/trace-mutation/v1", Operation: "set", REF: ref, BeforeDigest: before, AfterDigest: after, Changed: before != after, StoredSources: entries}
+	receipt := traceMutationReceipt{Schema: "sealgraph/trace-mutation/v2", Operation: "set", REF: ref, BeforeDigest: before, AfterDigest: after, Changed: before != after, StoredSources: entries}
 	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "trace set", receipt)
 	}
 	printHumanReceipt(stdout, "TRACE SET", humanField{"REF", ref}, humanField{"Origin map (prefix)", shortID(result.OriginID)}, humanField{"Candidate changed", yesNo(receipt.Changed)}, humanField{"Full sources", strconv.Itoa(len(entries))})
+	for _, source := range stored {
+		if source.New {
+			fmt.Fprintf(stdout, "  Full source file %q (%d bytes)\n", source.DisplayPath, source.ByteCount)
+		} else {
+			fmt.Fprintf(stdout, "  Full source snapshot %s (existing Snapshot reused, %d bytes)\n", source.SnapshotID, source.ByteCount)
+		}
+	}
 	return 0
 }
 
@@ -189,7 +209,7 @@ func runTraceClear(ctx context.Context, workDir string, args []string, stdout, s
 	if err != nil {
 		return commandError(stderr, "trace clear", err)
 	}
-	receipt := traceMutationReceipt{Schema: "sealgraph/trace-mutation/v1", Operation: "clear", REF: args[0], BeforeDigest: fmt.Sprintf("%x", result.BeforeCandidateSHA256), AfterDigest: fmt.Sprintf("%x", result.AfterCandidateSHA256), Changed: result.Changed, StoredSources: []traceStoredSourceJSON{}}
+	receipt := traceMutationReceipt{Schema: "sealgraph/trace-mutation/v2", Operation: "clear", REF: args[0], BeforeDigest: fmt.Sprintf("%x", result.BeforeCandidateSHA256), AfterDigest: fmt.Sprintf("%x", result.AfterCandidateSHA256), Changed: result.Changed, StoredSources: []traceStoredSourceJSON{}}
 	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "trace clear", receipt)
 	}

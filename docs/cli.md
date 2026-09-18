@@ -177,12 +177,18 @@ batches paths, or retries a possibly committed migration. Success emits
 
 ## 3. Candidate authoring
 
-TODO (Issue #17 TRACE_AUTHOR, ADR 0035 §§2.1/4.1): The accepted authoring
-contract says the retained input filename and byte count appear both on stderr
-and in the operation result, while its exact JSON mutation receipt lists
-`stored_sources` entries without a filename. Resolve whether the combined
-stdout/stderr response fulfills §2.1 or the receipt schema needs an explicit
-revision before declaring the authoring output contract complete.
+For format-7 `trace set`, the pre-store stderr notice identifies every full
+source file that will be retained, with its recipe-relative input filename and
+exact byte count. A successful human result repeats those details. A successful
+JSON result uses `sealgraph/trace-mutation/v2`; each `stored_sources` entry has
+`source_key,snapshot_id,content_blob_id,byte_length,input_file` in that order.
+`input_file` is the recipe-relative filename for a file input and `null` when
+the recipe reuses an existing SourceSnapshot. It identifies this operation's
+input, not a persistent path or the only historical filename. Entries retain
+duplicate sources and sort by SnapshotID, then null `input_file` before path,
+then UTF-8 path bytes. `trace clear` also uses `v2` and returns an empty
+`stored_sources` array. See [ADR 0041](adr/0041-trace-mutation-receipt-input-file.md)
+and its [acceptance record](process/issue-17-adr-0041-acceptance-2026-09-18.md).
 
 Format 5 uses one-target whole-record Cause operations:
 

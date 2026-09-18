@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,8 +50,14 @@ func TestTraceCLIAuthorAndRecoverFullSources(t *testing.T) {
 		t.Fatalf("trace set: code=%d output=%q notice=%q", code, output, notice)
 	}
 	receipt := decodeCLIJSON(t, output)
-	if receipt["schema"] != "sealgraph/trace-mutation/v1" || receipt["operation"] != "set" || receipt["changed"] != true || len(receipt["stored_sources"].([]any)) != 2 {
+	if receipt["schema"] != "sealgraph/trace-mutation/v2" || receipt["operation"] != "set" || receipt["changed"] != true || len(receipt["stored_sources"].([]any)) != 2 {
 		t.Fatalf("trace set receipt=%s", output)
+	}
+	for _, raw := range receipt["stored_sources"].([]any) {
+		source := raw.(map[string]any)
+		if source["input_file"] != map[string]any{"key-A": "a.txt", "key-B": "b.txt"}[source["source_key"].(string)] || source["byte_length"] != float64(10) {
+			t.Fatalf("file input receipt=%s", output)
+		}
 	}
 	assertTraceShow(t, dir, true, false)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed"), 0o644); err != nil {
@@ -118,7 +125,7 @@ func TestTraceCLIClearAndCandidateHEADSeparation(t *testing.T) {
 	mustRunCLI(t, dir, "seal", "root")
 	mustRunCLI(t, dir, "add", "root", "--content", "XYZ-UV")
 	clear := decodeCLIJSON(t, mustRunCLI(t, dir, "trace", "clear", "root", "--format", "json"))
-	if clear["changed"] != true {
+	if clear["schema"] != "sealgraph/trace-mutation/v2" || clear["changed"] != true || len(clear["stored_sources"].([]any)) != 0 {
 		t.Fatalf("trace clear=%v", clear)
 	}
 	second := decodeCLIJSON(t, mustRunCLI(t, dir, "trace", "clear", "root", "--format", "json"))
@@ -207,5 +214,54 @@ func TestTraceShowJSONIsSingleCompleteDocument(t *testing.T) {
 	var document any
 	if err := decoder.Decode(&document); err != nil || !strings.HasSuffix(output, "\n") {
 		t.Fatalf("trace show JSON=%q err=%v", output, err)
+	}
+}
+
+func TestTraceMutationReceiptInputFileAndSnapshotReuse(t *testing.T) {
+	dir := traceCLIFixture(t)
+	writeTraceTestFile(t, dir, "a.txt", "abcXYZtail")
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "XYZXYZ")
+	fileRecipe := `{"schema":"sealgraph/trace-recipe/v1","sources":[{"name":"file","source_key":"key-A","file":"a.txt"}],"runs":[{"kind":"external","length":3,"source":"file","source_start":3},{"kind":"external","length":3,"source":"file","source_start":3}]}`
+	writeTraceTestFile(t, dir, "file-recipe.json", fileRecipe)
+	code, output, notice := runCLI(t, dir, nil, "trace", "set", "root", "--recipe", "file-recipe.json", "--format", "json")
+	if code != 0 || !strings.Contains(notice, `"a.txt" (10 bytes)`) {
+		t.Fatalf("file trace set: code=%d output=%q notice=%q", code, output, notice)
+	}
+	first := decodeCLIJSON(t, output)
+	firstSource := first["stored_sources"].([]any)[0].(map[string]any)
+	if firstSource["input_file"] != "a.txt" {
+		t.Fatalf("file receipt=%v", first)
+	}
+	snapshotID := firstSource["snapshot_id"].(string)
+	mixedRecipe := fmt.Sprintf(`{"schema":"sealgraph/trace-recipe/v1","sources":[{"name":"file","source_key":"key-A","file":"a.txt"},{"name":"reused","snapshot":%q}],"runs":[{"kind":"external","length":3,"source":"file","source_start":3},{"kind":"external","length":3,"source":"reused","source_start":3}]}`, snapshotID)
+	writeTraceTestFile(t, dir, "mixed-recipe.json", mixedRecipe)
+	code, output, notice = runCLI(t, dir, nil, "trace", "set", "root", "--recipe", "mixed-recipe.json", "--format", "json")
+	if code != 0 || !strings.Contains(notice, `"a.txt" (10 bytes)`) {
+		t.Fatalf("mixed trace set: code=%d output=%q notice=%q", code, output, notice)
+	}
+	receipt := decodeCLIJSON(t, output)
+	entries := receipt["stored_sources"].([]any)
+	if receipt["schema"] != "sealgraph/trace-mutation/v2" || len(entries) != 2 {
+		t.Fatalf("mixed receipt=%s", output)
+	}
+	if entries[0].(map[string]any)["snapshot_id"] != snapshotID || entries[0].(map[string]any)["input_file"] != nil || entries[1].(map[string]any)["input_file"] != "a.txt" {
+		t.Fatalf("snapshot tie order or nullable input_file=%s", output)
+	}
+	if !strings.Contains(output, `"byte_length":10,"input_file":null`) || !strings.HasSuffix(output, "\n") {
+		t.Fatalf("field order or JSON framing=%q", output)
+	}
+	code, human, notice := runCLI(t, dir, nil, "trace", "set", "root", "--recipe", "mixed-recipe.json", "--format", "human")
+	if code != 0 || !strings.Contains(notice, `"a.txt" (10 bytes)`) {
+		t.Fatalf("human trace set: code=%d output=%q notice=%q", code, human, notice)
+	}
+	if !strings.Contains(human, `"a.txt" (10 bytes)`) || !strings.Contains(human, snapshotID) || !strings.Contains(human, "existing Snapshot reused") {
+		t.Fatalf("human success receipt=%q", human)
+	}
+}
+
+func writeTraceTestFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

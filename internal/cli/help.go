@@ -58,7 +58,7 @@ var commandHelpRegistry = map[string]commandHelp{
 		Path: "trace set", Summary: "Set the content and origin map of one existing Candidate atomically.",
 		Usage:   []string{"sealgraph trace set REF --recipe PATH [--content-file PATH|-] [--format human|json]"},
 		Options: []helpOption{{"--recipe PATH", "required portable relative UTF-8 JSON recipe file"}, {"--content-file PATH|-", "optional exact content bytes; default is existing Candidate content"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
-		Details: []string{"The recipe covers all content bytes with external and untraced runs. External source files are stored in full as immutable Blobs; review the disclosed file names and byte counts. Source bindings are not created."},
+		Details: []string{"The recipe covers all content bytes with external and untraced runs. External source files are stored in full as immutable Blobs; file names and byte counts appear before storage and in the success result. JSON uses trace-mutation/v2 with nullable input_file for reused snapshots. Source bindings are not created."},
 		Related: []string{"add", "trace clear", "trace show", "seal"},
 	},
 	"trace clear": {
