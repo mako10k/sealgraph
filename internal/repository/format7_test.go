@@ -211,6 +211,13 @@ func TestFormat7ReadsFormat6AndHistoricalCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := fixture.migrated.Add(ctx, AddOptions{REF: "candidate-v6", Content: []byte("working"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
+		t.Fatal(err)
+	}
+	beforeV6Candidate, err := fixture.migrated.candidates.LoadSnapshot("candidate-v6")
+	if err != nil {
+		t.Fatal(err)
+	}
 	beforeCandidate, err := fixture.migrated.candidates.LoadSnapshot("root")
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +240,14 @@ func TestFormat7ReadsFormat6AndHistoricalCandidate(t *testing.T) {
 	afterCandidate, err := repo.candidates.LoadSnapshot("root")
 	if err != nil || string(afterCandidate.Bytes) != string(beforeCandidate.Bytes) {
 		t.Fatalf("historical Candidate bytes changed: %v", err)
+	}
+	v6Candidate, err := repo.InspectCandidate(ctx, "candidate-v6")
+	if err != nil || v6Candidate.Candidate.Schema != "sealgraph/candidate/v6" || v6Candidate.Prospective.Seal.Schema != domainv7.SealSchema || v6Candidate.Prospective.Provenance.Origin != nil {
+		t.Fatalf("format-6 Candidate projection=%+v err=%v", v6Candidate, err)
+	}
+	afterV6Candidate, err := repo.candidates.LoadSnapshot("candidate-v6")
+	if err != nil || string(afterV6Candidate.Bytes) != string(beforeV6Candidate.Bytes) {
+		t.Fatalf("format-6 Candidate bytes changed: %v", err)
 	}
 	afterSeal, err := repo.objects.ReadObject(ctx, fixture.first.ID)
 	if err != nil || string(afterSeal.Data) != string(beforeSeal.Data) {
