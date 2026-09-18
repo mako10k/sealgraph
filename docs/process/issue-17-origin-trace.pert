@@ -129,7 +129,7 @@ task RANGE_COMPARATOR READY -> COMPARATOR:
     optimistic 5p
     most_likely 8p
     pessimistic 16p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P3; R2 AC4/5/12/13; ADR0036/0037"
@@ -309,3 +309,10 @@ work_event FORMAT_TYPES_FINISH_20260918:
   task FORMAT_TYPES
   kind finish
   occurred_at 2026-09-18T13:51:07+09:00
+
+work_event RANGE_COMPARATOR_START_20260918:
+  model 1
+  task RANGE_COMPARATOR
+  kind start
+  occurred_at 2026-09-18T14:02:30+09:00
+  planned_value 53/6p
