@@ -11,11 +11,17 @@ import (
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
-func TestRunTraceSourceBindingMutationAndInspectionJSON(t *testing.T) {
+func newTraceSourceCLIRepo(t *testing.T) string {
+	t.Helper()
 	dir := t.TempDir()
 	if _, err := repository.InitStandalone(dir); err != nil {
 		t.Fatal(err)
 	}
+	return dir
+}
+
+func TestRunTraceSourceBindingMutationAndInspectionJSON(t *testing.T) {
+	dir := newTraceSourceCLIRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("source"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +69,7 @@ func TestRunTraceSourceBindingMutationAndInspectionJSON(t *testing.T) {
 }
 
 func TestRunTraceSourceListSortsBySourceKey(t *testing.T) {
-	dir := t.TempDir()
-	if _, err := repository.InitStandalone(dir); err != nil {
-		t.Fatal(err)
-	}
+	dir := newTraceSourceCLIRepo(t)
 	for _, name := range []string{"a.txt", "b.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o600); err != nil {
 			t.Fatal(err)
@@ -89,5 +92,29 @@ func TestRunTraceSourceListSortsBySourceKey(t *testing.T) {
 	second := bytes.Index(stdout.Bytes(), []byte(`"source_key":"z-key"`))
 	if first < 0 || second < 0 || first > second {
 		t.Fatalf("list ordering=%s", stdout.String())
+	}
+}
+
+func TestRunTraceSourceBindReportsCorruptExistingBinding(t *testing.T) {
+	dir := newTraceSourceCLIRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"bind", "manual-A", "--file", "source.txt", "--format", "json"}
+	if code := runTraceSource(context.Background(), dir, args, &stdout, &stderr); code != 0 {
+		t.Fatalf("initial bind code=%d stderr=%q", code, stderr.String())
+	}
+	bindings, err := filepath.Glob(filepath.Join(dir, ".sealgraph", "local", "trace-sources", "*.json"))
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("binding files=%v err=%v", bindings, err)
+	}
+	if err := os.WriteFile(bindings[0], []byte("corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runTraceSource(context.Background(), dir, args, &stdout, &stderr); code == 0 || stdout.Len() != 0 || !bytes.Contains(stderr.Bytes(), []byte("corrupt")) {
+		t.Fatalf("corrupt bind code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }

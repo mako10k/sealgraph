@@ -166,16 +166,7 @@ func readStableTraceSourceFile(path string) ([]byte, os.FileInfo, error) {
 	if statErr == nil && (!os.SameFile(info, opened) || !opened.Mode().IsRegular()) {
 		statErr = errors.New("trace source binding changed before read")
 	}
-	data, readErr := io.ReadAll(file)
-	if readErr == nil {
-		if _, readErr = file.Seek(0, 0); readErr == nil {
-			var verification []byte
-			verification, readErr = io.ReadAll(file)
-			if readErr == nil && !bytes.Equal(data, verification) {
-				readErr = errors.New("trace source binding bytes changed during read")
-			}
-		}
-	}
+	data, readErr := readTraceSourceBytes(file)
 	closeErr := file.Close()
 	if statErr != nil {
 		return nil, nil, statErr
@@ -190,10 +181,35 @@ func readStableTraceSourceFile(path string) ([]byte, os.FileInfo, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if final.Mode()&os.ModeSymlink != 0 || !final.Mode().IsRegular() || !os.SameFile(opened, final) || final.Size() != opened.Size() || !final.ModTime().Equal(opened.ModTime()) || final.Mode() != opened.Mode() {
-		return nil, nil, errors.New("trace source binding changed during read")
+	if err := validateTraceSourceFileState(opened, final); err != nil {
+		return nil, nil, err
 	}
 	return data, final, nil
+}
+
+func readTraceSourceBytes(file *os.File) ([]byte, error) {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	verification, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(data, verification) {
+		return nil, errors.New("trace source binding bytes changed during read")
+	}
+	return data, nil
+}
+
+func validateTraceSourceFileState(opened, final os.FileInfo) error {
+	if final.Mode()&os.ModeSymlink != 0 || !final.Mode().IsRegular() || !os.SameFile(opened, final) || final.Size() != opened.Size() || !final.ModTime().Equal(opened.ModTime()) || final.Mode() != opened.Mode() {
+		return errors.New("trace source binding changed during read")
+	}
+	return nil
 }
 
 func (r *Repository) traceSourceLoad(key string) (TraceSourceBinding, []byte, string, error) {

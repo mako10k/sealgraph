@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -118,6 +119,8 @@ func runTraceSourceBind(ctx context.Context, workDir string, args []string, stdo
 	var before *repository.TraceSourceBinding
 	if existing, showErr := repo.TraceSourceShow(key); showErr == nil {
 		before = &existing
+	} else if !errors.Is(showErr, repository.ErrTraceSourceNotFound) {
+		return commandError(stderr, "trace source bind", showErr)
 	}
 	after, err := repo.TraceSourceBind(ctx, key, path.value)
 	if err != nil {
