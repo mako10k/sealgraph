@@ -233,12 +233,18 @@ func TestFormat7ReadsFormat6AndHistoricalCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	verifyFormat7HistoricalReadback(t, repo, fixture.first.ID, successorSeal.ID, beforeCandidate.Bytes, beforeV6Candidate.Bytes, beforeSeal.Data)
+}
+
+func verifyFormat7HistoricalReadback(t *testing.T, repo *Repository, firstID, successorID domain.ObjectID, candidateBytes, v6CandidateBytes, sealBytes []byte) {
+	t.Helper()
+	ctx := context.Background()
 	inspection, err := repo.InspectCandidate(ctx, "root")
 	if err != nil || inspection.Candidate.Schema != domainv5.CandidateSchema || inspection.Prospective.Seal.Schema != domainv7.SealSchema || inspection.Prospective.Provenance.Origin != nil {
 		t.Fatalf("historical Candidate projection=%+v err=%v", inspection, err)
 	}
 	afterCandidate, err := repo.candidates.LoadSnapshot("root")
-	if err != nil || string(afterCandidate.Bytes) != string(beforeCandidate.Bytes) {
+	if err != nil || string(afterCandidate.Bytes) != string(candidateBytes) {
 		t.Fatalf("historical Candidate bytes changed: %v", err)
 	}
 	v6Candidate, err := repo.InspectCandidate(ctx, "candidate-v6")
@@ -246,14 +252,14 @@ func TestFormat7ReadsFormat6AndHistoricalCandidate(t *testing.T) {
 		t.Fatalf("format-6 Candidate projection=%+v err=%v", v6Candidate, err)
 	}
 	afterV6Candidate, err := repo.candidates.LoadSnapshot("candidate-v6")
-	if err != nil || string(afterV6Candidate.Bytes) != string(beforeV6Candidate.Bytes) {
+	if err != nil || string(afterV6Candidate.Bytes) != string(v6CandidateBytes) {
 		t.Fatalf("format-6 Candidate bytes changed: %v", err)
 	}
-	afterSeal, err := repo.objects.ReadObject(ctx, fixture.first.ID)
-	if err != nil || string(afterSeal.Data) != string(beforeSeal.Data) {
+	afterSeal, err := repo.objects.ReadObject(ctx, firstID)
+	if err != nil || string(afterSeal.Data) != string(sealBytes) {
 		t.Fatalf("historical Seal bytes changed: %v", err)
 	}
-	resolvedV6, err := repo.LoadSeal(ctx, successorSeal.ID)
+	resolvedV6, err := repo.LoadSeal(ctx, successorID)
 	if err != nil || resolvedV6.Seal.Schema != "sealgraph/seal/v6" || resolvedV6.Provenance.Origin != nil {
 		t.Fatalf("format-6 Seal read=%+v err=%v", resolvedV6, err)
 	}
