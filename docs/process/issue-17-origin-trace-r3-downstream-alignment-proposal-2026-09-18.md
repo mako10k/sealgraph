@@ -2,9 +2,9 @@
 
 - 状態：Proposed。採用済み要件・設計・計画の改訂ではない。
 - 日付：2026-09-18
-- 上位候補：[R3-c1 要件差分](issue-17-origin-trace-requirement-r3-candidate-2026-09-18.md)（未承認）。基底は Accepted R1 + R2。
+- 上位要件：[R3-c1 要件差分](issue-17-origin-trace-requirement-r3-candidate-2026-09-18.md)は[承認記録](issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)により Accepted。基底は Accepted R1 + R2。本書の下流整合案は引き続き Proposed。
 - 対象：Accepted [ADR 0036](../adr/0036-origin-trace-r2-presence-and-directional-observation.md)、[0037](../adr/0037-origin-trace-r2-search-and-estimation.md)、[0038](../adr/0038-origin-trace-r2-cli-and-observation-output.md)、[0039](../adr/0039-origin-trace-derived-occurrence-positions.md)、[計画 P2](issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) の後継文書で必要な整合範囲。
-- 承認済みの各 exact snapshot・Seal は履歴として保持する。R3-c1 の採否が未決の間、本案を実装・公開契約の根拠にしない。
+- 承認済みの各 exact snapshot・Seal は履歴として保持する。本案は下流の採用判断を代行せず、実装・公開契約の根拠にしない。
 
 ## 1. 判断の出発点
 
@@ -40,6 +40,6 @@ ADR 0036～0038 の承認済み内容で R3 と両立する箇所は保存する
 
 ## 4. 境界と次の判断
 
-本案の一部は R3-c1 に依存する提案であり、採用済み ADR の権限ではない。最初の判断は R3-c1 のレビュー経路である。独立レビューはその経路選択後の exact snapshot に限る。R3 採用後に公開操作/schema、既定件数上限、各操作が S/F のどちらを使うかを後継設計で決め、その設計の採用と P2 後継計画・PERT の整合を経て実装へ進む。
+本案は Accepted R3-c1 に対する下流の提案であり、採用済み ADR の権限ではない。R3-c1 は exact snapshot の独立レビューを経て所有者が採用した。次に公開操作/schema、既定件数上限、各操作が S/F のどちらを使うかを後継設計で決め、その設計の採用と P2 後継計画・PERT の整合を経て実装へ進む。
 
 現在利用者が使える Issue #17 の新機能はない。本案は Accepted 仕様との衝突範囲と残る判断を可視化したものであり、実装・検証・提供・日程の確約を示さない。
