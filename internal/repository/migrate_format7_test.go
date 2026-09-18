@@ -57,13 +57,7 @@ func prepareFormat7MigrationFixture(t *testing.T, sourceFormat int) (context.Con
 	t.Helper()
 	ctx := context.Background()
 	root := t.TempDir()
-	if _, err := InitStandalone(root); err != nil {
-		t.Fatal(err)
-	}
-	repo, err := OpenStandalone(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	repo := initFormat7MigrationSource(t, root)
 	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("old"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -80,10 +74,11 @@ func prepareFormat7MigrationFixture(t *testing.T, sourceFormat int) (context.Con
 		if _, err := MigrateRepository5To6(ctx, root); err != nil {
 			t.Fatal(err)
 		}
-		repo, err = OpenStandalone(root)
+		migrated, err := OpenStandalone(root)
 		if err != nil {
 			t.Fatal(err)
 		}
+		repo = migrated
 		if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("successor-v6")}); err != nil {
 			t.Fatal(err)
 		}
@@ -95,6 +90,18 @@ func prepareFormat7MigrationFixture(t *testing.T, sourceFormat int) (context.Con
 		}
 	}
 	return ctx, root, repo
+}
+
+func initFormat7MigrationSource(t *testing.T, root string) *Repository {
+	t.Helper()
+	if _, err := InitStandalone(root); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenStandalone(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo
 }
 
 func TestMigrateRepositoryTo7RejectsWrongSourceAndCorruptionBeforeCommit(t *testing.T) {
