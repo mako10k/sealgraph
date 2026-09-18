@@ -141,7 +141,7 @@ task SELF_COMPARE SELF_READY -> SELF:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P4; R2/R3 AC4/5/8/12/13/16; ADR0038"
@@ -335,3 +335,10 @@ work_event TRACE_AUTHOR_FINISH_20260918:
   task TRACE_AUTHOR
   kind finish
   occurred_at 2026-09-18T16:13:20+09:00
+
+work_event SELF_COMPARE_START_20260918:
+  model 1
+  task SELF_COMPARE
+  kind start
+  occurred_at 2026-09-18T16:21:53+09:00
+  planned_value 5.5p
