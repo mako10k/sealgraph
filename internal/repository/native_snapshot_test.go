@@ -9,10 +9,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mako10k/sealgraph/internal/domain"
 	"github.com/mako10k/sealgraph/internal/migration"
 )
 
 func TestNativeSnapshotRestoresFullSourceAndOpaqueOrphan(t *testing.T) {
+	document, sealID, sourceID, orphanID := nativeRoundTripFixture(t)
+	target := t.TempDir()
+	receipt, err := LoadNativeSnapshotV1(context.Background(), target, document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := OpenStandalone(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNativeLoadReceipt(t, receipt, document)
+	assertNativeRestored(t, loaded, document, sealID, sourceID, orphanID)
+}
+
+func nativeRoundTripFixture(t *testing.T) ([]byte, domain.ObjectID, domain.ObjectID, domain.ObjectID) {
+	t.Helper()
 	ctx := context.Background()
 	source := openFormat7Fixture(t)
 	sealID, sourceID := format7SealFixture(t, source, []byte("abcXYZtail"), 3)
@@ -25,6 +42,16 @@ func TestNativeSnapshotRestoresFullSourceAndOpaqueOrphan(t *testing.T) {
 	if _, err := source.Add(ctx, AddOptions{REF: "draft", Content: []byte("draft"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
 		t.Fatal(err)
 	}
+	path := filepath.Join(source.workDir, "original.txt")
+	if err := os.WriteFile(path, []byte("abcXYZtail"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.TraceSourceBind(ctx, "source-A", "original.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 	orphanID := putFormat7Record(t, source, []byte("opaque orphan"))
 	document, err := source.DumpNativeSnapshotV1(ctx)
 	if err != nil {
@@ -34,21 +61,30 @@ func TestNativeSnapshotRestoresFullSourceAndOpaqueOrphan(t *testing.T) {
 	if err != nil || len(snapshot.REFs) != 1 || len(snapshot.Candidates) != 1 {
 		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
 	}
-	target := t.TempDir()
-	receipt, err := LoadNativeSnapshotV1(ctx, target, document)
+	return document, sealID, sourceID, orphanID
+}
+
+func assertNativeLoadReceipt(t *testing.T, receipt, document []byte) {
+	t.Helper()
+	var result nativeLoadReceipt
+	snapshot, err := migration.DecodeNativeSnapshotV1(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var result nativeLoadReceipt
 	if err := json.Unmarshal(bytes.TrimSpace(receipt), &result); err != nil || result.Schema != "sealgraph/native-load/v1" || result.Result != "LOADED" || result.RepositoryFormat != 7 || result.REFs != 1 || result.Candidates != 1 || result.Blobs != len(snapshot.Blobs) {
 		t.Fatalf("receipt=%s err=%v", receipt, err)
 	}
-	loaded, err := OpenStandalone(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+}
+
+func assertNativeRestored(t *testing.T, loaded *Repository, document []byte, sealID, sourceID, orphanID domain.ObjectID) {
+	t.Helper()
+	ctx := context.Background()
 	if _, err := loaded.Fsck(ctx); err != nil {
 		t.Fatal(err)
+	}
+	bindings, err := loaded.TraceSourceList()
+	if err != nil || len(bindings) != 0 {
+		t.Fatalf("local bindings transported: %+v err=%v", bindings, err)
 	}
 	restored, err := loaded.objects.ReadObject(ctx, sourceID)
 	if err != nil || !bytes.Equal(restored.Data, []byte("abcXYZtail")) {
