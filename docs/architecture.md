@@ -373,7 +373,11 @@ deterministic fixtures, compatibility consideration, and an approved ADR.
 
 ## 9. Format-7 origin trace boundaries
 
-Accepted Issue #17 R1/R2/R3 and ADRs 0033, 0035–0040 govern this successor.
+Accepted Issue #17 R1/R2/R3 govern this successor. ADR 0033 governs storage;
+ADRs 0036–0038 supersede conflicting comparison clauses of ADRs 0032/0034/0035;
+ADRs 0039/0040 add derived occurrence positions and paging; ADR 0041 updates
+the format-7 trace mutation receipt. Earlier ADR clauses not replaced by these
+decisions remain applicable under their acceptance records.
 `internal/domain/v7` and `internal/canonical/v7` define and encode
 SourceSnapshot, OriginMap, Provenance v3, Seal v7, and Candidate v7. The
 repository validates the complete typed closure and exact source-copy bytes;

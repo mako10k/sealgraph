@@ -2,10 +2,13 @@
 
 Status: the checked-in standalone CLI creates repository format 5 and opens
 formats 5, 6, and 7. Accepted ADRs 0023, 0025–0027 govern format 5;
-ADRs 0029–0031 govern format 6. Accepted Issue #17 R1/R2/R3 and ADRs
-0033, 0035–0040 govern the format-7 additions in §9. The older sections
-retain the format-5/6 contracts; original ADR `Proposed` headings are
-historical and their acceptance records establish current authority.
+ADRs 0029–0031 govern format 6. Accepted Issue #17 R1/R2/R3 and ADR 0033
+govern the format-7 storage boundary; ADR 0035 governs CLI clauses retained
+after ADRs 0036–0038 revise comparison, ADRs 0039/0040 add derived occurrence
+positions and paging, and ADR 0041 updates the trace mutation receipt (§9).
+The older sections retain the format-5/6 contracts; original ADR `Proposed`
+headings are historical and their acceptance records establish current
+authority.
 
 ## 0. Discovery, diagnostics, and output
 
@@ -613,8 +616,11 @@ automatic relink, or approval.
 ## 9. Format-7 origin trace
 
 Accepted [Issue #17 R1/R2/R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)
-and [ADRs 0033–0040](adr/0033-origin-trace-storage-and-migration.md) govern
-this successor. Trace authoring is format-7-only; these commands never migrate
+govern this successor. [ADR 0033](adr/0033-origin-trace-storage-and-migration.md)
+governs storage, ADR 0035's unaffected CLI clauses remain, ADRs 0036–0038
+revise comparison, ADRs 0039/0040 add occurrence listing, and
+[ADR 0041](adr/0041-trace-mutation-receipt-input-file.md) updates the format-7
+mutation receipt. Trace authoring is format-7-only; these commands never migrate
 a repository implicitly or create a Candidate/Seal on the caller's behalf.
 
 ```sh
@@ -647,7 +653,11 @@ ordered External/Untraced runs cover all Candidate content with exact copy
 equality. New source files are retained **in full** as immutable Blobs, with
 file names and byte counts disclosed before storage; `trace set` does not bind
 their keys to current files. `trace clear` explicitly removes only the
-Candidate origin. Success uses `sealgraph/trace-mutation/v2`.
+Candidate origin. Success uses `sealgraph/trace-mutation/v2`. Its
+`stored_sources` entries include the input `file` path and byte length for
+this operation; an existing SnapshotID reused without file input has
+`input_file:null`. The input path is an operation receipt, not immutable
+provenance or a claim of a unique historical filename.
 
 `trace source` manages non-canonical source-key bindings to current safe
 files. Show/list do not open those files. `trace correspondence` manages local

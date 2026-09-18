@@ -4,10 +4,14 @@ Status: normative format-5, format-6, and format-7 contract. Accepted ADRs
 0023, 0025–0027 define format 5; ADRs 0029–0031 add format 6. The accepted
 Issue #17 [R1](process/issue-17-origin-trace-requirement-r1-acceptance-2026-09-17.md),
 [R2](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md),
-and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md),
-with accepted ADRs 0032–0040, govern the format-7 origin-trace additions in
-§17. Their acceptance records govern where original ADR files retain historical
-`Proposed` text. New repositories still initialize as format 5; later formats
+and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)
+govern the format-7 additions in §17. ADR 0033 governs storage; ADRs 0036–0038
+replace conflicting comparison clauses of ADRs 0032/0034/0035; ADRs 0039/0040
+add derived positions and paging; ADR 0041 succeeds the format-7 trace
+mutation receipt. Unreplaced clauses of the earlier ADRs remain in force as
+specified by their acceptance records. Those records also govern where an
+original ADR file retains historical `Proposed` text. New repositories still
+initialize as format 5; later formats
 require explicit migration. Ordinary use fails closed on format 4.
 
 ## 1. Purpose
@@ -662,8 +666,10 @@ identity.
 
 This section applies the accepted Issue #17 R1, R2, and R3 requirement
 revisions. The exact accepted snapshots and their acceptance records remain the
-authority for detailed acceptance conditions AC1–AC21. Accepted ADRs 0033,
-0035–0040 specify the storage, search, observation, CLI, and paging contracts.
+authority for detailed acceptance conditions AC1–AC21. Accepted ADR 0033
+specifies storage, ADRs 0036–0038 the revised search and observation, ADRs
+0039/0040 derived positions and paging, and ADR 0041 the trace mutation
+receipt. The unaffected portions of ADRs 0032/0034/0035 remain applicable.
 The earlier sections continue to govern format-5/6 behavior and common
 invariants unless the accepted successor contract explicitly extends them.
 
