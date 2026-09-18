@@ -38,6 +38,15 @@ func putFormat7Record(t *testing.T, repo *Repository, data []byte) domain.Object
 	return id
 }
 
+func putFormat7Material(t *testing.T, repo *Repository, contentID domain.ObjectID) domain.ObjectID {
+	t.Helper()
+	data, err := canonicalv5.EncodeMaterial(domainv5.Material{Schema: domainv5.MaterialSchema, Content: contentID, Attachments: []domainv5.Attachment{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return putFormat7Record(t, repo, data)
+}
+
 func format7SealFixture(t *testing.T, repo *Repository, source []byte, start uint64) (domain.ObjectID, domain.ObjectID) {
 	t.Helper()
 	content := []byte("XYZ")
@@ -53,11 +62,7 @@ func format7SealFixture(t *testing.T, repo *Repository, source []byte, start uin
 		t.Fatal(err)
 	}
 	mapID := putFormat7Record(t, repo, mapBytes)
-	materialBytes, err := canonicalv5.EncodeMaterial(domainv5.Material{Schema: domainv5.MaterialSchema, Content: contentID, Attachments: []domainv5.Attachment{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	materialID := putFormat7Record(t, repo, materialBytes)
+	materialID := putFormat7Material(t, repo, contentID)
 	provenanceBytes, err := canonicalv7.EncodeProvenance(domainv7.Provenance{Schema: domainv7.ProvenanceSchema, Root: true, CauseLinks: []domainv7.CauseLink{}, Origin: &mapID})
 	if err != nil {
 		t.Fatal(err)
@@ -120,11 +125,7 @@ func TestFormat7DistinguishesUntracedMapFromNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	mapID := putFormat7Record(t, repo, mapBytes)
-	materialBytes, err := canonicalv5.EncodeMaterial(domainv5.Material{Schema: domainv5.MaterialSchema, Content: contentID, Attachments: []domainv5.Attachment{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	materialID := putFormat7Record(t, repo, materialBytes)
+	materialID := putFormat7Material(t, repo, contentID)
 	sealForOrigin := func(origin *domain.ObjectID) domain.ObjectID {
 		t.Helper()
 		p, err := canonicalv7.EncodeProvenance(domainv7.Provenance{Schema: domainv7.ProvenanceSchema, Root: true, CauseLinks: []domainv7.CauseLink{}, Origin: origin})
@@ -242,11 +243,7 @@ func TestFormat7RejectsCrossGenerationPair(t *testing.T) {
 	repo := openFormat7Fixture(t)
 	ctx := context.Background()
 	contentID := putFormat7Record(t, repo, []byte("content"))
-	materialBytes, err := canonicalv5.EncodeMaterial(domainv5.Material{Schema: domainv5.MaterialSchema, Content: contentID, Attachments: []domainv5.Attachment{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	materialID := putFormat7Record(t, repo, materialBytes)
+	materialID := putFormat7Material(t, repo, contentID)
 	legacyBytes, err := canonicalv5.EncodeProvenance(domainv5.Provenance{Schema: domainv5.ProvenanceSchema, Root: true, CauseLinks: []domainv5.CauseLink{}})
 	if err != nil {
 		t.Fatal(err)

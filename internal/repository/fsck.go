@@ -297,37 +297,8 @@ func validateFsckTypedReferences(inventory fsckInventory) error {
 		objectData[object.ID.String()] = object.Data
 	}
 	for id, seal := range inventory.seals {
-		if _, ok := inventory.materials[seal.Material.String()]; !ok {
-			return fmt.Errorf("Seal %s references Blob %s that is not a canonical Material", id, seal.Material)
-		}
-		if _, ok := inventory.provenances[seal.Provenance.String()]; !ok {
-			return fmt.Errorf("Seal %s references Blob %s that is not canonical Provenance", id, seal.Provenance)
-		}
-		sealGeneration := inventory.sealGeneration[id]
-		provenanceGeneration := inventory.provenanceGeneration[seal.Provenance.String()]
-		if (sealGeneration == 5 && provenanceGeneration != 1) || (sealGeneration == 6 && provenanceGeneration != 2) || (sealGeneration == 7 && provenanceGeneration != 3) {
-			return fmt.Errorf("Seal %s generation v%d cross-pairs with Provenance generation v%d", id, sealGeneration, provenanceGeneration)
-		}
-		if sealGeneration == 7 {
-			provenance := inventory.provenances[seal.Provenance.String()]
-			if provenance.Origin != nil {
-				material := inventory.materials[seal.Material.String()]
-				read := func(child domain.ObjectID) ([]byte, error) {
-					data, ok := objectData[child.String()]
-					if !ok {
-						return nil, fmt.Errorf("missing Blob %s", child)
-					}
-					return data, nil
-				}
-				origin, snapshots, err := originClosure(material.Content, objectData[material.Content.String()], *provenance.Origin, read)
-				if err != nil {
-					return fmt.Errorf("Seal %s has invalid origin closure: %w", id, err)
-				}
-				inventory.origins[provenance.Origin.String()] = origin
-				for snapshotID, snapshot := range snapshots {
-					inventory.snapshots[snapshotID] = snapshot
-				}
-			}
+		if err := validateFsckSealReferences(id, seal, inventory, objectData); err != nil {
+			return err
 		}
 	}
 	for id, material := range inventory.materials {
@@ -351,6 +322,41 @@ func validateFsckTypedReferences(inventory fsckInventory) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func validateFsckSealReferences(id string, seal domainv5.Seal, inventory fsckInventory, objectData map[string][]byte) error {
+	material, ok := inventory.materials[seal.Material.String()]
+	if !ok {
+		return fmt.Errorf("Seal %s references Blob %s that is not a canonical Material", id, seal.Material)
+	}
+	provenance, ok := inventory.provenances[seal.Provenance.String()]
+	if !ok {
+		return fmt.Errorf("Seal %s references Blob %s that is not canonical Provenance", id, seal.Provenance)
+	}
+	sealGeneration := inventory.sealGeneration[id]
+	provenanceGeneration := inventory.provenanceGeneration[seal.Provenance.String()]
+	if (sealGeneration == 5 && provenanceGeneration != 1) || (sealGeneration == 6 && provenanceGeneration != 2) || (sealGeneration == 7 && provenanceGeneration != 3) {
+		return fmt.Errorf("Seal %s generation v%d cross-pairs with Provenance generation v%d", id, sealGeneration, provenanceGeneration)
+	}
+	if sealGeneration != 7 || provenance.Origin == nil {
+		return nil
+	}
+	read := func(child domain.ObjectID) ([]byte, error) {
+		data, ok := objectData[child.String()]
+		if !ok {
+			return nil, fmt.Errorf("missing Blob %s", child)
+		}
+		return data, nil
+	}
+	origin, snapshots, err := originClosure(material.Content, objectData[material.Content.String()], *provenance.Origin, read)
+	if err != nil {
+		return fmt.Errorf("Seal %s has invalid origin closure: %w", id, err)
+	}
+	inventory.origins[provenance.Origin.String()] = origin
+	for snapshotID, snapshot := range snapshots {
+		inventory.snapshots[snapshotID] = snapshot
 	}
 	return nil
 }

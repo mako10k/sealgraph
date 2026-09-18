@@ -101,11 +101,6 @@ func DecodeSeal(data []byte) (domainv7.Seal, error) {
 	return decodeCanonical(data, "seal", parseSeal, EncodeSeal)
 }
 
-func EncodeMaterial(v domainv7.Material) ([]byte, error) { return encodeMaterial(v) }
-func DecodeMaterial(data []byte) (domainv7.Material, error) {
-	return decodeCanonical(data, "material", parseMaterial, EncodeMaterial)
-}
-
 func EncodeProvenance(v domainv7.Provenance) ([]byte, error) {
 	n, err := normalizeProvenance(v)
 	if err != nil {
@@ -113,18 +108,7 @@ func EncodeProvenance(v domainv7.Provenance) ([]byte, error) {
 	}
 	b := []byte(`{"schema":`)
 	b, _ = canonical.AppendString(b, n.Schema)
-	b = append(b, `,"root":`...)
-	b = canonical.AppendBool(b, n.Root)
-	b = append(b, `,"draft":`...)
-	b = canonical.AppendBool(b, n.Draft)
-	b = append(b, `,"cause_links":`...)
-	b, err = appendCauseLinks(b, n.CauseLinks)
-	if err != nil {
-		return nil, err
-	}
-	b = append(b, `,"origin":`...)
-	b = appendOptionalID(b, n.Origin)
-	return append(b, '}'), nil
+	return appendOriginState(b, n.Root, n.Draft, n.CauseLinks, n.Origin)
 }
 func DecodeProvenance(data []byte) (domainv7.Provenance, error) {
 	return decodeCanonical(data, "provenance", parseProvenance, EncodeProvenance)
@@ -148,38 +132,10 @@ func EncodeCandidate(v domainv7.Candidate) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	b = append(b, `,"root":`...)
-	b = canonical.AppendBool(b, n.Root)
-	b = append(b, `,"draft":`...)
-	b = canonical.AppendBool(b, n.Draft)
-	b = append(b, `,"cause_links":`...)
-	b, err = appendCauseLinks(b, n.CauseLinks)
-	if err != nil {
-		return nil, err
-	}
-	b = append(b, `,"origin":`...)
-	b = appendOptionalID(b, n.Origin)
-	return append(b, '}'), nil
+	return appendOriginState(b, n.Root, n.Draft, n.CauseLinks, n.Origin)
 }
 func DecodeCandidate(data []byte) (domainv7.Candidate, error) {
 	return decodeCanonical(data, "candidate", parseCandidate, EncodeCandidate)
-}
-
-func encodeMaterial(v domainv7.Material) ([]byte, error) {
-	n, err := domainv5.NormalizeMaterial(v)
-	if err != nil {
-		return nil, err
-	}
-	b := []byte(`{"schema":`)
-	b, _ = canonical.AppendString(b, n.Schema)
-	b = append(b, `,"content":`...)
-	b, _ = canonical.AppendNativeObjectID(b, n.Content)
-	b = append(b, `,"attachments":`...)
-	b, err = appendAttachments(b, n.Attachments)
-	if err != nil {
-		return nil, err
-	}
-	return append(b, '}'), nil
 }
 
 func normalizeProvenance(v domainv7.Provenance) (domainv7.Provenance, error) {
@@ -223,6 +179,22 @@ func appendOptionalID(b []byte, id *domain.ObjectID) []byte {
 	}
 	x, _ := canonical.AppendNativeObjectID(b, *id)
 	return x
+}
+
+func appendOriginState(b []byte, root, draft bool, links []domainv5.CauseLink, origin *domain.ObjectID) ([]byte, error) {
+	b = append(b, `,"root":`...)
+	b = canonical.AppendBool(b, root)
+	b = append(b, `,"draft":`...)
+	b = canonical.AppendBool(b, draft)
+	b = append(b, `,"cause_links":`...)
+	var err error
+	b, err = appendCauseLinks(b, links)
+	if err != nil {
+		return nil, err
+	}
+	b = append(b, `,"origin":`...)
+	b = appendOptionalID(b, origin)
+	return append(b, '}'), nil
 }
 func appendAttachments(b []byte, a []domainv5.Attachment) ([]byte, error) {
 	b = append(b, '[')
@@ -464,27 +436,6 @@ func parseSeal(data []byte) (domainv7.Seal, error) {
 	}
 	p, e := oidReq(f, "provenance")
 	return domainv7.Seal{Schema: s, Material: m, Provenance: p}, e
-}
-func parseMaterial(data []byte) (domainv7.Material, error) {
-	var v domainv5.Material
-	f, e := object(data, "schema", "content", "attachments")
-	if e != nil {
-		return v, e
-	}
-	v.Schema, e = strReq(f, "schema")
-	if e != nil {
-		return v, e
-	}
-	v.Content, e = oidReq(f, "content")
-	if e != nil {
-		return v, e
-	}
-	var raws []json.RawMessage
-	if e = json.Unmarshal(f["attachments"], &raws); e != nil {
-		return v, e
-	}
-	v.Attachments, e = parseAttachments(raws)
-	return v, e
 }
 func parseAttachments(raws []json.RawMessage) ([]domainv5.Attachment, error) {
 	r := make([]domainv5.Attachment, len(raws))
