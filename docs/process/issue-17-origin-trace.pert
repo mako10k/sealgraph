@@ -117,7 +117,7 @@ task TRACE_AUTHOR TYPES -> AUTHOR:
     optimistic 3p
     most_likely 5p
     pessimistic 9p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P2; R1/R3 AC1/2/3/15/20; ADR0033/0035"
@@ -329,3 +329,9 @@ work_event TRACE_AUTHOR_START_20260918:
   kind start
   occurred_at 2026-09-18T14:23:18+09:00
   planned_value 16/3p
+
+work_event TRACE_AUTHOR_FINISH_20260918:
+  model 1
+  task TRACE_AUTHOR
+  kind finish
+  occurred_at 2026-09-18T16:13:20+09:00
