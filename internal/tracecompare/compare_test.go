@@ -17,6 +17,7 @@ func TestComparePriorityAndBoundaries(t *testing.T) {
 		{"shifted point before earlier copy", Input{[]byte("abcXdef"), 3, []byte("X"), []byte("XabcXdef")}, Present, 4},
 		{"interval before remainder", Input{[]byte("abcXdef"), 3, []byte("X"), []byte("aaaaXaXaaaaa")}, Present, 4},
 		{"balanced surrounding edits", Input{[]byte("abcXdef"), 3, []byte("X"), []byte("QQQabcXdefRRR")}, Present, 6},
+		{"same length with offset shift", Input{[]byte("abcXdef"), 3, []byte("X"), []byte("abXcdef")}, Present, 2},
 		{"duplicate priority", Input{[]byte("aaaa"), 1, []byte("aa"), []byte("aaaa")}, Present, 1},
 		{"remaining after shifted", Input{[]byte("abcXdef"), 3, []byte("X"), []byte("XabcYdef")}, Present, 0},
 		{"last valid start", Input{[]byte("abcdef"), 4, []byte("ef"), []byte("abef")}, Present, 2},
