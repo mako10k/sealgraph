@@ -47,6 +47,20 @@ func putFormat7Material(t *testing.T, repo *Repository, contentID domain.ObjectI
 	return putFormat7Record(t, repo, data)
 }
 
+func putFormat7Seal(t *testing.T, repo *Repository, materialID domain.ObjectID, origin *domain.ObjectID) domain.ObjectID {
+	t.Helper()
+	p, err := canonicalv7.EncodeProvenance(domainv7.Provenance{Schema: domainv7.ProvenanceSchema, Root: true, CauseLinks: []domainv7.CauseLink{}, Origin: origin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pID := putFormat7Record(t, repo, p)
+	s, err := canonicalv7.EncodeSeal(domainv7.Seal{Schema: domainv7.SealSchema, Material: materialID, Provenance: pID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return putFormat7Record(t, repo, s)
+}
+
 func format7SealFixture(t *testing.T, repo *Repository, source []byte, start uint64) (domain.ObjectID, domain.ObjectID) {
 	t.Helper()
 	content := []byte("XYZ")
@@ -63,16 +77,7 @@ func format7SealFixture(t *testing.T, repo *Repository, source []byte, start uin
 	}
 	mapID := putFormat7Record(t, repo, mapBytes)
 	materialID := putFormat7Material(t, repo, contentID)
-	provenanceBytes, err := canonicalv7.EncodeProvenance(domainv7.Provenance{Schema: domainv7.ProvenanceSchema, Root: true, CauseLinks: []domainv7.CauseLink{}, Origin: &mapID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	provenanceID := putFormat7Record(t, repo, provenanceBytes)
-	sealBytes, err := canonicalv7.EncodeSeal(domainv7.Seal{Schema: domainv7.SealSchema, Material: materialID, Provenance: provenanceID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return putFormat7Record(t, repo, sealBytes), sourceID
+	return putFormat7Seal(t, repo, materialID, &mapID), sourceID
 }
 
 func TestFormat7ReadsFullSourceClosure(t *testing.T) {
@@ -126,21 +131,8 @@ func TestFormat7DistinguishesUntracedMapFromNull(t *testing.T) {
 	}
 	mapID := putFormat7Record(t, repo, mapBytes)
 	materialID := putFormat7Material(t, repo, contentID)
-	sealForOrigin := func(origin *domain.ObjectID) domain.ObjectID {
-		t.Helper()
-		p, err := canonicalv7.EncodeProvenance(domainv7.Provenance{Schema: domainv7.ProvenanceSchema, Root: true, CauseLinks: []domainv7.CauseLink{}, Origin: origin})
-		if err != nil {
-			t.Fatal(err)
-		}
-		pID := putFormat7Record(t, repo, p)
-		s, err := canonicalv7.EncodeSeal(domainv7.Seal{Schema: domainv7.SealSchema, Material: materialID, Provenance: pID})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return putFormat7Record(t, repo, s)
-	}
-	withMap := sealForOrigin(&mapID)
-	withoutMap := sealForOrigin(nil)
+	withMap := putFormat7Seal(t, repo, materialID, &mapID)
+	withoutMap := putFormat7Seal(t, repo, materialID, nil)
 	if withMap.Equal(withoutMap) {
 		t.Fatal("distinct origin states have identical SealID")
 	}
@@ -149,6 +141,22 @@ func TestFormat7DistinguishesUntracedMapFromNull(t *testing.T) {
 	withoutResolved, withoutErr := repo.LoadSeal(ctx, withoutMap)
 	if withErr != nil || withoutErr != nil || withResolved.Provenance.Origin == nil || withoutResolved.Provenance.Origin != nil {
 		t.Fatalf("with=%+v err=%v without=%+v err=%v", withResolved, withErr, withoutResolved, withoutErr)
+	}
+}
+
+func TestFormat7EmptyContentHasEmptyRunCoverage(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	contentID := putFormat7Record(t, repo, nil)
+	mapBytes, err := canonicalv7.EncodeOriginMap(domainv7.OriginMap{Schema: domainv7.OriginMapSchema, Content: contentID, Runs: []domainv7.OriginRun{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapID := putFormat7Record(t, repo, mapBytes)
+	materialID := putFormat7Material(t, repo, contentID)
+	sealID := putFormat7Seal(t, repo, materialID, &mapID)
+	resolved, err := repo.LoadSeal(context.Background(), sealID)
+	if err != nil || resolved.ContentBytes != 0 || resolved.Provenance.Origin == nil {
+		t.Fatalf("empty content closure=%+v err=%v", resolved, err)
 	}
 }
 
