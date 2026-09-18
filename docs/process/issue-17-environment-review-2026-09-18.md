@@ -3,6 +3,7 @@
 - 測定日：2026-09-18、19:13～19:19 JST。
 - 対象：Accepted [R3 実装計画 P3](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) §2・§3 P8 と [正本 PERT](issue-17-origin-trace.pert) の `ENVIRONMENT_REVIEW`。本書は合成入力の初期測定記録であり、性能合格基準、利用可能な最大サイズ、実利用環境の保証ではない。
 - 入力と各試行の生値：[process-measurements.csv](measurements/issue-17-environment-review-2026-09-18/process-measurements.csv)、別実行のシステムコール I/O 観測：[syscall-io-sample.json](measurements/issue-17-environment-review-2026-09-18/syscall-io-sample.json)。両ファイルをこの測定の正本証拠として保存する。大きな合成 repository と出力文書は一時領域のみで、Git に含めない。
+- PERT 実績：`ENVIRONMENT_REVIEW` は19:11:58 JST に着手、19:21:27 JST に完了した。経過9分29秒は作業期間であり、投入工数としては記録していない。`ENVIRONMENT` milestone は測定記録に対応して reached とした。
 
 ## 条件
 
@@ -36,7 +37,7 @@
 
 `occurrences` 続きページは別の単発実行で位置100～199の100件、`has_more=true`、GNU time 0.03秒、最大 RSS 13,392 KiB。native load した両サイズの repository で `fsck` は `result=ok`。再 dump の exact bytes は元 dump と `cmp` で一致した。
 
-`--estimate` 付きの不在比較を、同じ構成のより小さい合成入力で別途試した。4 KiB は0.06秒、16 KiB は1.00秒で `ABSENT_EXACT` と `CANDIDATES` を返した。64 KiB は `timeout 10s` に達して終了コード124、1 MiB は76.89秒時点でも完了せず、測定者が signal 15 で停止した。後二者に成功 JSON はない。ここでの上限と停止は測定手順であり、製品の数値 budget や `INCOMPLETE` 応答ではない。推定時間の伸びはこの合成入力に対する観測に限り、実 workload や複雑度の一般則を証明しない。
+`--estimate` 付きの不在比較を、同じ構成のより小さい合成入力で別途試した。4 KiB は0.06秒・最大 RSS 9,376 KiB、16 KiB は1.00秒・10,944 KiBで `ABSENT_EXACT` と `CANDIDATES` を返した。64 KiB は `timeout 10s` に達して終了コード124・最大 RSS 10,772 KiB、1 MiB は76.89秒時点でも完了せず、測定者が signal 15 で停止した（最大 RSS 22,912 KiB）。GNU time の `%I/%O` は順に4 KiB入力で80/8、16 KiBで0/8、64 KiBで0/0、1 MiBで0/0。後二者に成功 JSON はない。ここでの上限と停止は測定手順であり、製品の数値 budget や `INCOMPLETE` 応答ではない。推定時間の伸びはこの合成入力に対する観測に限り、実 workload や複雑度の一般則を証明しない。
 
 別実行の syscall I/O 観測では、16 MiB compare の成功 read 系返却 bytes は約67.4 MB、16 MiB native load は約45.8 MB、16 MiB dump の stdout 文書は22,371,788 bytesだった。GNU time のウォーム後3回では全ケース `%I=0`。これは page cache に影響され、物理媒体から読まなかったことや総 I/O がゼロだったことを示さない。各ケースの `%O` と syscall subset の内訳は生値を参照。
 
