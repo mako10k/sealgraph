@@ -165,7 +165,7 @@ task DETAIL_TRIAL DIRECTIONS -> TRIAL:
     optimistic 1p
     most_likely 2p
     pessimistic 4p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; AC1-21"
@@ -413,3 +413,10 @@ work_event ENVIRONMENT_REVIEW_FINISH_20260918:
   task ENVIRONMENT_REVIEW
   kind finish
   occurred_at 2026-09-18T19:21:27+09:00
+
+work_event DETAIL_TRIAL_START_20260918:
+  model 1
+  task DETAIL_TRIAL
+  kind start
+  occurred_at 2026-09-18T19:26:25+09:00
+  planned_value 13/6p
