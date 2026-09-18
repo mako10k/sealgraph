@@ -121,9 +121,6 @@ func (r *Repository) Add(ctx context.Context, options AddOptions) (domainv5.Cand
 }
 
 func (r *Repository) addLocked(ctx context.Context, options AddOptions) (domainv5.Candidate, error) {
-	if r.format == 7 {
-		return domainv5.Candidate{}, fmt.Errorf("format-7 Candidate authoring is not available in the FORMAT_TYPES phase")
-	}
 	if err := domain.ValidateREF(options.REF); err != nil {
 		return domainv5.Candidate{}, err
 	}
@@ -163,7 +160,11 @@ func (r *Repository) applyAddOptions(ctx context.Context, edit candidateEdit, op
 		return domainv5.Candidate{}, fmt.Errorf("new Candidate %s requires explicit --root --clear-cause-links or --non-root with one complete --target group", options.REF)
 	}
 	candidate := edit.Candidate
-	candidate.Content = domain.ComputeNativeBlobID(options.Content)
+	contentID := domain.ComputeNativeBlobID(options.Content)
+	if r.format == 7 && candidate.Origin != nil && !candidate.Content.Equal(contentID) {
+		return domainv5.Candidate{}, fmt.Errorf("Candidate %s has origin trace; changing content requires trace set with content or trace clear", options.REF)
+	}
+	candidate.Content = contentID
 	if options.DraftSet {
 		candidate.Draft = options.Draft
 	}
@@ -218,6 +219,7 @@ func (r *Repository) candidateForObservedEdit(ctx context.Context, ref string, o
 		Schema: domainv5.CandidateSchema, REF: ref, ExpectedREFHead: &expected,
 		Content: resolved.Material.Content, Attachments: append([]domainv5.Attachment(nil), resolved.Material.Attachments...),
 		Root: resolved.Provenance.Root, Draft: resolved.Provenance.Draft,
+		Origin:     resolved.Provenance.Origin,
 		CauseLinks: cloneCauseLinks(resolved.Provenance.CauseLinks),
 	}}, nil
 }
@@ -349,9 +351,6 @@ type SealResult struct {
 }
 
 func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
-	if r.format == 7 {
-		return SealResult{}, fmt.Errorf("format-7 Seal authoring is not available in the FORMAT_TYPES phase")
-	}
 	return withMutation(ctx, r.writer, "seal REF", func() (SealResult, error) {
 		if err := domain.ValidateREF(ref); err != nil {
 			return SealResult{}, err
@@ -395,11 +394,14 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 		if err := r.refs.Update(ctx, ref, candidate.ExpectedREFHead, &sealID); err != nil {
 			return SealResult{}, fmt.Errorf("Seal Blob %s was written but REF %s was not advanced: %w", sealID, ref, err)
 		}
-		content, err := r.readRepositoryBlobID(ctx, candidate.Content, fmt.Sprintf("published content for %s", ref))
+		published, err := r.LoadSeal(ctx, sealID)
 		if err != nil {
-			return SealResult{ID: sealID, OperationID: record.ID}, fmt.Errorf("REF %s was published at Seal %s but published content readback failed: %w", ref, sealID, err)
+			return SealResult{ID: sealID, OperationID: record.ID}, fmt.Errorf("REF %s was published at Seal %s but published Seal readback failed: %w", ref, sealID, err)
 		}
-		resolved.ContentBytes = len(content)
+		if !published.Material.Content.Equal(candidate.Content) || !sameOrigin(published.Provenance.Origin, candidate.Origin) {
+			return SealResult{ID: sealID, OperationID: record.ID}, fmt.Errorf("REF %s was published at Seal %s but Material/Provenance origin readback differs from Candidate", ref, sealID)
+		}
+		resolved = published
 		result := SealResult{ID: sealID, Resolved: resolved, OperationID: record.ID}
 		if err := r.commitRecovery(record); err != nil {
 			return result, fmt.Errorf("REF %s was published at Seal %s but recovery record %s could not be marked COMMITTED: %w", ref, sealID, record.ID, err)
@@ -421,7 +423,12 @@ func (r *Repository) writeCandidateSealBlobs(ctx context.Context, ref string, ca
 		return domainv5.ResolvedSeal{}, err
 	}
 	var provenanceBytes, sealBytes []byte
-	if r.format == 6 {
+	if r.format == 7 {
+		provenanceBytes, err = canonicalv7.EncodeProvenance(resolved.Provenance)
+		if err == nil {
+			sealBytes, err = canonicalv7.EncodeSeal(resolved.Seal)
+		}
+	} else if r.format == 6 {
 		provenanceBytes, err = canonicalv6.EncodeProvenance(resolved.Provenance)
 		if err == nil {
 			sealBytes, err = canonicalv6.EncodeSeal(resolved.Seal)
@@ -459,8 +466,16 @@ func (r *Repository) validateSealCandidate(ctx context.Context, candidate domain
 	if err := r.validatePublicationExpectation(ctx, candidate); err != nil {
 		return headObservation{}, err
 	}
-	if _, err := r.readRepositoryBlobID(ctx, candidate.Content, fmt.Sprintf("Candidate content for %s", candidate.REF)); err != nil {
+	content, err := r.readRepositoryBlobID(ctx, candidate.Content, fmt.Sprintf("Candidate content for %s", candidate.REF))
+	if err != nil {
 		return headObservation{}, err
+	}
+	if r.format == 7 && candidate.Origin != nil {
+		if _, _, err := originClosure(candidate.Content, content, *candidate.Origin, func(child domain.ObjectID) ([]byte, error) {
+			return r.readRepositoryBlobID(ctx, child, "format-7 Candidate origin closure")
+		}); err != nil {
+			return headObservation{}, fmt.Errorf("Candidate %s has invalid origin closure: %w", candidate.REF, err)
+		}
 	}
 	for _, attachment := range candidate.Attachments {
 		if _, err := r.readRepositoryBlobID(ctx, attachment.Blob, fmt.Sprintf("Candidate attachment %q for %s", attachment.Name, candidate.REF)); err != nil {

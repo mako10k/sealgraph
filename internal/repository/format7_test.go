@@ -306,3 +306,103 @@ func TestFormat7RejectedAddLeavesNoOrphanContent(t *testing.T) {
 		t.Fatalf("rejected add changed object inventory: before=%d after=%d err=%v", len(before), len(after), err)
 	}
 }
+
+func TestFormat7TraceSetSealsExactMultipleSourceClosure(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("abc-XYZ"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(sourcePath, []byte("00abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourceBytes, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(sourcePath); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	set, err := repo.TraceSet(ctx, TraceSetOptions{
+		REF: "root", Runs: []TraceRunInput{{Kind: "external", Length: 3, SourceName: "a", SourceStart: 2}, {Kind: "untraced", Length: 1}, {Kind: "external", Length: 3, SourceName: "b", SourceStart: 1}},
+		Sources: []TraceSourceInput{{Name: "a", SourceKey: "A", Content: sourceBytes, DisplayPath: "a.txt"}, {Name: "b", SourceKey: "B", Content: []byte("-XYZ!")}},
+		BeforeStore: func(sources []StoredTraceSource) error {
+			called = true
+			if len(sources) != 2 || sources[0].DisplayPath != "a.txt" || sources[0].ByteCount != 5 {
+				t.Fatalf("pre-store sources=%+v", sources)
+			}
+			return nil
+		},
+	})
+	if err != nil || !called || set.Candidate.Origin == nil || !set.OriginID.Equal(*set.Candidate.Origin) {
+		t.Fatalf("set=%+v err=%v called=%v", set, err, called)
+	}
+	sealed, err := repo.Seal(ctx, "root")
+	if err != nil || sealed.Resolved.Provenance.Origin == nil || !sealed.Resolved.Provenance.Origin.Equal(set.OriginID) {
+		t.Fatalf("seal=%+v err=%v", sealed, err)
+	}
+	loaded, err := repo.LoadOrigin(ctx, set.OriginID, sealed.Resolved.Material.Content)
+	if err != nil || len(loaded.Sources) != 2 {
+		t.Fatalf("origin=%+v err=%v", loaded, err)
+	}
+	sources := map[string]string{}
+	for _, source := range loaded.Sources {
+		sources[source.Snapshot.SourceKey] = string(source.Content)
+	}
+	if sources["A"] != "00abc" || sources["B"] != "-XYZ!" {
+		t.Fatalf("full source recovery=%+v", sources)
+	}
+}
+
+func TestFormat7TraceSetRequiresExistingCandidateAndClearIsExplicit(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	ctx := context.Background()
+	if _, err := repo.TraceSet(ctx, TraceSetOptions{REF: "missing"}); err == nil {
+		t.Fatal("trace set created a Candidate")
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("abc"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.TraceSet(ctx, TraceSetOptions{REF: "root", Runs: []TraceRunInput{{Kind: "untraced", Length: 3}}}); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := repo.TraceClear(ctx, "root")
+	if err != nil || !cleared.Changed || cleared.Candidate.Origin != nil {
+		t.Fatalf("clear=%+v err=%v", cleared, err)
+	}
+	again, err := repo.TraceClear(ctx, "root")
+	if err != nil || again.Changed || again.BeforeCandidateSHA256 != again.AfterCandidateSHA256 {
+		t.Fatalf("clear again=%+v err=%v", again, err)
+	}
+}
+
+func TestFormat7TraceSetCanReuseExactSourceSnapshot(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("abc"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := repo.TraceSet(ctx, TraceSetOptions{REF: "root", Runs: []TraceRunInput{{Kind: "external", Length: 3, SourceName: "source"}}, Sources: []TraceSourceInput{{Name: "source", SourceKey: "key", Content: []byte("abc")}}})
+	if err != nil || len(first.StoredSources) != 1 {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	if _, err := repo.TraceClear(ctx, "root"); err != nil {
+		t.Fatal(err)
+	}
+	second, err := repo.TraceSet(ctx, TraceSetOptions{REF: "root", Runs: []TraceRunInput{{Kind: "external", Length: 3, SourceName: "reused"}}, Sources: []TraceSourceInput{{Name: "reused", SnapshotID: &first.StoredSources[0].SnapshotID}}})
+	if err != nil || len(second.StoredSources) != 1 || second.StoredSources[0].New || !second.StoredSources[0].SnapshotID.Equal(first.StoredSources[0].SnapshotID) {
+		t.Fatalf("second=%+v err=%v", second, err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("changed")}); err == nil {
+		t.Fatal("add silently changed traced content")
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("abc")}); err != nil {
+		t.Fatalf("same-content add did not preserve trace: %v", err)
+	}
+	inspection, err := repo.InspectCandidate(ctx, "root")
+	if err != nil || inspection.Candidate.Origin == nil || !inspection.Candidate.Origin.Equal(second.OriginID) {
+		t.Fatalf("inspection=%+v err=%v", inspection, err)
+	}
+}

@@ -97,12 +97,12 @@ func (s candidateStore) decode(data []byte) (domainv5.Candidate, error) {
 }
 
 func (s candidateStore) SaveIfUnchanged(candidate domainv5.Candidate, expected []byte, expectedPresent bool) error {
-	if s.format == 7 {
-		return fmt.Errorf("format-7 Candidate authoring is not available in the FORMAT_TYPES phase")
-	}
 	var data []byte
 	var err error
-	if s.format == 6 {
+	if s.format == 7 {
+		candidate.Schema = "sealgraph/candidate/v7"
+		data, err = canonicalv7.EncodeCandidate(candidate)
+	} else if s.format == 6 {
 		candidate.Schema = "sealgraph/candidate/v6"
 		data, err = canonicalv6.EncodeCandidate(candidate)
 	} else {

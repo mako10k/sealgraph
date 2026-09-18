@@ -33,8 +33,8 @@ func (r *Repository) RemoveLinkMetadata(ctx context.Context, ref, target, namesp
 }
 
 func (r *Repository) mutateLinkMetadata(ctx context.Context, action, ref, target, namespace string, replacement *domainv5.MetadataEntry) (LinkMetadataMutationResult, error) {
-	if r.format != 6 {
-		return LinkMetadataMutationResult{}, errors.New("Link metadata mutation requires repository format 6")
+	if r.format != 6 && r.format != 7 {
+		return LinkMetadataMutationResult{}, errors.New("Link metadata mutation requires repository format 6 or 7")
 	}
 	if replacement == nil {
 		if _, err := canonicalv6.NormalizeMetadata([]domainv5.MetadataEntry{{Namespace: namespace, Value: json.RawMessage("null")}}); err != nil {
@@ -91,7 +91,7 @@ func (r *Repository) mutateLinkMetadataLocked(ctx context.Context, action, ref, 
 		return LinkMetadataMutationResult{}, err
 	}
 	result := LinkMetadataMutationResult{Action: action, REF: ref, Namespace: namespace, TargetSeal: resolved.ID.String(), Before: before, After: cloneMetadataEntry(replacement), Candidate: candidate, Prospective: prospective}
-	if replacement != nil && before != nil && metadataEntriesEqual(*before, *replacement) && edit.Candidate.Schema == "sealgraph/candidate/v6" {
+	if replacement != nil && before != nil && metadataEntriesEqual(*before, *replacement) && (edit.Candidate.Schema == "sealgraph/candidate/v6" || edit.Candidate.Schema == "sealgraph/candidate/v7") {
 		return result, nil
 	}
 	if err := r.validateCandidateMutation(ctx, candidate, observation); err != nil {
