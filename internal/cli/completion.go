@@ -61,7 +61,7 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 
 func completionForOption(prior []string) (string, []string, bool) {
 	switch prior[len(prior)-1] {
-	case "--file", "--content-file", "--value-file":
+	case "--file", "--content-file", "--value-file", "--recipe":
 		return "file", nil, true
 	case "--format":
 		if prior[0] == "load" || (prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract") {
@@ -124,7 +124,7 @@ func repositoryCompletionValues(workDir, path string) []string {
 		return nil
 	}
 	switch path {
-	case "seal", "candidate show", "candidate compare", "candidate discard":
+	case "seal", "candidate show", "candidate compare", "candidate discard", "trace set", "trace clear":
 		return names.Candidates
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources

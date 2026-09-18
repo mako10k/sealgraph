@@ -34,9 +34,6 @@ type Run struct {
 	SourceStart uint64
 }
 
-// Decode is an alias for Parse.
-func Decode(data []byte) (Recipe, error) { return Parse(data) }
-
 func Parse(data []byte) (Recipe, error) {
 	if !utf8.Valid(data) {
 		return Recipe{}, fmt.Errorf("recipe is not valid UTF-8")

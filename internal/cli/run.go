@@ -81,6 +81,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runInit(workDir, args[1:], stdout, stderr), true
 	case "add":
 		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr), true
+	case "trace":
+		return runTrace(ctx, workDir, args[1:], stdin, stdout, stderr), true
 	case "source":
 		return runSource(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
