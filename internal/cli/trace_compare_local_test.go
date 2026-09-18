@@ -53,3 +53,21 @@ func TestBuildTraceCompareLocalKeepsNoTraceSeparate(t *testing.T) {
 		t.Fatalf("no trace local=%+v", local)
 	}
 }
+
+func TestBuildTraceCompareLocalKeepsAbsentWhenEstimateIncomplete(t *testing.T) {
+	content := domain.ComputeNativeBlobID([]byte("abc"))
+	origin := domain.ComputeNativeBlobID([]byte("origin"))
+	snapshot := domain.ComputeNativeBlobID([]byte("snapshot"))
+	current := domain.ComputeNativeBlobID([]byte("current"))
+	local := buildTraceCompareLocal(repository.TraceCompareOwnResult{
+		Content: content, Origin: &origin,
+		Runs: []repository.TraceOwnRunResult{{
+			SourceSnapshotID: snapshot, SourceKey: "source-A", Length: 3, CurrentBlobID: &current,
+			Presence: tracecompare.AbsentExact, PresenceReason: "NO_EXACT_MATCH", Examined: true,
+			Estimate: &repository.TraceOwnEstimateResult{State: "INCOMPLETE", Method: "single-diff-lcs-v1", Reason: "recoverable resource error"},
+		}},
+	})
+	if !local.Complete || !local.HasDifference || local.HasUnresolved || local.Ranges[0].Presence != "ABSENT_EXACT" || local.Ranges[0].Estimate.State != "INCOMPLETE" || local.Ranges[0].Estimate.Method == nil {
+		t.Fatalf("incomplete estimate changed exact presence: %+v", local)
+	}
+}
