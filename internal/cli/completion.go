@@ -66,7 +66,13 @@ func completionForOption(prior []string) (string, []string, bool) {
 	case "--file", "--content-file", "--value-file", "--recipe":
 		return "file", nil, true
 	case "--format":
-		if prior[0] == "load" || (prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract") {
+		if prior[0] == "load" {
+			return "plain", []string{"universal-blob-v1", "native-blobs-v1"}, true
+		}
+		if prior[0] == "dump" {
+			return "plain", []string{"native-blobs-v1"}, true
+		}
+		if prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract" {
 			return "plain", []string{"universal-blob-v1"}, true
 		}
 		return "plain", []string{"human", "json"}, true

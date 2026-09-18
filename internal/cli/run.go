@@ -394,6 +394,8 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 		return runGraph(ctx, workDir, args[1:], stdout, stderr)
 	case "fsck":
 		return runFsck(ctx, workDir, args[1:], stdout, stderr)
+	case "dump":
+		return runDump(ctx, workDir, args[1:], stdout, stderr)
 	case "migrate":
 		return runMigrate(ctx, workDir, args[1:], stdout, stderr)
 	case "load":
@@ -552,8 +554,10 @@ func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
 func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("load", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var format singleString
+	var format, file, maxInputBytes singleString
 	flags.Var(&format, "format", "required versioned dump format")
+	flags.Var(&file, "file", "named native snapshot input file")
+	flags.Var(&maxInputBytes, "max-input-bytes", "positive maximum native snapshot input size")
 	if err := flags.Parse(args); err != nil {
 		return flagUsageError(stderr, "load", err)
 	}
@@ -561,10 +565,26 @@ func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader
 		return usageError(stderr, "load accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
 	if !format.set {
-		return usageError(stderr, "load requires --format universal-blob-v1")
+		return usageError(stderr, "load requires --format universal-blob-v1 or native-blobs-v1")
+	}
+	if format.value == "native-blobs-v1" {
+		if !file.set || file.value == "" {
+			return usageError(stderr, "load native-blobs-v1 requires exactly one non-empty --file PATH")
+		}
+		if !maxInputBytes.set {
+			return usageError(stderr, "load native-blobs-v1 requires exactly one --max-input-bytes N")
+		}
+		maxBytes, err := parseNativeMaxInput(maxInputBytes.value)
+		if err != nil {
+			return usageError(stderr, "%v", err)
+		}
+		return runNativeLoad(ctx, workDir, file.value, maxBytes, stdout, stderr)
 	}
 	if format.value != "universal-blob-v1" {
-		return usageError(stderr, "load format %q is unsupported; expected universal-blob-v1", format.value)
+		return usageError(stderr, "load format %q is unsupported; expected universal-blob-v1 or native-blobs-v1", format.value)
+	}
+	if file.set || maxInputBytes.set {
+		return usageError(stderr, "load universal-blob-v1 accepts stdin only; --file and --max-input-bytes require native-blobs-v1")
 	}
 	input, err := io.ReadAll(stdin)
 	if err != nil {

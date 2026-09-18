@@ -147,6 +147,30 @@ failure, and published receipt-undelivered failure are distinct. A
 post-publication failure MUST NOT be answered by retrying load or deleting the
 target automatically.
 
+Format-7 native snapshot transport uses explicit file input and a bounded
+read:
+
+```sh
+sealgraph dump --format native-blobs-v1 > repository.snapshot.json
+sealgraph load --format native-blobs-v1 --file repository.snapshot.json --max-input-bytes N
+```
+
+`dump` is available only for repository format 7. Its stdout is exactly one
+canonical `sealgraph/native-snapshot/v1` document. The document contains every
+retained Blob, including opaque orphan Blobs; a notice identifying that complete
+Blob inventory is written to stderr after successful stdout delivery.
+
+`load` requires a named regular non-symlink file and a positive
+`--max-input-bytes` value. The input is rejected before publication when it
+exceeds that limit. Loading publishes only to an absent target and never
+merges, overwrites, repairs, or deletes an existing target. Successful stdout
+is compact JSON plus LF with schema `sealgraph/native-load/v1`, in this member
+order: `schema,result,snapshot_sha256,repository_format,blobs,refs,candidates`.
+`result` is `LOADED`; the snapshot digest covers the exact input file bytes and
+the counts come from post-publication readback. If stdout delivery fails after
+publication, stderr reports `LOAD_COMMITTED_OUTPUT_UNDELIVERED`; do not retry
+load. Verify the committed repository with `fsck` and inventory.
+
 ### `sealgraph load-receipt`
 
 ```sh
