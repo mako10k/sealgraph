@@ -10,8 +10,8 @@ The core question is not only “what changed?” but:
 
 ## Status
 
-The checked-in standalone runtime implements the format-5 native core and its
-format-6 Cause Link metadata successor:
+The checked-in standalone runtime implements the format-5 native core, its
+format-6 Cause Link metadata successor, and the format-7 Origin Trace successor:
 Material/Provenance/Seal typed Blobs, parentless Candidates, whole-record Cause
 Links with observer-scoped branching revision assertions, exact selectors,
 atomic universal-blob import, active-leaf admission, stale/frontier, history,
@@ -27,15 +27,23 @@ and imported into an absent format-5 target. New repositories also initialize
 as format 5; an explicit config-only migration upgrades one validated format-5
 repository to format 6 without rewriting retained records. Format 6 preserves
 strict historical format-5 reads and writes new Seal v6, Provenance v2, and
-Candidate v6 records with bounded, namespaced, canonical JSON Link metadata. The
+Candidate v6 records with bounded, namespaced, canonical JSON Link metadata.
+Explicit config-only migration from format 5 or 6 enters format 7 without
+rewriting retained records. Format 7 retains full original source files as
+immutable Blobs, maps ordered content runs to them, and provides separate
+one-hit presence comparison, optional changed-range estimates, and paged
+occurrence listing. Native snapshot dump/load transports the complete canonical
+format-7 inventory. The
 normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-ADRs 0023, 0025, 0026, 0027, 0029, 0030, and 0031.
+with accepted Issue #17 R1/R2/R3 and their successor ADRs. Public syntax and
+versioned output are in [`docs/cli.md`](docs/cli.md).
 
 The runtime never opens format 4 as live state and never rewrites it in place.
-Migration retains the source and emits a complete old-to-new typed identity and
-semantic-change receipt.
+The isolated format-4 extraction/import retains the source and emits a complete
+old-to-new typed identity and semantic-change receipt. Format-7 repository
+migration changes config only and emits its own inventory receipt.
 
 ## Standalone beta surface
 
@@ -130,6 +138,8 @@ A format-5 or format-6 Seal joins:
 Format 6 additionally commits each Cause Link's sorted metadata entries to Seal
 identity. The core validates their namespace, optional schema identifier, and
 canonical JSON shape, but does not assign domain meaning to them.
+Format 7 adds an optional OriginMap in Provenance. Its External runs refer to
+full immutable SourceSnapshots; the Cause Link still targets the whole Seal.
 
 REF paths, selector spelling, tags, publication expectation, actor, and time do
 not enter Seal identity. Multiple REFs may point to the same Seal.
@@ -189,6 +199,17 @@ sealgraph impact [--asserted-by OBSERVER ...] [--all-paths] [--max-paths N]
 sealgraph graph
 sealgraph migrate extract --source-format 4 --format universal-blob-v1
 sealgraph migrate repository --from 5 --to 6
+sealgraph migrate repository --from 5 --to 7
+sealgraph migrate repository --from 6 --to 7
+sealgraph trace set REF --recipe PATH [--content-file PATH|-]
+sealgraph trace clear REF
+sealgraph trace show (--ref REF | --seal SELECTOR)
+sealgraph trace compare (--ref REF | --seal SELECTOR) --max-graph-visits N [--estimate]
+sealgraph trace occurrences (--ref REF --baseline candidate|head | --seal SELECTOR) --run-index N --view snapshot|current|both [--limit N] [--cursor TOKEN]
+sealgraph trace source <bind|rebind|unbind|show|list>
+sealgraph trace correspondence <put|show|list|remove>
+sealgraph dump --format native-blobs-v1
+sealgraph load --format native-blobs-v1 --file PATH --max-input-bytes N
 sealgraph load --format universal-blob-v1
 sealgraph load-receipt --source-document-sha256 HEX
 ```
@@ -205,6 +226,13 @@ format 6. It performs no record rewrite, downgrade, format inference, or batch
 migration. After migration, legacy authoring commands preserve metadata already
 present on an exact Cause target; metadata changes remain explicit through
 `link-metadata set` and `link-metadata remove`.
+The 5/6-to-7 commands likewise validate source and a private format-7 stage,
+replace only config, and read back the retained bytes and identities. They do
+not create origin claims for historical Seals. `trace occurrences` derives
+matching byte positions only when requested, with a default 100-entry page;
+`trace compare` can stop after one exact hit. File differences do not change
+STALE. Format 7 uses v4 inspection JSON for `show`, Candidate inspection,
+graph/history/impact/compare, and `fsck`; `status/v3` remains unchanged.
 
 `manifest` is a read-only deterministic path/size/SHA-256 claim builder. It
 uses only explicit relative files and an explicit source identity, performs no
