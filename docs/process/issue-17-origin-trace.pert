@@ -28,7 +28,7 @@ milestone READY:
 
 milestone TYPES:
   title "S1 後継型とclosure検証"
-  state planned
+  state reached
 
 milestone AUTHOR:
   title "S2 Trace作成とSeal公開"
@@ -105,7 +105,7 @@ task FORMAT_TYPES READY -> TYPES:
     optimistic 3p
     most_likely 5p
     pessimistic 9p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P1; R1/R3 AC1/2/11/16/20; ADR0033/0039"
@@ -303,3 +303,9 @@ work_event FORMAT_TYPES_START_20260918:
   kind start
   occurred_at 2026-09-18T13:30:37+09:00
   planned_value 16/3p
+
+work_event FORMAT_TYPES_FINISH_20260918:
+  model 1
+  task FORMAT_TYPES
+  kind finish
+  occurred_at 2026-09-18T13:51:07+09:00
