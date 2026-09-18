@@ -58,9 +58,9 @@ ref_format = manifest-v1
 
 An exact format-4 config fails before mutation with
 `FORMAT4_REQUIRES_MIGRATION` and the commands fixed by ADR 0026. Every other
-config is unsupported or malformed. There is no dual reader, ignored legacy
-field, compatibility mode, in-place conversion, legacy-parent fallback, or
-automatic repair.
+config outside the exact format-5/6/7 forms in this document is unsupported
+or malformed. There is no ignored legacy field, inferred format, implicit
+conversion, legacy-parent fallback, or automatic repair.
 
 `sealgraph migrate extract --source-format 4 --format universal-blob-v1`
 is the sole format-5 command that reads a format-4 repository. Its source

@@ -83,8 +83,8 @@ Pure semantic types:
 - REF names and derived observation facts.
 
 The format-4 payload type remains reachable only by the isolated migration
-document verifier; ordinary repository APIs use only versioned format-5 and
-format-6 types.
+document verifier; ordinary repository APIs use only versioned format-5,
+format-6, and format-7 types.
 
 No filesystem, Git, CLI, clock, environment, or current-REF lookup occurs
 here. A Seal contains no owner REF.
@@ -103,6 +103,9 @@ historical bytes exact and never accepts v6 members. Material v1 remains shared.
 Format-6 Assessment-free change identity uses the generation-specific
 `upstream-change/v2` canonical record; Assessment references remain outside this
 slice.
+The v7 codec enforces exact Seal v7/Provenance v3 pairing and canonical
+OriginMap/SourceSnapshot records; it reads historical generations without
+re-encoding their stored bytes.
 
 Canonical encoding does not resolve selectors, inspect REFs, derive stale, or
 perform I/O.
