@@ -23,6 +23,7 @@ type FsckReport struct {
 	Blobs, Seals, Materials, Provenances, REFs, Tags, ActiveSeals          int
 	SealsV5, SealsV6, SealsV7, ProvenancesV1, ProvenancesV2, ProvenancesV3 int
 	CandidatesV5, CandidatesV6, CandidatesV7                               int
+	OriginMaps, SourceSnapshots                                            int
 	HistoricalOrDetachedSeals                                              []domain.ObjectID
 	UnreferencedBlobs                                                      []domain.ObjectID
 }
@@ -96,7 +97,7 @@ func (r *Repository) Fsck(ctx context.Context) (FsckReport, error) {
 }
 
 func buildFsckReport(inventory fsckInventory, observation headObservation, tags []fsckTag, activeGraph *observedGraph, referenced map[string]bool, candidatesV5, candidatesV6, candidatesV7 int) FsckReport {
-	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}, CandidatesV5: candidatesV5, CandidatesV6: candidatesV6, CandidatesV7: candidatesV7}
+	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}, CandidatesV5: candidatesV5, CandidatesV6: candidatesV6, CandidatesV7: candidatesV7, OriginMaps: len(inventory.origins), SourceSnapshots: len(inventory.snapshots)}
 	for _, generation := range inventory.sealGeneration {
 		if generation == 5 {
 			report.SealsV5++
