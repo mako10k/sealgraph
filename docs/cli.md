@@ -208,6 +208,68 @@ rebind and unbind require the exact observed old path. Mutation JSON uses
 `sealgraph/trace-source-list/v1`. These commands do not read current file bytes
 for show/list or change immutable origin records.
 
+Format 7 offers detailed origin comparison separately from `status`:
+
+```sh
+sealgraph trace compare (--ref REF | --seal SELECTOR) \
+  --max-graph-visits N [--estimate] [--format human|json]
+```
+
+The selected `--seal` must identify an immutable Seal. `--ref` compares its
+Candidate, when present, separately from the HEAD graph. The graph visit limit
+is a required positive integer and can leave the graph scope incomplete.
+Each external run checks whether its complete original byte sequence occurs
+anywhere in the stable current file. A found sequence is `PRESENT`, with the
+first selected match position; an exhaustive miss is `ABSENT_EXACT`, without
+asserting deletion. Failed reads or interrupted searches are `UNDETERMINED`.
+The selected position does not establish which historical occurrence survived.
+No diff is performed unless `--estimate` is supplied. The legacy
+`--max-alignment-cells` option is rejected.
+
+JSON output is `sealgraph/trace-compare/v2`; its exact member order and
+completeness rules are specified by [ADR 0038](adr/0038-origin-trace-r2-cli-and-observation-output.md).
+`observation.declaration_digest` is null without `--estimate` and identifies
+the ID-sorted declaration set, including the empty set, with it. Every range
+has separate `presence` and `estimate` fields. Estimate states are
+`NOT_REQUESTED`, `NOT_APPLICABLE`, `CANDIDATES`, `NO_CANDIDATE`, or
+`INCOMPLETE`. A recoverable estimation failure keeps completed presence
+evidence. Candidates report current byte ranges, evidence kind, method,
+reason, and declaration IDs. Estimates and declarations never override
+presence, graph completeness, or stale state.
+
+Explicit range correspondence is local comparison input:
+
+```sh
+sealgraph trace correspondence put --file PATH [--format human|json]
+sealgraph trace correspondence show ID [--format human|json]
+sealgraph trace correspondence list [--format human|json]
+sealgraph trace correspondence remove ID [--format human|json]
+```
+
+The input is one JSON declaration with exact members `schema`,
+`source_snapshot`, `source_start`, `length`, `current_blob`, `current_ranges`,
+`deleted`, `reason`, and `declared_at`. Its schema is
+`sealgraph/trace-correspondence/v1`. The source and current identities and
+byte range bounds are checked at `put`; the current BlobID must equal the
+stable bytes read through the source key's current binding. Each current range
+is a positive `{start,length}` half-open byte interval; multiple nonoverlapping
+ranges retain their declared order. An empty range array requires
+`deleted=true`. The reason is explicit and nonempty, and `declared_at` uses
+`YYYY-MM-DDTHH:MM:SSZ`. A declaration may map changed bytes or state a
+deletion; neither claim is taken as proof of historical or semantic identity.
+
+The declaration ID is SHA-256 of its compact canonical JSON, stored without
+an added newline at `.sealgraph/local/trace-correspondences/<ID>.json`. `put`
+is idempotent for exact bytes; `remove` removes only the named ID. Show/list
+use `sealgraph/trace-correspondence-list/v1`, and put/remove use
+`sealgraph/trace-correspondence-mutation/v1`. List order is by ID. During
+`trace compare --estimate`, declarations match only the exact source snapshot,
+old range, and observed current BlobID. Conflicting current range claims stay
+as separate candidates; matching claims with the same ranges retain all
+supporting declaration IDs. See [ADR 0035](adr/0035-origin-trace-cli-and-observation-output.md)
+§2.3 and [ADR 0038](adr/0038-origin-trace-r2-cli-and-observation-output.md)
+for canonical field and output contracts.
+
 Format 5 uses one-target whole-record Cause operations:
 
 ```text

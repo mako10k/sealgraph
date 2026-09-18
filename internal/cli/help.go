@@ -49,10 +49,10 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"trace": {
 		Path: "trace", Summary: "Author or inspect one content origin trace.",
-		Usage:       []string{"sealgraph trace <set|clear|show|source> ..."},
-		Subcommands: []string{"set", "clear", "show", "source"},
+		Usage:       []string{"sealgraph trace <set|clear|show|compare|source|correspondence> ..."},
+		Subcommands: []string{"set", "clear", "show", "compare", "source", "correspondence"},
 		Details:     []string{"Origin authoring is available only in repository format 7. Trace operations never create an implicit Candidate or Seal."},
-		Related:     []string{"trace set", "trace clear", "trace show", "trace source", "add", "seal"},
+		Related:     []string{"trace set", "trace clear", "trace show", "trace compare", "trace source", "trace correspondence", "add", "seal"},
 	},
 	"trace set": {
 		Path: "trace set", Summary: "Set the content and origin map of one existing Candidate atomically.",
@@ -75,6 +75,29 @@ var commandHelpRegistry = map[string]commandHelp{
 		Details: []string{"SourceSnapshot records identify full immutable source Blobs. The original source bytes are not embedded in this view."},
 		Related: []string{"trace set", "candidate show", "show"},
 	},
+	"trace compare": {
+		Path: "trace compare", Summary: "Compare exact origin bytes with current files and optionally estimate changed ranges.",
+		Usage:   []string{"sealgraph trace compare (--ref REF | --seal SELECTOR) --max-graph-visits N [--estimate] [--format human|json]"},
+		Options: []helpOption{{"--ref REF", "select one REF with separate Candidate and HEAD observations"}, {"--seal SELECTOR", "select one immutable Seal"}, {"--max-graph-visits N", "required positive bound on graph vertex visits"}, {"--estimate", "also estimate changed current ranges after exact absence"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"Exact presence is independent of estimates and correspondence declarations. A selected match position is a representative match, not proof of the historical origin location. Graph-budget exhaustion leaves scope incomplete without changing completed local facts."},
+		Related: []string{"trace show", "trace source", "trace correspondence", "stale"},
+	},
+	"trace correspondence": {
+		Path: "trace correspondence", Summary: "Manage local declarations for estimated current ranges.",
+		Usage:       []string{"sealgraph trace correspondence <put|show|list|remove> ..."},
+		Subcommands: []string{"put", "show", "list", "remove"},
+		Details:     []string{"Declarations are local, version-bound observation inputs. They do not alter exact presence, Seals, Cause Links, or stale state."},
+		Related:     []string{"trace compare", "trace source"},
+	},
+	"trace correspondence put": {
+		Path: "trace correspondence put", Summary: "Store one explicit version-bound range declaration.",
+		Usage:   []string{"sealgraph trace correspondence put --file PATH [--format human|json]"},
+		Options: []helpOption{{"--file PATH", "required JSON declaration file"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Related: []string{"trace correspondence show", "trace correspondence list", "trace compare"},
+	},
+	"trace correspondence show":   inspectionHelp("trace correspondence show", "Show one exact local declaration.", "sealgraph trace correspondence show ID [--format human|json]", nil),
+	"trace correspondence list":   inspectionHelp("trace correspondence list", "List local declarations in ID order.", "sealgraph trace correspondence list [--format human|json]", nil),
+	"trace correspondence remove": inspectionHelp("trace correspondence remove", "Remove one exact local declaration.", "sealgraph trace correspondence remove ID [--format human|json]", nil),
 	"trace source": {
 		Path: "trace source", Summary: "Manage non-canonical source-key to current-file bindings.",
 		Usage:       []string{"sealgraph trace source <bind|rebind|unbind|show|list> ..."},

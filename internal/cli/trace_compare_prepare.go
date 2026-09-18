@@ -21,6 +21,14 @@ type traceComparePreparedSelection struct {
 }
 
 func prepareTraceCompareNoEstimate(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int) (traceCompareV2Document, error) {
+	return prepareTraceCompare(ctx, repo, ref, seal, maxGraphVisits, false)
+}
+
+func prepareTraceCompareWithEstimate(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int) (traceCompareV2Document, error) {
+	return prepareTraceCompare(ctx, repo, ref, seal, maxGraphVisits, true)
+}
+
+func prepareTraceCompare(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int, estimate bool) (traceCompareV2Document, error) {
 	if maxGraphVisits <= 0 {
 		return traceCompareV2Document{}, fmt.Errorf("max graph visits must be positive")
 	}
@@ -28,37 +36,76 @@ func prepareTraceCompareNoEstimate(ctx context.Context, repo *repository.Reposit
 	if err != nil {
 		return traceCompareV2Document{}, err
 	}
+	var declarations []repository.TraceCorrespondenceRecord
+	var declarationDigest string
+	if estimate {
+		declarations, err = repo.TraceCorrespondenceList()
+		if err != nil {
+			return traceCompareV2Document{}, err
+		}
+		declarationDigest, err = traceCorrespondenceDigest(declarations)
+		if err != nil {
+			return traceCompareV2Document{}, err
+		}
+	}
 	prepared, err := selectTraceCompareBaselines(ctx, repo, ref, seal, maxGraphVisits)
 	if err != nil {
 		return traceCompareV2Document{}, err
 	}
-	results, sources, err := repo.TraceCompareOwnBatch(ctx, prepared.baselines)
+	var results []repository.TraceCompareOwnResult
+	var sources []repository.TraceOwnSourceObservation
+	if estimate {
+		results, sources, err = repo.TraceCompareOwnBatchEstimated(ctx, prepared.baselines, declarations)
+	} else {
+		results, sources, err = repo.TraceCompareOwnBatch(ctx, prepared.baselines)
+	}
 	if err != nil {
 		return traceCompareV2Document{}, err
 	}
-	doc, err := assembleTraceCompareNoEstimate(prepared, results, sources, beforeBinding, maxGraphVisits)
+	doc, err := assembleTraceCompare(prepared, results, sources, beforeBinding, maxGraphVisits)
 	if err != nil {
 		return traceCompareV2Document{}, err
 	}
+	if estimate {
+		doc.Observation.DeclarationDigest = &declarationDigest
+	}
+	if err := revalidateTraceCompare(ctx, repo, prepared, ref, beforeBinding, declarationDigest, estimate); err != nil {
+		return traceCompareV2Document{}, err
+	}
+	return doc, nil
+}
+
+func revalidateTraceCompare(ctx context.Context, repo *repository.Repository, prepared traceComparePreparedSelection, ref singleString, beforeBinding, declarationDigest string, estimate bool) error {
+	var err error
 	if prepared.graph != nil {
 		err = repo.RevalidateTraceDirectionGraph(ctx, *prepared.graph)
 	} else {
 		err = repo.RevalidateTraceDirectionHeads(ctx, *prepared.heads)
 	}
 	if err != nil {
-		return traceCompareV2Document{}, err
+		return err
 	}
 	afterBinding, err := traceCompareBindingDigest(repo)
 	if err != nil || afterBinding != beforeBinding {
-		return traceCompareV2Document{}, fmt.Errorf("Trace source bindings changed during comparison: %v", err)
+		return fmt.Errorf("Trace source bindings changed during comparison: %v", err)
+	}
+	if estimate {
+		currentDeclarations, err := repo.TraceCorrespondenceList()
+		if err != nil {
+			return err
+		}
+		afterDigest, err := traceCorrespondenceDigest(currentDeclarations)
+		if err != nil || afterDigest != declarationDigest {
+			return fmt.Errorf("Trace correspondence declarations changed during comparison: %v", err)
+		}
 	}
 	if ref.set && !prepared.candidate {
 		_, candidateErr := repo.CandidateExactDigest(ctx, ref.value)
 		if !errors.Is(candidateErr, repository.ErrCandidateNotFound) {
-			return traceCompareV2Document{}, fmt.Errorf("Candidate %s appeared or became unreadable during comparison: %v", ref.value, candidateErr)
+			return fmt.Errorf("Candidate %s appeared or became unreadable during comparison: %v", ref.value, candidateErr)
 		}
 	}
-	return doc, nil
+	return nil
 }
 
 func selectTraceCompareBaselines(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int) (traceComparePreparedSelection, error) {
@@ -162,7 +209,7 @@ func traceCompareBindingDigest(repo *repository.Repository) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func assembleTraceCompareNoEstimate(prepared traceComparePreparedSelection, results []repository.TraceCompareOwnResult, sources []repository.TraceOwnSourceObservation, bindingDigest string, maxVisits int) (traceCompareV2Document, error) {
+func assembleTraceCompare(prepared traceComparePreparedSelection, results []repository.TraceCompareOwnResult, sources []repository.TraceOwnSourceObservation, bindingDigest string, maxVisits int) (traceCompareV2Document, error) {
 	doc := traceCompareV2Document{Schema: "sealgraph/trace-compare/v2", Selection: prepared.selection, Observation: traceCompareObservationJSON{REFHeads: []traceCompareREFHeadJSON{}, BindingDigest: bindingDigest, Sources: traceCompareSourceRecords(sources)}, Limits: traceCompareLimitsJSON{MaxGraphVisits: maxVisits}}
 	if prepared.graph != nil {
 		doc.Observation.REFHeads = traceCompareREFHeads(prepared.graph.REFHeads)

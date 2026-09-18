@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -138,5 +140,23 @@ func TestPrepareTraceCompareExactHistoricalSeal(t *testing.T) {
 	}
 	if doc.Graph == nil || doc.Graph.Center != old.String() || doc.Graph.Scope.Kind != "observed-head-closure-plus-selected-seal" || len(doc.Graph.Scope.ExtraSeals) != 1 || doc.Graph.Scope.ExtraSeals[0] != old.String() {
 		t.Fatalf("historical comparison=%+v", doc.Graph)
+	}
+}
+
+func TestPrepareTraceCompareWithEstimatePreservesPresence(t *testing.T) {
+	dir, repo := traceComparePreparedFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("abcXQZtail"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := prepareTraceCompareWithEstimate(context.Background(), repo, singleString{value: "root", set: true}, singleString{}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Observation.DeclarationDigest == nil || doc.CandidateOwn == nil || len(doc.CandidateOwn.Local.Ranges) != 2 {
+		t.Fatalf("estimate document=%+v", doc)
+	}
+	absent, present := doc.CandidateOwn.Local.Ranges[0], doc.CandidateOwn.Local.Ranges[1]
+	if absent.Presence != "ABSENT_EXACT" || absent.Estimate.State != "CANDIDATES" || absent.Estimate.Method == nil || len(absent.Estimate.Candidates) != 1 || present.Presence != "PRESENT" || present.Estimate.State != "NOT_APPLICABLE" {
+		t.Fatalf("estimated ranges=%+v", doc.CandidateOwn.Local.Ranges)
 	}
 }

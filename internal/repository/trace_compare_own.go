@@ -49,6 +49,7 @@ type TraceOwnRunResult struct {
 	PresenceReason     string
 	SelectedMatchStart *int
 	Examined           bool
+	Estimate           *TraceOwnEstimateResult
 }
 
 // TraceCompareOwnResult contains only the selected baseline's local facts.

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,34 @@ type traceCompareCLIOptions struct {
 	maxGraphVisits int
 	estimate       bool
 	output         inspectionOutput
+}
+
+func runTraceCompare(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
+	options, err := parseTraceCompareArgs(args, stdout)
+	if err != nil {
+		return flagUsageError(stderr, "trace compare", err)
+	}
+	repo, err := repository.OpenStandalone(workDir)
+	if err != nil {
+		return commandError(stderr, "trace compare", err)
+	}
+	if repo.Format() != 7 {
+		return commandError(stderr, "trace compare", fmt.Errorf("origin trace comparison requires repository format 7"))
+	}
+	var document traceCompareV2Document
+	if options.estimate {
+		document, err = prepareTraceCompareWithEstimate(ctx, repo, options.ref, options.seal, options.maxGraphVisits)
+	} else {
+		document, err = prepareTraceCompareNoEstimate(ctx, repo, options.ref, options.seal, options.maxGraphVisits)
+	}
+	if err != nil {
+		return commandError(stderr, "trace compare", err)
+	}
+	if options.output.JSON {
+		return writeInspectionJSON(stdout, stderr, "trace compare", document)
+	}
+	printTraceCompareV2Human(stdout, document)
+	return 0
 }
 
 func parseTraceCompareArgs(args []string, stdout io.Writer) (traceCompareCLIOptions, error) {

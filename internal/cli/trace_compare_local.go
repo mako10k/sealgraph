@@ -86,7 +86,7 @@ func buildTraceCompareLocal(result repository.TraceCompareOwnResult) traceCompar
 		item := traceCompareRangeResultJSON{
 			RunIndex: run.RunIndex, SourceSnapshotID: run.SourceSnapshotID.String(), SourceKey: run.SourceKey,
 			OldRange: traceCompareRangeJSON{Start: run.OldStart, Length: run.Length}, Presence: string(run.Presence), PresenceReason: run.PresenceReason,
-			Examined: "EXAMINED", Estimate: traceCompareEstimateJSON{State: "NOT_REQUESTED", Candidates: []traceCompareEstimateCandidateJSON{}},
+			Examined: "EXAMINED", Estimate: traceCompareEstimateRecord(run.Estimate),
 		}
 		if run.CurrentBlobID != nil {
 			id := run.CurrentBlobID.String()
@@ -118,6 +118,30 @@ func buildTraceCompareLocal(result repository.TraceCompareOwnResult) traceCompar
 	return local
 }
 
+func traceCompareEstimateRecord(value *repository.TraceOwnEstimateResult) traceCompareEstimateJSON {
+	result := traceCompareEstimateJSON{State: "NOT_REQUESTED", Candidates: []traceCompareEstimateCandidateJSON{}}
+	if value == nil {
+		return result
+	}
+	result.State = value.State
+	if value.Method != "" {
+		method := value.Method
+		result.Method = &method
+	}
+	if value.Reason != "" {
+		reason := value.Reason
+		result.Reason = &reason
+	}
+	for _, candidate := range value.Candidates {
+		item := traceCompareEstimateCandidateJSON{CurrentRanges: []traceCompareRangeJSON{}, EvidenceKind: candidate.EvidenceKind, Method: candidate.Method, Reason: candidate.Reason, DeclarationIDs: append([]string{}, candidate.DeclarationIDs...)}
+		for _, current := range candidate.CurrentRanges {
+			item.CurrentRanges = append(item.CurrentRanges, traceCompareRangeJSON{Start: current.Start, Length: current.Length})
+		}
+		result.Candidates = append(result.Candidates, item)
+	}
+	return result
+}
+
 func printTraceCompareLocalHuman(out io.Writer, local traceCompareLocalJSON) {
 	fmt.Fprintf(out, "%s content=%s trace=%s complete=%t\n", strings.ToUpper(local.Baseline.Kind), local.Baseline.ContentBlobID, local.TracePresence, local.Complete)
 	for _, run := range local.Ranges {
@@ -125,6 +149,18 @@ func printTraceCompareLocalHuman(out io.Writer, local traceCompareLocalJSON) {
 		if run.SelectedMatchStart != nil {
 			fmt.Fprintf(out, " selected_start=%d (selected match; historical origin is not established)", *run.SelectedMatchStart)
 		}
+		if run.Estimate.State != "NOT_REQUESTED" {
+			fmt.Fprintf(out, " estimate=%s", run.Estimate.State)
+			if run.Estimate.Method != nil {
+				fmt.Fprintf(out, " method=%s", *run.Estimate.Method)
+			}
+			if run.Estimate.Reason != nil {
+				fmt.Fprintf(out, " reason=%s", quoteHumanString(*run.Estimate.Reason))
+			}
+		}
 		fmt.Fprintln(out)
+		for _, candidate := range run.Estimate.Candidates {
+			fmt.Fprintf(out, "    candidate kind=%s method=%s ranges=%v declarations=%v reason=%s\n", candidate.EvidenceKind, candidate.Method, candidate.CurrentRanges, candidate.DeclarationIDs, quoteHumanString(candidate.Reason))
+		}
 	}
 }

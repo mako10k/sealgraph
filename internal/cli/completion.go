@@ -46,10 +46,12 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 		}
 	}
 	path := prior[0]
-	if len(prior) > 1 {
-		if _, ok := commandHelpRegistry[path+" "+prior[1]]; ok {
-			path += " " + prior[1]
+	for i := 1; i < len(prior); i++ {
+		next := path + " " + prior[i]
+		if _, ok := commandHelpRegistry[next]; !ok {
+			break
 		}
+		path = next
 	}
 	if strings.HasPrefix(current, "-") {
 		if entry, ok := commandHelpRegistry[path]; ok {
@@ -126,6 +128,16 @@ func repositoryCompletionValues(workDir, path string) []string {
 	switch path {
 	case "seal", "candidate show", "candidate compare", "candidate discard", "trace set", "trace clear":
 		return names.Candidates
+	case "trace correspondence show", "trace correspondence remove":
+		records, err := repo.TraceCorrespondenceList()
+		if err != nil {
+			return nil
+		}
+		ids := make([]string, 0, len(records))
+		for _, record := range records {
+			ids = append(ids, record.ID)
+		}
+		return ids
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
 	case "recover", "recover show":

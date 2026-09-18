@@ -10,8 +10,8 @@ import (
 	"github.com/mako10k/sealgraph/internal/repository"
 )
 
-// traceCompareV2Document is the ADR 0038 output shape for comparison without
-// --estimate. Dispatch remains separate until the complete CLI contract exists.
+// traceCompareV2Document is the ADR 0038 output shape for comparison with or
+// without optional range estimation.
 type traceCompareV2Document struct {
 	Schema       string                      `json:"schema"`
 	Selection    traceShowSelection          `json:"selection"`
