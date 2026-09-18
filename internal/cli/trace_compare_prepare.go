@@ -1,0 +1,167 @@
+package cli
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/mako10k/sealgraph/internal/domain"
+	"github.com/mako10k/sealgraph/internal/repository"
+)
+
+type traceComparePreparedSelection struct {
+	selection traceShowSelection
+	baselines []repository.TraceOwnBaseline
+	graph     *repository.DirectionGraphResult
+	heads     *repository.DirectionGraphHeads
+	candidate bool
+}
+
+func prepareTraceCompareNoEstimate(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int) (traceCompareV2Document, error) {
+	if maxGraphVisits <= 0 {
+		return traceCompareV2Document{}, fmt.Errorf("max graph visits must be positive")
+	}
+	beforeBinding, err := traceCompareBindingDigest(repo)
+	if err != nil {
+		return traceCompareV2Document{}, err
+	}
+	prepared, err := selectTraceCompareBaselines(ctx, repo, ref, seal, maxGraphVisits)
+	if err != nil {
+		return traceCompareV2Document{}, err
+	}
+	results, sources, err := repo.TraceCompareOwnBatch(ctx, prepared.baselines)
+	if err != nil {
+		return traceCompareV2Document{}, err
+	}
+	doc, err := assembleTraceCompareNoEstimate(prepared, results, sources, beforeBinding, maxGraphVisits)
+	if err != nil {
+		return traceCompareV2Document{}, err
+	}
+	if prepared.graph != nil {
+		err = repo.RevalidateTraceDirectionGraph(ctx, *prepared.graph)
+	} else {
+		err = repo.RevalidateTraceDirectionHeads(ctx, *prepared.heads)
+	}
+	if err != nil {
+		return traceCompareV2Document{}, err
+	}
+	afterBinding, err := traceCompareBindingDigest(repo)
+	if err != nil || afterBinding != beforeBinding {
+		return traceCompareV2Document{}, fmt.Errorf("Trace source bindings changed during comparison: %v", err)
+	}
+	if ref.set && !prepared.candidate {
+		_, candidateErr := repo.CandidateExactDigest(ctx, ref.value)
+		if !errors.Is(candidateErr, repository.ErrCandidateNotFound) {
+			return traceCompareV2Document{}, fmt.Errorf("Candidate %s appeared or became unreadable during comparison: %v", ref.value, candidateErr)
+		}
+	}
+	return doc, nil
+}
+
+func selectTraceCompareBaselines(ctx context.Context, repo *repository.Repository, ref, seal singleString, maxGraphVisits int) (traceComparePreparedSelection, error) {
+	prepared := traceComparePreparedSelection{}
+	var center *domain.ObjectID
+	if seal.set {
+		selected, err := repo.ResolveSelector(ctx, seal.value)
+		if err != nil {
+			return prepared, err
+		}
+		id := selected.ID
+		center = &id
+		idText := id.String()
+		prepared.selection = traceShowSelection{Kind: "seal", Requested: seal.value, ResolvedSealID: &idText}
+	} else {
+		prepared.selection = traceShowSelection{Kind: "ref", Requested: ref.value}
+		_, err := repo.CandidateExactDigest(ctx, ref.value)
+		if err == nil {
+			prepared.candidate = true
+			prepared.baselines = append(prepared.baselines, repository.TraceOwnBaseline{Kind: repository.TraceOwnCandidate, REF: ref.value})
+		} else if !errors.Is(err, repository.ErrCandidateNotFound) {
+			return prepared, err
+		}
+		head, err := repo.CurrentREFHead(ctx, ref.value)
+		if err != nil {
+			return prepared, err
+		}
+		center = head
+		if head != nil {
+			idText := head.String()
+			prepared.selection.ResolvedSealID = &idText
+		} else if !prepared.candidate {
+			return prepared, fmt.Errorf("REF %s has no Candidate or HEAD", ref.value)
+		}
+	}
+	if center == nil {
+		heads, err := repo.TraceDirectionHeads(ctx)
+		if err != nil {
+			return prepared, err
+		}
+		prepared.heads = &heads
+		return prepared, nil
+	}
+	graph, err := repo.TraceDirectionGraph(ctx, *center, maxGraphVisits)
+	if err != nil {
+		return prepared, err
+	}
+	prepared.graph = &graph
+	if ref.set {
+		prepared.baselines = append(prepared.baselines, repository.TraceOwnBaseline{Kind: repository.TraceOwnHead, REF: ref.value})
+	} else {
+		prepared.baselines = append(prepared.baselines, repository.TraceOwnBaseline{Kind: repository.TraceOwnSeal, SealID: center})
+	}
+	for _, id := range graph.ObservedSealIDs {
+		if !id.Equal(*center) {
+			copyID := id
+			prepared.baselines = append(prepared.baselines, repository.TraceOwnBaseline{Kind: repository.TraceOwnSeal, SealID: &copyID})
+		}
+	}
+	return prepared, nil
+}
+
+func traceCompareBindingDigest(repo *repository.Repository) (string, error) {
+	bindings, err := repo.TraceSourceList()
+	if err != nil {
+		return "", err
+	}
+	records := make([]traceSourceBindingJSON, 0, len(bindings))
+	for _, binding := range bindings {
+		records = append(records, *traceSourceBindingJSONValue(binding))
+	}
+	data, err := json.Marshal(records)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func assembleTraceCompareNoEstimate(prepared traceComparePreparedSelection, results []repository.TraceCompareOwnResult, sources []repository.TraceOwnSourceObservation, bindingDigest string, maxVisits int) (traceCompareV2Document, error) {
+	doc := traceCompareV2Document{Schema: "sealgraph/trace-compare/v2", Selection: prepared.selection, Observation: traceCompareObservationJSON{REFHeads: []traceCompareREFHeadJSON{}, BindingDigest: bindingDigest, Sources: traceCompareSourceRecords(sources)}, Limits: traceCompareLimitsJSON{MaxGraphVisits: maxVisits}}
+	if prepared.graph != nil {
+		doc.Observation.REFHeads = traceCompareREFHeads(prepared.graph.REFHeads)
+		doc.Limits.UsedGraphVisits = prepared.graph.UsedVisits
+	} else {
+		doc.Observation.REFHeads = traceCompareREFHeads(prepared.heads.REFHeads)
+		reason := "NO_HEAD"
+		doc.GraphReason = &reason
+	}
+	for _, result := range results {
+		if result.Baseline.Kind == repository.TraceOwnCandidate {
+			local := buildTraceCompareLocal(result)
+			doc.CandidateOwn = &traceCompareCandidateJSON{Baseline: local.Baseline, Local: local}
+			doc.Observation.CandidateDigest = local.Baseline.CandidateDigest
+			break
+		}
+	}
+	if prepared.graph != nil {
+		graph, err := buildTraceCompareGraph(*prepared.graph, results)
+		if err != nil {
+			return traceCompareV2Document{}, err
+		}
+		doc.Graph = graph
+	}
+	return doc, nil
+}
