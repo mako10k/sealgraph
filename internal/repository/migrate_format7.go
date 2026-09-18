@@ -69,9 +69,6 @@ func (r *Repository) migrateFormat7Locked(ctx context.Context, workDir string, f
 	if err := validateFormat7MigrationStaging(ctx, staging, beforePhysical, beforeInventory, beforeReport); err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("validate format-7 staging: %w", err)
 	}
-	if err := r.revalidateFormat7MigrationSource(ctx, beforePhysical, beforeInventory); err != nil {
-		return Format7MigrationResult{}, err
-	}
 	temp, err := writeFormat7ConfigTemp(r.dir)
 	if err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("prepare exact format-7 config: %w", err)
