@@ -27,6 +27,19 @@ type nativeLoadReceipt struct {
 // an absent target once. Any post-publication error retains the target for
 // explicit readback; callers must never retry blindly.
 func LoadNativeSnapshotV1(ctx context.Context, workDir string, input []byte) ([]byte, error) {
+	return loadNativeSnapshotV1(ctx, workDir, input, nil)
+}
+
+// LoadNativeSnapshotV1WithPrePublishCheck lets the caller revalidate a named
+// input file's exact bytes immediately before the absent-target publication.
+func LoadNativeSnapshotV1WithPrePublishCheck(ctx context.Context, workDir string, input []byte, check func() error) ([]byte, error) {
+	if check == nil {
+		return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: native input revalidation is required")
+	}
+	return loadNativeSnapshotV1(ctx, workDir, input, check)
+}
+
+func loadNativeSnapshotV1(ctx context.Context, workDir string, input []byte, check func() error) ([]byte, error) {
 	target := filepath.Join(workDir, ".sealgraph")
 	if err := preflightUniversalLoad(workDir, target); err != nil {
 		return nil, err
@@ -54,6 +67,11 @@ func LoadNativeSnapshotV1(ctx context.Context, workDir string, input []byte) ([]
 	}
 	if err := verifyNativeLoadModes(staging); err != nil {
 		return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: verify native staging retained at %s: %w", staging, err)
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: native input changed before publication; staging retained at %s: %w", staging, err)
+		}
 	}
 	if err := renameNoReplace(staging, target); err != nil {
 		return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: atomic no-replace native publication failed; staging retained at %s: %w", staging, err)

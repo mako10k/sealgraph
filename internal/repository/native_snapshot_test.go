@@ -160,3 +160,24 @@ func TestNativeSnapshotRequiresAbsentTargetAndFormat7Source(t *testing.T) {
 		t.Fatalf("legacy dump error=%v", err)
 	}
 }
+
+func TestNativeSnapshotRejectsChangedInputBeforePublication(t *testing.T) {
+	ctx := context.Background()
+	source := openFormat7Fixture(t)
+	document, err := source.DumpNativeSnapshotV1(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	checked := false
+	_, err = LoadNativeSnapshotV1WithPrePublishCheck(ctx, target, document, func() error {
+		checked = true
+		return os.ErrInvalid
+	})
+	if !checked || err == nil || !strings.Contains(err.Error(), "PRE_PUBLICATION_FAILURE") {
+		t.Fatalf("input prepublication check: checked=%t err=%v", checked, err)
+	}
+	if _, err := os.Lstat(filepath.Join(target, ".sealgraph")); !os.IsNotExist(err) {
+		t.Fatalf("changed input published destination: %v", err)
+	}
+}
