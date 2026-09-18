@@ -21,7 +21,7 @@ import (
 
 func runTrace(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "trace requires set, clear, show, compare, source, or correspondence")
+		return usageError(stderr, "trace requires set, clear, show, compare, occurrences, source, or correspondence")
 	}
 	switch args[0] {
 	case "set":
@@ -32,12 +32,14 @@ func runTrace(ctx context.Context, workDir string, args []string, stdin io.Reade
 		return runTraceShow(ctx, workDir, args[1:], stdout, stderr)
 	case "compare":
 		return runTraceCompare(ctx, workDir, args[1:], stdout, stderr)
+	case "occurrences":
+		return runTraceOccurrences(ctx, workDir, args[1:], stdout, stderr)
 	case "source":
 		return runTraceSource(ctx, workDir, args[1:], stdout, stderr)
 	case "correspondence":
 		return runTraceCorrespondence(ctx, workDir, args[1:], stdout, stderr)
 	default:
-		return usageError(stderr, "unknown trace operation %q; expected set, clear, show, compare, source, or correspondence", args[0])
+		return usageError(stderr, "unknown trace operation %q; expected set, clear, show, compare, occurrences, source, or correspondence", args[0])
 	}
 }
 

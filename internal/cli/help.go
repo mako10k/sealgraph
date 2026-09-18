@@ -49,10 +49,10 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"trace": {
 		Path: "trace", Summary: "Author or inspect one content origin trace.",
-		Usage:       []string{"sealgraph trace <set|clear|show|compare|source|correspondence> ..."},
-		Subcommands: []string{"set", "clear", "show", "compare", "source", "correspondence"},
+		Usage:       []string{"sealgraph trace <set|clear|show|compare|occurrences|source|correspondence> ..."},
+		Subcommands: []string{"set", "clear", "show", "compare", "occurrences", "source", "correspondence"},
 		Details:     []string{"Origin authoring is available only in repository format 7. Trace operations never create an implicit Candidate or Seal."},
-		Related:     []string{"trace set", "trace clear", "trace show", "trace compare", "trace source", "trace correspondence", "add", "seal"},
+		Related:     []string{"trace set", "trace clear", "trace show", "trace compare", "trace occurrences", "trace source", "trace correspondence", "add", "seal"},
 	},
 	"trace set": {
 		Path: "trace set", Summary: "Set the content and origin map of one existing Candidate atomically.",
@@ -81,6 +81,13 @@ var commandHelpRegistry = map[string]commandHelp{
 		Options: []helpOption{{"--ref REF", "select one REF with separate Candidate and HEAD observations"}, {"--seal SELECTOR", "select one immutable Seal"}, {"--max-graph-visits N", "required positive bound on graph vertex visits"}, {"--estimate", "also estimate changed current ranges after exact absence"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
 		Details: []string{"Exact presence is independent of estimates and correspondence declarations. A selected match position is a representative match, not proof of the historical origin location. Graph-budget exhaustion leaves scope incomplete without changing completed local facts."},
 		Related: []string{"trace show", "trace source", "trace correspondence", "stale"},
+	},
+	"trace occurrences": {
+		Path: "trace occurrences", Summary: "List exact byte occurrence positions for one external origin run.",
+		Usage:   []string{"sealgraph trace occurrences (--ref REF --baseline candidate|head | --seal SELECTOR) --run-index N --view snapshot|current|both [--limit N] [--cursor TOKEN] [--format human|json]"},
+		Options: []helpOption{{"--ref REF", "select a REF and require --baseline"}, {"--baseline candidate|head", "select exactly one REF baseline"}, {"--seal SELECTOR", "select one immutable Seal"}, {"--run-index N", "required zero-based OriginMap run index"}, {"--view snapshot|current|both", "required source version view"}, {"--limit N", "positive page size; default 100"}, {"--cursor TOKEN", "continue one version-bound page"}, {"--format human|json", "optional; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"Overlapping matches are included. A page with has_more=true is a prefix, not the full occurrence set. The selected trace compare match and inferred changed ranges have separate meanings."},
+		Related: []string{"trace compare", "trace show", "trace source"},
 	},
 	"trace correspondence": {
 		Path: "trace correspondence", Summary: "Manage local declarations for estimated current ranges.",

@@ -270,6 +270,40 @@ supporting declaration IDs. See [ADR 0035](adr/0035-origin-trace-cli-and-observa
 §2.3 and [ADR 0038](adr/0038-origin-trace-r2-cli-and-observation-output.md)
 for canonical field and output contracts.
 
+To derive every exact occurrence of one External run on demand, use the
+format-7 read-only listing operation:
+
+```sh
+sealgraph trace occurrences \
+  (--ref REF --baseline candidate|head | --seal SELECTOR) \
+  --run-index N --view snapshot|current|both \
+  [--limit N] [--cursor TOKEN] [--format human|json]
+```
+
+`--ref` requires an explicit Candidate or HEAD baseline; if that side is
+absent, the command fails without selecting the other. `--seal` selects one
+immutable Seal and cannot be combined with `--baseline`. `--run-index` is the
+zero-based OriginMap run index, including untraced runs in the count; the
+selected run must be External. `snapshot` searches the saved full source Blob,
+`current` searches stable bytes read from its source key binding, and `both`
+returns snapshot positions first and then current positions. Each view lists
+all overlapping exact byte matches in increasing start-offset order. An entry
+states a byte position in one fixed version, not historical identity.
+
+The default page limit is 100 entries across both views; an explicit `--limit`
+must be positive. The page result is `sealgraph/trace-occurrences/v1` with
+exact members `schema,selection,run,view,observation,page` as specified by
+[Accepted ADR 0040](adr/0040-origin-trace-occurrence-listing-and-paging.md).
+`page.has_more=true` means further matches exist and `next_cursor` continues
+from the last entry. Only the final page proves the full position set. A
+cursor fixes the chosen baseline, run, view, limit, snapshot and current byte
+identities, and current binding where applicable. Changed context returns
+`PAGE_CONTEXT_CHANGED`; a malformed or altered token returns
+`PAGE_TOKEN_INVALID`. A current source read failure produces
+`page.state=INCOMPLETE`, a reason, and no assertion that an empty entry array
+means no matches. The operation does not store occurrence positions or alter
+the one-match `trace compare` presence result.
+
 Format 5 uses one-target whole-record Cause operations:
 
 ```text

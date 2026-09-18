@@ -72,6 +72,10 @@ func completionForOption(prior []string) (string, []string, bool) {
 		return "plain", []string{"human", "json"}, true
 	case "--source-format":
 		return "plain", []string{"4"}, true
+	case "--baseline":
+		return "plain", []string{"candidate", "head"}, true
+	case "--view":
+		return "plain", []string{"snapshot", "current", "both"}, true
 	case "--from":
 		return "plain", []string{"5"}, true
 	case "--to":
