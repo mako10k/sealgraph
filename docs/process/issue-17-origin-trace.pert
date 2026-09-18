@@ -189,7 +189,7 @@ task NATIVE_TRANSPORT AUTHOR -> TRANSPORT:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; R3 AC20; ADR0032/0033/0035"
@@ -387,3 +387,16 @@ work_event OCCURRENCES_LIST_FINISH_20260918:
   task OCCURRENCES_LIST
   kind finish
   occurred_at 2026-09-18T18:41:30+09:00
+
+work_event NATIVE_TRANSPORT_START_20260918:
+  model 1
+  task NATIVE_TRANSPORT
+  kind start
+  occurred_at 2026-09-18T18:47:37+09:00
+  planned_value 5.5p
+
+work_event NATIVE_TRANSPORT_FINISH_20260918:
+  model 1
+  task NATIVE_TRANSPORT
+  kind finish
+  occurred_at 2026-09-18T18:59:29+09:00
