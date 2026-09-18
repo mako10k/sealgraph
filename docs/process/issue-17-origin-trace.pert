@@ -291,6 +291,18 @@ task OCCURRENCES_LIST AUTHOR -> OCCURRENCES:
 gate JOIN_OCCURRENCES OCCURRENCES -> TRIAL:
   reason "詳細側試用では位置一覧とページ継続も確認する。"
 
+task MIGRATE_FORMAT7 TYPES -> MIGRATION:
+  title "P9 format 5/6→7 明示移行コマンド"
+  description "ADR0033 §2.7とADR0035 §4.3のconfig-only migration、旧ID/bytes保持、staged fsck、atomic config公開、readback、v2 receipt、失敗境界、旧5→6維持を仮設repoで実装・検証。実repo移行・releaseなし。三点値は未計測仮説で着手前に再見積り。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-p3-migration-addendum-2026-09-18.md; Accepted ADR0033 §2.7/0035 §4.3"
+
 work_event PLAN_REVIEW_ACCEPTED_20260918:
   model 1
   task PLAN_REVIEW
@@ -439,3 +451,9 @@ work_event STATUS_REVISIT_FINISH_20260918:
   task STATUS_REVISIT
   kind finish
   occurred_at 2026-09-18T19:44:37+09:00
+
+milestone MIGRATION:
+  title "P9 format 5/6→7 明示移行の実装を検証"
+
+gate JOIN_MIGRATION MIGRATION -> INTEGRATION:
+  reason "NORMATIVE_SYNCとFULL_VERIFICATIONはformat 5/6→7の明示移行実装も含めて照合する。実repo移行の許可ではない。"
