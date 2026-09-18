@@ -3,7 +3,7 @@
 - 日付: 2026-09-18（JST）
 - 範囲: Accepted R1/R2/R3 の AC1〜AC21、Accepted ADR 0033・0036〜0041、Accepted [P3 計画](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) P9、[正本 PERT](issue-17-origin-trace.pert) `FULL_VERIFICATION`。P3 本文の `Proposed` は承認前の exact snapshot で、現在の採用状態は[承認記録](issue-17-origin-trace-implementation-plan-r3-acceptance-2026-09-18.md)による。
 - 検証対象: ローカル branch `codex/issue-17-origin-trace-r2-wip` の format 7 実装、format 5/6 の保持、仮設 repository による migration/transport、公開 CLI、規範文書。実 repository の移行、push、release、所有者の最終受入は対象外。
-- PERT 実績: `FULL_VERIFICATION` は20:49:37 JSTに開始し、20:56:01 JSTに終了。経過6分24秒は作業期間であり投入工数ではない。`FINISH` milestone は P3 内部適合証拠の到達として reached。closure により既に到達していた `SELF`・`DIRECTIONS`・`TRANSPORT`・`INTEGRATION`・`ESTIMATE`・`OCCURRENCES` も reached に更新した。`document check`、両 schedule、`dag next` の読み戻しは診断なしで成功し、残り task はない。配布や受入の到達を示さない。
+- PERT 実績: `FULL_VERIFICATION` は20:49:37 JSTに開始し、20:56:01 JSTに終了。経過6分24秒は作業期間であり投入工数ではない。`FINISH` milestone は P3 内部適合証拠の到達として reached。closure により既に到達していた `SELF`・`DIRECTIONS`・`TRANSPORT`・`INTEGRATION`・`ESTIMATE`・`OCCURRENCES` も reached に更新し、project 説明を Accepted P3 と内部検証済みの境界に合わせた。`document check`、両 schedule、`dag next` の読み戻しは診断なしで成功し、残り task はない。配布や受入の到達を示さない。
 
 ## AC 対応と証拠
 

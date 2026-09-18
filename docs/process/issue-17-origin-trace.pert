@@ -2,7 +2,7 @@
 project SEALGRAPH_ISSUE17:
   version 5
   title "Issue #17 Origin Trace R3 作業投影"
-  description "Accepted R1/R2/R3・ADR0033-0040に対するP3候補の作業投影。P3採用まではPLAN_REVIEWがblocked。三点ポイントは未計測の仮説、velocity・納期なし、1人枠は計算仮定。実装・公開・実移行の承認ではない。"
+  description "Accepted R1/R2/R3・ADR0033-0041とAccepted P3の実装・検証工程の投影。FINISHは内部適合証拠の到達であり、公開・実repository移行・所有者の最終受入ではない。三点ポイントは事前の相対見積り、WRITER 1枠は計算仮定であり投入工数ではない。"
   duration_unit point
   finish FINISH
 
