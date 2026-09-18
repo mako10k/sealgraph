@@ -10,6 +10,9 @@ import (
 // EncodeCandidate emits the exact persisted format-5 Candidate bytes,
 // including the required final LF.
 func EncodeCandidate(candidate domainv5.Candidate) ([]byte, error) {
+	if candidate.Origin != nil {
+		return nil, fmt.Errorf("format-5 Candidate cannot encode origin")
+	}
 	normalized, err := domainv5.NormalizeCandidate(candidate)
 	if err != nil {
 		return nil, err

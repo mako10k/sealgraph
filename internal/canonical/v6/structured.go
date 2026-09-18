@@ -41,6 +41,9 @@ func EncodeMaterial(material domainv6.Material) ([]byte, error) {
 func DecodeMaterial(data []byte) (domainv6.Material, error) { return canonicalv5.DecodeMaterial(data) }
 
 func EncodeProvenance(provenance domainv6.Provenance) ([]byte, error) {
+	if provenance.Origin != nil {
+		return nil, fmt.Errorf("format-6 Provenance cannot encode origin")
+	}
 	normalized, err := normalizeProvenance(provenance)
 	if err != nil {
 		return nil, err
@@ -61,6 +64,9 @@ func DecodeProvenance(data []byte) (domainv6.Provenance, error) {
 }
 
 func EncodeCandidate(candidate domainv6.Candidate) ([]byte, error) {
+	if candidate.Origin != nil {
+		return nil, fmt.Errorf("format-6 Candidate cannot encode origin")
+	}
 	normalized, err := normalizeCandidate(candidate)
 	if err != nil {
 		return nil, err

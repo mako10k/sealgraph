@@ -86,6 +86,9 @@ func DecodeMaterial(data []byte) (domainv5.Material, error) {
 
 // EncodeProvenance returns canonical Provenance Blob bytes without a trailing LF.
 func EncodeProvenance(provenance domainv5.Provenance) ([]byte, error) {
+	if provenance.Origin != nil {
+		return nil, fmt.Errorf("format-5 Provenance cannot encode origin")
+	}
 	normalized, err := domainv5.NormalizeProvenance(provenance)
 	if err != nil {
 		return nil, err
