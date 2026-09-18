@@ -118,3 +118,43 @@ func TestMigrateRepositoryTo7RejectsWrongSourceAndCorruptionBeforeCommit(t *test
 		t.Fatalf("precommit failure changed config: %q err=%v", config, err)
 	}
 }
+
+func TestMigrateRepositoryTo7RetainsNewerShapedOrphan(t *testing.T) {
+	for _, sourceFormat := range []int{5, 6} {
+		t.Run(migrationSourceConfig(sourceFormat), func(t *testing.T) {
+			ctx, root, repo := prepareFormat7MigrationFixture(t, sourceFormat)
+			content, err := repo.objects.WriteBlob(ctx, []byte("orphan-content"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			material := putFormat7Material(t, repo, content)
+			orphan := putFormat7Seal(t, repo, material, nil)
+			before, err := repo.Fsck(ctx)
+			if err != nil || before.SealsV7 != 0 {
+				t.Fatalf("source fsck=%+v err=%v", before, err)
+			}
+			physical, err := capturePhysicalRepositoryObservation(repo.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := MigrateRepositoryTo7(ctx, root, sourceFormat); err != nil {
+				t.Fatal(err)
+			}
+			migrated, err := OpenStandalone(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			after, err := migrated.Fsck(ctx)
+			if err != nil || after.SealsV7 != 1 {
+				t.Fatalf("migrated fsck=%+v err=%v", after, err)
+			}
+			if _, err := migrated.LoadSeal(ctx, orphan); err != nil {
+				t.Fatalf("retained orphan cannot be read: %v", err)
+			}
+			readback, err := capturePhysicalRepositoryObservation(migrated.dir)
+			if err != nil || !equalMigrationRetainedPhysical(physical, readback) {
+				t.Fatalf("orphan bytes changed: %v", err)
+			}
+		})
+	}
+}

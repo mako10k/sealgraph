@@ -40,8 +40,7 @@ func (r *Repository) migrateFormat7Locked(ctx context.Context, workDir string, f
 	if current, err := repositoryFormat(r.dir); err != nil || current != fromFormat {
 		return Format7MigrationResult{}, fmt.Errorf("migration source config changed before validation: format=%d err=%v", current, err)
 	}
-	beforeReport, err := r.Fsck(ctx)
-	if err != nil {
+	if _, err := r.Fsck(ctx); err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("format-%d fsck before migration: %w", fromFormat, err)
 	}
 	beforePhysical, err := capturePhysicalRepositoryObservation(r.dir)
@@ -66,7 +65,7 @@ func (r *Repository) migrateFormat7Locked(ctx context.Context, workDir string, f
 	if err := stageFormat7Migration(staging, beforePhysical, beforeInventory.candidates); err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("prepare format-7 staging: %w", err)
 	}
-	if err := validateFormat7MigrationStaging(ctx, staging, beforePhysical, beforeInventory, beforeReport); err != nil {
+	if err := validateFormat7MigrationStaging(ctx, staging, beforePhysical, beforeInventory); err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("validate format-7 staging: %w", err)
 	}
 	temp, err := writeFormat7ConfigTemp(r.dir)
@@ -80,7 +79,7 @@ func (r *Repository) migrateFormat7Locked(ctx context.Context, workDir string, f
 	if err := commitFormat7Config(r.dir, temp, fromFormat); err != nil {
 		return Format7MigrationResult{}, err
 	}
-	return readBackFormat7Migration(ctx, workDir, beforePhysical, beforeInventory, beforeReport)
+	return readBackFormat7Migration(ctx, workDir, beforePhysical, beforeInventory)
 }
 
 func stageFormat7Migration(staging string, physical physicalRepositoryObservation, candidates map[string][]byte) error {
@@ -123,14 +122,10 @@ func stageFormat7Migration(staging string, physical physicalRepositoryObservatio
 	return syncStagingTree(staging)
 }
 
-func validateFormat7MigrationStaging(ctx context.Context, staging string, physical physicalRepositoryObservation, inventory format6MigrationObservation, report FsckReport) error {
+func validateFormat7MigrationStaging(ctx context.Context, staging string, physical physicalRepositoryObservation, inventory format6MigrationObservation) error {
 	staged := newRepositoryFormat(staging, 7)
-	stagedReport, err := staged.Fsck(ctx)
-	if err != nil {
+	if _, err := staged.Fsck(ctx); err != nil {
 		return fmt.Errorf("staged fsck: %w", err)
-	}
-	if err := validateFormat7MigrationCounts(report, stagedReport); err != nil {
-		return err
 	}
 	stagedPhysical, err := capturePhysicalRepositoryObservation(staging)
 	if err != nil || !equalMigrationRetainedPhysical(physical, stagedPhysical) {
@@ -141,16 +136,6 @@ func validateFormat7MigrationStaging(ctx context.Context, staging string, physic
 		return fmt.Errorf("staged REF, Candidate, or object inventory differs from source: %v", err)
 	}
 	return staged.validateMigrationCandidates(ctx, inventory.candidates)
-}
-
-func validateFormat7MigrationCounts(before, after FsckReport) error {
-	if before.SealsV5 != after.SealsV5 || before.SealsV6 != after.SealsV6 ||
-		before.CandidatesV5 != after.CandidatesV5 || before.CandidatesV6 != after.CandidatesV6 ||
-		before.Seals != after.Seals || before.REFs != after.REFs || before.Tags != after.Tags ||
-		before.Blobs != after.Blobs || after.SealsV7 != 0 || after.CandidatesV7 != 0 || after.ProvenancesV3 != 0 {
-		return fmt.Errorf("config-only migration changed retained typed inventory")
-	}
-	return nil
 }
 
 func equalMigrationRetainedPhysical(source, target physicalRepositoryObservation) bool {
@@ -233,7 +218,7 @@ func migrationSourceConfig(format int) string {
 	return format6ConfigBytes
 }
 
-func readBackFormat7Migration(ctx context.Context, workDir string, physical physicalRepositoryObservation, inventory format6MigrationObservation, before FsckReport) (Format7MigrationResult, error) {
+func readBackFormat7Migration(ctx context.Context, workDir string, physical physicalRepositoryObservation, inventory format6MigrationObservation) (Format7MigrationResult, error) {
 	migrated, err := OpenStandalone(workDir)
 	if err != nil || migrated.Format() != 7 {
 		return Format7MigrationResult{}, fmt.Errorf("MIGRATION_COMMITTED_READBACK_FAILED: reopen format-7 repository; do not retry automatically: %v", err)
@@ -241,9 +226,6 @@ func readBackFormat7Migration(ctx context.Context, workDir string, physical phys
 	after, err := migrated.Fsck(ctx)
 	if err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("MIGRATION_COMMITTED_READBACK_FAILED: format-7 fsck; do not retry automatically: %w", err)
-	}
-	if err := validateFormat7MigrationCounts(before, after); err != nil {
-		return Format7MigrationResult{}, fmt.Errorf("MIGRATION_COMMITTED_READBACK_FAILED: %w; do not retry automatically", err)
 	}
 	currentPhysical, err := capturePhysicalRepositoryObservation(migrated.dir)
 	if err != nil || !equalMigrationRetainedPhysical(physical, currentPhysical) {
