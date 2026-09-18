@@ -406,3 +406,28 @@ func TestFormat7TraceSetCanReuseExactSourceSnapshot(t *testing.T) {
 		t.Fatalf("inspection=%+v err=%v", inspection, err)
 	}
 }
+
+func TestFormat7DoesNotAuditContentOrCauseMeaning(t *testing.T) {
+	repo := openFormat7Fixture(t)
+	ctx := context.Background()
+	if _, err := repo.Add(ctx, AddOptions{REF: "claim", Content: []byte("red equals blue"), Root: true, RootSet: true, ClearCauseLinks: true}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := repo.Seal(ctx, "claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Add(ctx, AddOptions{REF: "reply", Content: []byte("red does not equal blue"), RootSet: true, Cause: &CauseInput{Target: "claim"}}); err != nil {
+		t.Fatalf("structurally valid but contradictory content was rejected: %v", err)
+	}
+	reply, err := repo.Seal(ctx, "reply")
+	if err != nil {
+		t.Fatalf("structurally valid but semantically arbitrary Cause was rejected: %v", err)
+	}
+	if len(reply.Resolved.Provenance.CauseLinks) != 1 || !reply.Resolved.Provenance.CauseLinks[0].TargetSeal.Equal(claim.ID) {
+		t.Fatalf("Cause no longer targets the exact whole Seal: %+v", reply.Resolved.Provenance.CauseLinks)
+	}
+	if _, err := repo.Fsck(ctx); err != nil {
+		t.Fatalf("structurally valid repository failed fsck: %v", err)
+	}
+}
