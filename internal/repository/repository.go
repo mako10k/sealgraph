@@ -1,4 +1,5 @@
-// Package repository coordinates the standalone format-5 and format-6 runtime.
+// Package repository coordinates the standalone format-5, format-6, and
+// format-7 runtime.
 // Format-4 repositories are rejected at the config boundary and are never
 // interpreted by ordinary runtime readers.
 package repository
@@ -12,6 +13,7 @@ import (
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
+	canonicalv7 "github.com/mako10k/sealgraph/internal/canonical/v7"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/recovery"
@@ -344,6 +346,9 @@ type SealResult struct {
 }
 
 func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
+	if r.format == 7 {
+		return SealResult{}, fmt.Errorf("format-7 Seal authoring is not available in the FORMAT_TYPES phase")
+	}
 	return withMutation(ctx, r.writer, "seal REF", func() (SealResult, error) {
 		if err := domain.ValidateREF(ref); err != nil {
 			return SealResult{}, err
@@ -504,7 +509,9 @@ func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5
 		return domainv5.ResolvedSeal{}, fmt.Errorf("read Provenance %s for Seal %s: %w", seal.Provenance, id, err)
 	}
 	var provenance domainv5.Provenance
-	if generation == 6 {
+	if generation == 7 {
+		provenance, err = canonicalv7.DecodeProvenance(provenanceObject.Data)
+	} else if generation == 6 {
 		provenance, err = canonicalv6.DecodeProvenance(provenanceObject.Data)
 	} else {
 		provenance, err = canonicalv5.DecodeProvenance(provenanceObject.Data)
@@ -524,11 +531,24 @@ func (r *Repository) LoadSeal(ctx context.Context, id domain.ObjectID) (domainv5
 			return domainv5.ResolvedSeal{}, err
 		}
 	}
+	if generation == 7 && provenance.Origin != nil {
+		_, _, err := originClosure(material.Content, content, *provenance.Origin, func(child domain.ObjectID) ([]byte, error) {
+			return r.readRepositoryBlobID(ctx, child, "format-7 origin closure")
+		})
+		if err != nil {
+			return domainv5.ResolvedSeal{}, fmt.Errorf("validate origin closure for Seal %s: %w", id, err)
+		}
+	}
 	return domainv5.ResolvedSeal{ID: id, Seal: seal, Material: material, Provenance: provenance, ContentBytes: len(content)}, nil
 }
 
 func (r *Repository) decodeSeal(data []byte) (domainv5.Seal, int, error) {
-	if r.format == 6 {
+	if r.format == 7 {
+		if seal, err := canonicalv7.DecodeSeal(data); err == nil {
+			return seal, 7, nil
+		}
+	}
+	if r.format >= 6 {
 		if seal, err := canonicalv6.DecodeSeal(data); err == nil {
 			return seal, 6, nil
 		}

@@ -7,6 +7,7 @@ import (
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
+	canonicalv7 "github.com/mako10k/sealgraph/internal/canonical/v7"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 	"github.com/mako10k/sealgraph/internal/store"
@@ -78,6 +79,13 @@ func (r *Repository) inspectCandidate(ctx context.Context, ref string) (Candidat
 			}
 		}
 	}
+	if r.format == 7 && candidate.Origin != nil {
+		if _, _, err := originClosure(candidate.Content, content, *candidate.Origin, func(child domain.ObjectID) ([]byte, error) {
+			return r.readRepositoryBlobID(ctx, child, "format-7 Candidate origin closure")
+		}); err != nil {
+			return CandidateInspection{}, nil, fmt.Errorf("Candidate %s has invalid origin closure: %w", ref, err)
+		}
+	}
 	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return CandidateInspection{}, nil, fmt.Errorf("derive prospective Candidate IDs: %w", err)
@@ -113,9 +121,12 @@ func (r *Repository) prospectiveSeal(candidate domainv5.Candidate) (domainv5.Res
 		return domainv5.ResolvedSeal{}, err
 	}
 	materialID := domain.ComputeNativeBlobID(materialBytes)
-	provenance := domainv5.Provenance{Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks}
+	provenance := domainv5.Provenance{Root: candidate.Root, Draft: candidate.Draft, CauseLinks: candidate.CauseLinks, Origin: candidate.Origin}
 	var provenanceBytes []byte
-	if r.format == 6 {
+	if r.format == 7 {
+		provenance.Schema = "sealgraph/provenance/v3"
+		provenanceBytes, err = canonicalv7.EncodeProvenance(provenance)
+	} else if r.format == 6 {
 		provenance.Schema = "sealgraph/provenance/v2"
 		provenanceBytes, err = canonicalv6.EncodeProvenance(provenance)
 	} else {
@@ -128,7 +139,10 @@ func (r *Repository) prospectiveSeal(candidate domainv5.Candidate) (domainv5.Res
 	provenanceID := domain.ComputeNativeBlobID(provenanceBytes)
 	seal := domainv5.Seal{Material: materialID, Provenance: provenanceID}
 	var sealBytes []byte
-	if r.format == 6 {
+	if r.format == 7 {
+		seal.Schema = "sealgraph/seal/v7"
+		sealBytes, err = canonicalv7.EncodeSeal(seal)
+	} else if r.format == 6 {
 		seal.Schema = "sealgraph/seal/v6"
 		sealBytes, err = canonicalv6.EncodeSeal(seal)
 	} else {

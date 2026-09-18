@@ -32,9 +32,22 @@ func TestOriginMapCanonicalBytesAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if id := domain.ComputeNativeBlobID(got).String(); id != "077cd333f977f421dab6d36867d1df2764fd2cf7741e23942d481f1f81d2eac0" {
+		t.Fatalf("OriginMap canonical ID=%s", id)
+	}
 	reencoded, err := EncodeOriginMap(decoded)
 	if err != nil || !bytes.Equal(got, reencoded) {
 		t.Fatalf("round trip err=%v", err)
+	}
+}
+
+func TestSourceSnapshotCanonicalID(t *testing.T) {
+	encoded, err := EncodeSourceSnapshot(domainv7.SourceSnapshot{Schema: domainv7.SourceSnapshotSchema, SourceKey: "source-A", Content: testID('c')})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id := domain.ComputeNativeBlobID(encoded).String(); id != "12b732a69208f7a9d7c4a7f43f6c83f14561ceb0fa75a963ec7577dc3802fb60" {
+		t.Fatalf("SourceSnapshot canonical ID=%s", id)
 	}
 }
 

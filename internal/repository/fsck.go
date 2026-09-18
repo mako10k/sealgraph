@@ -11,18 +11,20 @@ import (
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
+	canonicalv7 "github.com/mako10k/sealgraph/internal/canonical/v7"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
+	domainv7 "github.com/mako10k/sealgraph/internal/domain/v7"
 	"github.com/mako10k/sealgraph/internal/store"
 	"github.com/mako10k/sealgraph/internal/store/native"
 )
 
 type FsckReport struct {
-	Blobs, Seals, Materials, Provenances, REFs, Tags, ActiveSeals int
-	SealsV5, SealsV6, ProvenancesV1, ProvenancesV2                int
-	CandidatesV5, CandidatesV6                                    int
-	HistoricalOrDetachedSeals                                     []domain.ObjectID
-	UnreferencedBlobs                                             []domain.ObjectID
+	Blobs, Seals, Materials, Provenances, REFs, Tags, ActiveSeals          int
+	SealsV5, SealsV6, SealsV7, ProvenancesV1, ProvenancesV2, ProvenancesV3 int
+	CandidatesV5, CandidatesV6, CandidatesV7                               int
+	HistoricalOrDetachedSeals                                              []domain.ObjectID
+	UnreferencedBlobs                                                      []domain.ObjectID
 }
 
 type fsckInventory struct {
@@ -30,6 +32,8 @@ type fsckInventory struct {
 	seals                map[string]domainv5.Seal
 	materials            map[string]domainv5.Material
 	provenances          map[string]domainv5.Provenance
+	origins              map[string]domainv7.OriginMap
+	snapshots            map[string]domainv7.SourceSnapshot
 	sealGeneration       map[string]int
 	provenanceGeneration map[string]int
 }
@@ -80,31 +84,35 @@ func (r *Repository) Fsck(ctx context.Context) (FsckReport, error) {
 		return FsckReport{}, fmt.Errorf("validate active repository graph: %w", err)
 	}
 	referenced := fsckReferencedClosure(inventory)
-	candidatesV5, candidatesV6, err := r.fsckCandidateGenerations(ctx)
+	candidatesV5, candidatesV6, candidatesV7, err := r.fsckCandidateGenerations(ctx)
 	if err != nil {
 		return FsckReport{}, err
 	}
-	report := buildFsckReport(inventory, observation, tags, activeGraph, referenced, candidatesV5, candidatesV6)
+	report := buildFsckReport(inventory, observation, tags, activeGraph, referenced, candidatesV5, candidatesV6, candidatesV7)
 	if err := r.validateFsckFinalObservation(ctx, observation, physical); err != nil {
 		return FsckReport{}, err
 	}
 	return report, nil
 }
 
-func buildFsckReport(inventory fsckInventory, observation headObservation, tags []fsckTag, activeGraph *observedGraph, referenced map[string]bool, candidatesV5, candidatesV6 int) FsckReport {
-	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}, CandidatesV5: candidatesV5, CandidatesV6: candidatesV6}
+func buildFsckReport(inventory fsckInventory, observation headObservation, tags []fsckTag, activeGraph *observedGraph, referenced map[string]bool, candidatesV5, candidatesV6, candidatesV7 int) FsckReport {
+	report := FsckReport{Blobs: len(inventory.objects), Seals: len(inventory.seals), Materials: len(inventory.materials), Provenances: len(inventory.provenances), REFs: len(observation.names), Tags: len(tags), ActiveSeals: len(activeGraph.active), HistoricalOrDetachedSeals: []domain.ObjectID{}, UnreferencedBlobs: []domain.ObjectID{}, CandidatesV5: candidatesV5, CandidatesV6: candidatesV6, CandidatesV7: candidatesV7}
 	for _, generation := range inventory.sealGeneration {
 		if generation == 5 {
 			report.SealsV5++
-		} else {
+		} else if generation == 6 {
 			report.SealsV6++
+		} else if generation == 7 {
+			report.SealsV7++
 		}
 	}
 	for _, generation := range inventory.provenanceGeneration {
 		if generation == 1 {
 			report.ProvenancesV1++
-		} else {
+		} else if generation == 2 {
 			report.ProvenancesV2++
+		} else if generation == 3 {
+			report.ProvenancesV3++
 		}
 	}
 	for id := range inventory.seals {
@@ -147,6 +155,8 @@ func validateFsckFixedPhysicalEntries(entries map[string]physicalEntryObservatio
 	expected := configBytes
 	if string(config.Data) == format6ConfigBytes {
 		expected = format6ConfigBytes
+	} else if string(config.Data) == format7ConfigBytes {
+		expected = format7ConfigBytes
 	}
 	expectedConfigDigest := sha256.Sum256([]byte(expected))
 	if config.Size != int64(len(expected)) || config.SHA256 != expectedConfigDigest {
@@ -281,8 +291,10 @@ func validateFsckObjectInventoryPhysical(objects []store.Object, physical physic
 
 func validateFsckTypedReferences(inventory fsckInventory) error {
 	objects := make(map[string]bool, len(inventory.objects))
+	objectData := make(map[string][]byte, len(inventory.objects))
 	for _, object := range inventory.objects {
 		objects[object.ID.String()] = true
+		objectData[object.ID.String()] = object.Data
 	}
 	for id, seal := range inventory.seals {
 		if _, ok := inventory.materials[seal.Material.String()]; !ok {
@@ -293,8 +305,29 @@ func validateFsckTypedReferences(inventory fsckInventory) error {
 		}
 		sealGeneration := inventory.sealGeneration[id]
 		provenanceGeneration := inventory.provenanceGeneration[seal.Provenance.String()]
-		if (sealGeneration == 5 && provenanceGeneration != 1) || (sealGeneration == 6 && provenanceGeneration != 2) {
+		if (sealGeneration == 5 && provenanceGeneration != 1) || (sealGeneration == 6 && provenanceGeneration != 2) || (sealGeneration == 7 && provenanceGeneration != 3) {
 			return fmt.Errorf("Seal %s generation v%d cross-pairs with Provenance generation v%d", id, sealGeneration, provenanceGeneration)
+		}
+		if sealGeneration == 7 {
+			provenance := inventory.provenances[seal.Provenance.String()]
+			if provenance.Origin != nil {
+				material := inventory.materials[seal.Material.String()]
+				read := func(child domain.ObjectID) ([]byte, error) {
+					data, ok := objectData[child.String()]
+					if !ok {
+						return nil, fmt.Errorf("missing Blob %s", child)
+					}
+					return data, nil
+				}
+				origin, snapshots, err := originClosure(material.Content, objectData[material.Content.String()], *provenance.Origin, read)
+				if err != nil {
+					return fmt.Errorf("Seal %s has invalid origin closure: %w", id, err)
+				}
+				inventory.origins[provenance.Origin.String()] = origin
+				for snapshotID, snapshot := range snapshots {
+					inventory.snapshots[snapshotID] = snapshot
+				}
+			}
 		}
 	}
 	for id, material := range inventory.materials {
@@ -345,12 +378,26 @@ func fsckReferencedClosure(inventory fsckInventory) map[string]bool {
 			}
 		}
 		if provenance, ok := inventory.provenances[id]; ok {
+			if provenance.Origin != nil {
+				queue = append(queue, provenance.Origin.String())
+			}
 			for _, link := range provenance.CauseLinks {
 				queue = append(queue, link.TargetSeal.String())
 				for _, previous := range link.PreviousRevisionSealOfTargetSeal {
 					queue = append(queue, previous.String())
 				}
 			}
+		}
+		if origin, ok := inventory.origins[id]; ok {
+			queue = append(queue, origin.Content.String())
+			for _, run := range origin.Runs {
+				if run.Kind == "external" {
+					queue = append(queue, run.Snapshot.String())
+				}
+			}
+		}
+		if snapshot, ok := inventory.snapshots[id]; ok {
+			queue = append(queue, snapshot.Content.String())
 		}
 	}
 	return referenced
@@ -396,7 +443,7 @@ func fsckInventoryFromPhysicalFormat(ctx context.Context, physical physicalRepos
 }
 
 func classifyFsckObjects(objects []store.Object, format int) fsckInventory {
-	result := fsckInventory{objects: objects, seals: make(map[string]domainv5.Seal), materials: make(map[string]domainv5.Material), provenances: make(map[string]domainv5.Provenance), sealGeneration: make(map[string]int), provenanceGeneration: make(map[string]int)}
+	result := fsckInventory{objects: objects, seals: make(map[string]domainv5.Seal), materials: make(map[string]domainv5.Material), provenances: make(map[string]domainv5.Provenance), origins: make(map[string]domainv7.OriginMap), snapshots: make(map[string]domainv7.SourceSnapshot), sealGeneration: make(map[string]int), provenanceGeneration: make(map[string]int)}
 	for _, object := range objects {
 		if value, err := canonicalv5.DecodeSeal(object.Data); err == nil {
 			result.seals[object.ID.String()] = value
@@ -409,7 +456,7 @@ func classifyFsckObjects(objects []store.Object, format int) fsckInventory {
 			result.provenances[object.ID.String()] = value
 			result.provenanceGeneration[object.ID.String()] = 1
 		}
-		if format == 6 {
+		if format >= 6 {
 			if value, err := canonicalv6.DecodeSeal(object.Data); err == nil {
 				result.seals[object.ID.String()] = value
 				result.sealGeneration[object.ID.String()] = 6
@@ -419,35 +466,47 @@ func classifyFsckObjects(objects []store.Object, format int) fsckInventory {
 				result.provenanceGeneration[object.ID.String()] = 2
 			}
 		}
+		if format == 7 {
+			if value, err := canonicalv7.DecodeSeal(object.Data); err == nil {
+				result.seals[object.ID.String()] = value
+				result.sealGeneration[object.ID.String()] = 7
+			}
+			if value, err := canonicalv7.DecodeProvenance(object.Data); err == nil {
+				result.provenances[object.ID.String()] = value
+				result.provenanceGeneration[object.ID.String()] = 3
+			}
+		}
 	}
 	return result
 }
 
-func (r *Repository) fsckCandidateGenerations(ctx context.Context) (int, int, error) {
+func (r *Repository) fsckCandidateGenerations(ctx context.Context) (int, int, int, error) {
 	names, err := r.candidates.List()
 	if err != nil {
-		return 0, 0, fmt.Errorf("validate Candidate namespace for fsck: %w", err)
+		return 0, 0, 0, fmt.Errorf("validate Candidate namespace for fsck: %w", err)
 	}
-	v5, v6 := 0, 0
+	v5, v6, v7 := 0, 0, 0
 	for _, name := range names {
 		snapshot, err := r.candidates.LoadSnapshot(name)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, err
 		}
-		if _, err := canonicalv6.DecodeCandidate(snapshot.Bytes); err == nil {
+		if _, err := canonicalv7.DecodeCandidate(snapshot.Bytes); err == nil && r.format == 7 {
+			v7++
+		} else if _, err := canonicalv6.DecodeCandidate(snapshot.Bytes); err == nil && r.format >= 6 {
 			v6++
 		} else if _, err := canonicalv5.DecodeCandidate(snapshot.Bytes); err == nil {
 			v5++
 		} else {
-			return 0, 0, fmt.Errorf("Candidate %s has unsupported generation", name)
+			return 0, 0, 0, fmt.Errorf("Candidate %s has unsupported generation", name)
 		}
-		if r.format == 6 {
+		if r.format >= 6 {
 			if _, err := r.InspectCandidate(ctx, name); err != nil {
-				return 0, 0, fmt.Errorf("validate Candidate %s closure for fsck: %w", name, err)
+				return 0, 0, 0, fmt.Errorf("validate Candidate %s closure for fsck: %w", name, err)
 			}
 		}
 	}
-	return v5, v6, nil
+	return v5, v6, v7, nil
 }
 
 func fsckResolvedSeals(inventory fsckInventory) map[string]domainv5.ResolvedSeal {
