@@ -3,6 +3,7 @@
 - 実行日: 2026-09-18（JST）
 - 根拠: Accepted Issue #17 R1/R2/R3 要件、Accepted ADR 0033・0036〜0041、[P3 計画](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) P9、[PERT](issue-17-origin-trace.pert) `NORMATIVE_SYNC`
 - 範囲: format 7 の規範文書、公開 CLI の記述、help/completion と実装の整合。実 repository の移行、配布、最終受入は含まない。
+- PERT 実績: `NORMATIVE_SYNC` は 2026-09-18 20:24:00 JST に開始、20:42:18 JST に終了。18 分 18 秒は経過時間であり投入工数ではない。`DOCS` milestone は到達。
 
 ## 権威と変更
 
@@ -20,5 +21,9 @@ CLI help の trace command 登録は既に現行契約と一致していた。co
 - completion（`--from` のコマンド別候補を含む）、inspection v4、`.gitignore` 方針の focused test が成功した。
 - `gofmt -w .`、`go vet ./...`、`go test ./...`、`npm ci`、`npm run clone-check`、`make complexity-check`、`make deadcode-check`、`make completion-check` が成功した。clone-check は重複率 0.09% で通過した。`--from` 修正後に全て再実行した。
 - 独立した文書レビューで ADR の後継範囲と `/local/` 記述の不整合を指摘され、修正後の再レビューで解消を確認した。別の独立レビューで `--from` 補完と文書索引の漏れを指摘され、上記の修正と回帰テストを加えた。
+
+## 残作業と条件付き見通し
+
+2026-09-18 20:43 JST 時点で、PERT の残りは `FULL_VERIFICATION`（三点見積の期待値 3.333p）だけである。開始・終了時刻が揃った完了 13 task は計 60.333p、経過 task 時間の合計 4.745 時間で、観測代理速度は 12.71p/時。長かった `TRACE_AUTHOR` と `SELF_COMPARE` に限定すると 10.833p / 2.907 時間 = 3.73p/時。後者から全標本までの感度範囲を 1 人が中断なく作業する仮定で換算すると、内部検証の条件付き終了は同日 20:59〜21:37 JST。これはコミット・レビューの進行と task 時間による近似であり、投入工数や納期の約束ではない。次の更新点は `FULL_VERIFICATION` の実績取得時。配布、実 repository 移行、所有者受入の待ちはこの範囲に含まない。
 
 この記録は文書と公開操作の同期の証拠であり、AC1〜AC21 の全体適合や利用者への配布を確定しない。次の `FULL_VERIFICATION` が全体対応表と独立レビューを閉じる。

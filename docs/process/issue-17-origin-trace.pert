@@ -68,7 +68,7 @@ milestone INTEGRATION:
 
 milestone DOCS:
   title "P9 規範文書と公開操作の整合"
-  state planned
+  state reached
 
 milestone FINISH:
   title "P9 全体適合証拠が揃う（公開・実移行は別）"
@@ -201,7 +201,7 @@ task NORMATIVE_SYNC INTEGRATION -> DOCS:
     optimistic 1p
     most_likely 2p
     pessimistic 4p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; ADR0038/0040"
@@ -478,3 +478,9 @@ work_event NORMATIVE_SYNC_START_20260918:
   kind start
   occurred_at 2026-09-18T20:24:00+09:00
   planned_value 13/6p
+
+work_event NORMATIVE_SYNC_FINISH_20260918:
+  model 1
+  task NORMATIVE_SYNC
+  kind finish
+  occurred_at 2026-09-18T20:42:18+09:00
