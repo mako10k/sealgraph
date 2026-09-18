@@ -116,8 +116,9 @@ Selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
 `REF@TOKEN`. A repository-wide `SEAL_TOKEN` is 4 through 64 lower-case hex
 characters, resolves uniquely across the native ODB, and must decode as a
 canonical Seal generation permitted by the current repository format. Format 5
-therefore accepts Seal v5 only; format 6 accepts valid Seal v5 and Seal v6
-objects with their exact required Provenance pairing. `REF@hex` instead resolves
+therefore accepts Seal v5 only; format 6 accepts valid Seal v5 and Seal v6,
+and format 7 accepts Seal v5/v6/v7, each with its exact required Provenance
+pairing. `REF@hex` instead resolves
 uniquely within the REF's current HEAD plus observed structural revision closure;
 unrelated loose objects do not participate in that scoped prefix match.
 `REF@non-hex`
@@ -246,7 +247,7 @@ repository or machine must verify.
 
 ## 6. Working candidate
 
-`add`, `link`, `unlink`, and, in format 6, `link-metadata set/remove` edit the
+`add`, `link`, `unlink`, and, in formats 6 and 7, `link-metadata set/remove` edit the
 next Candidate state for one destination REF. Attachment mutation commands are
 intentionally absent.
 
@@ -277,7 +278,7 @@ associates positional arguments, changes another target, or creates a Seal.
 Multiple targets require separate reviewed Candidate mutations. `derive` and
 `add --parent` are absent.
 
-In format 6, legacy `add`/`link` authoring preserves existing metadata on the
+In formats 6 and 7, legacy `add`/`link` authoring preserves existing metadata on the
 same exact target and creates empty metadata for a new target. Only
 `link-metadata set` adds or replaces one complete namespace entry, and only
 `link-metadata remove` removes one existing namespace. Both operations require
@@ -363,6 +364,8 @@ comparisons advances to `/v3`; `status/v3` and `stale/v2` remain unchanged.
 Format-6 shared Link records include complete metadata, typed Seal/Provenance
 generations, and detailed per-target/per-namespace comparison records as fixed
 by ADR 0031. A changed meaning MUST NOT be emitted under an older schema.
+In format 7, these nine inspection schemas advance to `/v4` as fixed by
+Accepted ADR 0035 §4.2; `status/v3` and `stale/v2` retain their meanings.
 
 Format-6 Assessment-free change identity uses
 `sealgraph/upstream-change/v2`. It retains ADR 0028's established member order,

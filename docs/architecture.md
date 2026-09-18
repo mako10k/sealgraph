@@ -193,7 +193,8 @@ Coordinates:
   exact-state restoration;
 - absent-target universal-blob import, typed projection, semantic-loss receipt,
   fsck/digest readback, and atomic namespace publication;
-- exact config-only format-5-to-6 migration with retained-state readback.
+- exact config-only format-5-to-6 and format-5/6-to-7 migrations with
+  retained-state readback.
 
 It never probes Git. A Git entry point passes the real worktree root explicitly
 when native mutation is requested.

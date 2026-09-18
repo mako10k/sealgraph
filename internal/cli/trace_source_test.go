@@ -20,6 +20,20 @@ func newTraceSourceCLIRepo(t *testing.T) string {
 	return dir
 }
 
+func TestTraceSourceCompletionUsesSourceKeys(t *testing.T) {
+	dir := newTraceSourceCLIRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "trace", "source", "bind", "manual-A", "--file", "source.txt")
+	for _, action := range []string{"show", "rebind", "unbind"} {
+		got := mustRunCLI(t, dir, "__completion", "--bash", "trace", "source", action, "")
+		if got != "__sealgraph_completion_mode=plain\nmanual-A\n" {
+			t.Fatalf("%s completion=%q", action, got)
+		}
+	}
+}
+
 func TestRunTraceSourceBindingMutationAndInspectionJSON(t *testing.T) {
 	dir := newTraceSourceCLIRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("source"), 0o600); err != nil {

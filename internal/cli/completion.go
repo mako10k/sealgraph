@@ -148,6 +148,18 @@ func repositoryCompletionValues(workDir, path string) []string {
 			ids = append(ids, record.ID)
 		}
 		return ids
+	case "trace source show", "trace source rebind", "trace source unbind":
+		bindings, err := repo.TraceSourceList()
+		if err != nil {
+			return nil
+		}
+		keys := make([]string, 0, len(bindings))
+		for _, binding := range bindings {
+			if !strings.ContainsAny(binding.SourceKey, "\r\n") {
+				keys = append(keys, binding.SourceKey)
+			}
+		}
+		return keys
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
 	case "recover", "recover show":
