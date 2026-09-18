@@ -53,10 +53,12 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0036-origin-trace-r2-presence-and-directional-observation.md`](adr/0036-origin-trace-r2-presence-and-directional-observation.md) — Accepted: 原文残存・方向別観測。ADR 0032 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
 - [`adr/0037-origin-trace-r2-search-and-estimation.md`](adr/0037-origin-trace-r2-search-and-estimation.md) — Accepted: 完全一致探索と独立した変更後範囲推定。ADR 0034 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
 - [`adr/0038-origin-trace-r2-cli-and-observation-output.md`](adr/0038-origin-trace-r2-cli-and-observation-output.md) — Accepted: 軽い比較と任意の推定を分ける CLI/schema。ADR 0035 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0039-origin-trace-derived-occurrence-positions.md`](adr/0039-origin-trace-derived-occurrence-positions.md) — Accepted: 全文からの一致位置導出と件数上限付き提示の後継設計判断（[承認・非 draft Seal 記録](process/issue-17-adr-0039-acceptance-2026-09-18.md)）。旧 [draft Seal](process/issue-17-adr-0039-proposed-seal-2026-09-18.md) は履歴。後継要件・公開契約との整合は未確定。
 
 ## Agent-auditable design
 
 - Issue #17 は [R2 差分要件](process/issue-17-origin-trace-requirement-r2-candidate-2026-09-17.md)を Accepted（[承認記録](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md)）。原文の完全一致確認と変更後範囲推定を分離する。[独立レビュー](process/issue-17-r2-c2-independent-review-2026-09-17.md)は採用判断の入力。[行指向の旧指示](process/issue-17-line-oriented-direction-2026-09-17.md)と[当時の詳細候補](process/issue-17-line-oriented-comparison-candidate-2026-09-17.md)は撤回後の履歴であり、今後の実装根拠にしない。旧 ADR 0032/0034/0035 の比較関連部分と[旧実装計画](process/issue-17-origin-trace-implementation-plan-2026-09-17.md)は R2 と不整合。ADR 0036～0038 と[新計画 P2](process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md)は[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)の exact snapshots で Accepted。[R2 と４文書の Seal 実行記録](process/issue-17-r2-downstream-seal-2026-09-17.md)に ID と読み戻し結果を示す。
+- 2026-09-18 の所有者方針に基づく[ADR 0039](adr/0039-origin-trace-derived-occurrence-positions.md)は、位置を全文から必要時に導出する後継判断として Accepted。Accepted R2 の後継要件改訂と ADR 0036～0038・計画 P2 との実装上の整合は別途必要である。
 
 - [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
