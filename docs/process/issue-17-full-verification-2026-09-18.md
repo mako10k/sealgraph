@@ -3,6 +3,7 @@
 - 日付: 2026-09-18（JST）
 - 範囲: Accepted R1/R2/R3 の AC1〜AC21、Accepted ADR 0033・0036〜0041、Accepted [P3 計画](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) P9、[正本 PERT](issue-17-origin-trace.pert) `FULL_VERIFICATION`。P3 本文の `Proposed` は承認前の exact snapshot で、現在の採用状態は[承認記録](issue-17-origin-trace-implementation-plan-r3-acceptance-2026-09-18.md)による。
 - 検証対象: ローカル branch `codex/issue-17-origin-trace-r2-wip` の format 7 実装、format 5/6 の保持、仮設 repository による migration/transport、公開 CLI、規範文書。実 repository の移行、push、release、所有者の最終受入は対象外。
+- PERT 実績: `FULL_VERIFICATION` は20:49:37 JSTに開始し、20:56:01 JSTに終了。経過6分24秒は作業期間であり投入工数ではない。`FINISH` milestone は P3 内部適合証拠の到達として reached。closure により既に到達していた `SELF`・`DIRECTIONS`・`TRANSPORT`・`INTEGRATION`・`ESTIMATE`・`OCCURRENCES` も reached に更新した。`document check`、両 schedule、`dag next` の読み戻しは診断なしで成功し、残り task はない。配布や受入の到達を示さない。
 
 ## AC 対応と証拠
 
@@ -37,7 +38,7 @@
 - [format7 tests](../../internal/repository/format7_test.go) は SourceSnapshot/OriginMap typed closure、source byte 不一致・範囲外拒否、旧 format 5/6 Seal・Candidate の厳格読取と世代の組合せを確認した。[migration tests](../../internal/repository/migrate_format7_test.go) は 5→7 / 6→7 の config のみの明示移行、保持 bytes/inventory、再実行と破損の拒否を確認した。
 - [native round trip tests](../../internal/repository/native_snapshot_test.go) は全 Blob と未参照 Blob、typed closure、local binding 非輸送、欠損 closure の公開前拒否を確認した。[CLI tests](../../internal/cli/inspection_json_v4_test.go) は format 7 inspection v4 と旧形式 v2/v3、[completion tests](../../internal/cli/trace_source_test.go) は source key と `--from` の補完を確認した。
 - 独立した読み取り専用レビューは AC1〜AC21 に確定的な欠陥・矛盾を見つけなかった。レビューは上記の native transport、旧形式読取、移行、help/completion を重点確認した。専用の source-export command は確認していないが、AC20 は immutable bytes からの exact 復元を要求し、repository API と native transport の readback で確認した。公開操作の追加要件には読み替えない。
-- AC11/AC13 の回帰テスト追加後に `gofmt -w .`、`go vet ./...`、`go test -count=1 ./...`、`go test -race -count=1 ./internal/repository ./internal/cli`、`npm ci`、`npm run clone-check`、`make complexity-check`、`make deadcode-check`、`make completion-check` を再実行し、全て成功した。clone-check は既知の2組・重複率0.09%で成功。
+- AC11/AC13 の回帰テスト追加後に `gofmt -w .`、`go vet ./...`、`go test -count=1 ./...`、`go test -race -count=1 ./internal/repository ./internal/cli`、`npm ci`、`npm run clone-check`、`make complexity-check`、`make deadcode-check`、`make completion-check` を再実行し、全て成功した。clone-check は既知の2組・重複率0.09%で成功。本文の相対リンク49件に欠落なし。
 
 ## 限界と残る境界
 

@@ -44,11 +44,11 @@ milestone SELF_READY:
 
 milestone SELF:
   title "S4 自身のTrace比較"
-  state planned
+  state reached
 
 milestone DIRECTIONS:
   title "S5 方向別の詳細観測"
-  state planned
+  state reached
 
 milestone TRIAL:
   title "P8 詳細側の試用と測定"
@@ -60,11 +60,11 @@ milestone STATUS_DECISION:
 
 milestone TRANSPORT:
   title "P9 native transportと元版復元"
-  state planned
+  state reached
 
 milestone INTEGRATION:
   title "全体適合確認の前提"
-  state planned
+  state reached
 
 milestone DOCS:
   title "P9 規範文書と公開操作の整合"
@@ -72,7 +72,7 @@ milestone DOCS:
 
 milestone FINISH:
   title "P9 全体適合証拠が揃う（公開・実移行は別）"
-  state planned
+  state reached
 
 task CONTRACT_REVIEW START -> CONTRACTS:
   title "S0 詳細契約の採用版を確定"
@@ -213,7 +213,7 @@ task FULL_VERIFICATION DOCS -> FINISH:
     optimistic 2p
     most_likely 3p
     pessimistic 6p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; AC1-21; repository AGENTS validation"
@@ -257,6 +257,7 @@ gate READY_PLAN PLAN_ACCEPTED -> READY:
 
 milestone ESTIMATE:
   title "P6 変更後範囲推定を検証"
+  state reached
 
 task ESTIMATE_COMPARE SELF -> ESTIMATE:
   title "P6 ABSENT_EXACT後の範囲推定"
@@ -275,6 +276,7 @@ gate JOIN_ESTIMATE ESTIMATE -> TRIAL:
 
 milestone OCCURRENCES:
   title "P7 一致位置一覧とページングを検証"
+  state reached
 
 task OCCURRENCES_LIST AUTHOR -> OCCURRENCES:
   title "P7 trace occurrences読取一覧"
@@ -491,3 +493,9 @@ work_event FULL_VERIFICATION_START_20260918:
   kind start
   occurred_at 2026-09-18T20:49:37+09:00
   planned_value 10/3p
+
+work_event FULL_VERIFICATION_FINISH_20260918:
+  model 1
+  task FULL_VERIFICATION
+  kind finish
+  occurred_at 2026-09-18T20:56:01+09:00
