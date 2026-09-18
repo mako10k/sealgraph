@@ -119,3 +119,24 @@ func TestPrepareTraceCompareDownstreamUsesCauseOnly(t *testing.T) {
 		t.Fatalf("path JSON=%s", encoded)
 	}
 }
+
+func TestPrepareTraceCompareExactHistoricalSeal(t *testing.T) {
+	dir, repo := traceComparePreparedFixture(t)
+	ctx := context.Background()
+	mustRunCLI(t, dir, "seal", "root")
+	old, err := repo.CurrentREFHead(ctx, "root")
+	if err != nil || old == nil {
+		t.Fatalf("old HEAD=%v err=%v", old, err)
+	}
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "XYZ-UV")
+	mustRunCLI(t, dir, "trace", "clear", "root")
+	mustRunCLI(t, dir, "add", "root", "--content", "updated")
+	mustRunCLI(t, dir, "seal", "root")
+	doc, err := prepareTraceCompareNoEstimate(ctx, repo, singleString{}, singleString{value: "@" + old.String(), set: true}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Graph == nil || doc.Graph.Center != old.String() || doc.Graph.Scope.Kind != "observed-head-closure-plus-selected-seal" || len(doc.Graph.Scope.ExtraSeals) != 1 || doc.Graph.Scope.ExtraSeals[0] != old.String() {
+		t.Fatalf("historical comparison=%+v", doc.Graph)
+	}
+}

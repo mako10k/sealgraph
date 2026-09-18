@@ -65,11 +65,10 @@ func selectTraceCompareBaselines(ctx context.Context, repo *repository.Repositor
 	prepared := traceComparePreparedSelection{}
 	var center *domain.ObjectID
 	if seal.set {
-		selected, err := repo.ResolveSelector(ctx, seal.value)
+		id, err := resolveTraceCompareSeal(ctx, repo, seal.value)
 		if err != nil {
 			return prepared, err
 		}
-		id := selected.ID
 		center = &id
 		idText := id.String()
 		prepared.selection = traceShowSelection{Kind: "seal", Requested: seal.value, ResolvedSealID: &idText}
@@ -119,6 +118,31 @@ func selectTraceCompareBaselines(ctx context.Context, repo *repository.Repositor
 		}
 	}
 	return prepared, nil
+}
+
+func resolveTraceCompareSeal(ctx context.Context, repo *repository.Repository, text string) (domain.ObjectID, error) {
+	selector, err := repository.ParseSelector(text)
+	if err != nil {
+		return domain.ObjectID{}, err
+	}
+	if selector.Kind == repository.SelectorCurrentREF {
+		return domain.ObjectID{}, fmt.Errorf("trace compare --seal requires an immutable Seal selector")
+	}
+	if selector.Kind == repository.SelectorGlobalSeal && len(selector.Token) == 64 {
+		id, err := domain.ParseObjectID(selector.Token)
+		if err != nil {
+			return domain.ObjectID{}, err
+		}
+		if _, err := repo.LoadSeal(ctx, id); err != nil {
+			return domain.ObjectID{}, err
+		}
+		return id, nil
+	}
+	selected, err := repo.ResolveSelector(ctx, text)
+	if err != nil {
+		return domain.ObjectID{}, err
+	}
+	return selected.ID, nil
 }
 
 func traceCompareBindingDigest(repo *repository.Repository) (string, error) {
