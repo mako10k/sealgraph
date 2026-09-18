@@ -52,7 +52,7 @@ milestone DIRECTIONS:
 
 milestone TRIAL:
   title "P8 詳細側の試用と測定"
-  state planned
+  state reached
 
 milestone STATUS_DECISION:
   title "status保留の継続または再検討方針を記録"
@@ -165,7 +165,7 @@ task DETAIL_TRIAL DIRECTIONS -> TRIAL:
     optimistic 1p
     most_likely 2p
     pessimistic 4p
-  status active
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; AC1-21"
@@ -420,3 +420,9 @@ work_event DETAIL_TRIAL_START_20260918:
   kind start
   occurred_at 2026-09-18T19:26:25+09:00
   planned_value 13/6p
+
+work_event DETAIL_TRIAL_FINISH_20260918:
+  model 1
+  task DETAIL_TRIAL
+  kind finish
+  occurred_at 2026-09-18T19:31:11+09:00

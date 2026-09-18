@@ -2,6 +2,7 @@
 
 - 日付：2026-09-18。対象は Accepted [R3 実装計画 P3](issue-17-origin-trace-implementation-plan-r3-2026-09-18.md) §3 P8 と [正本 PERT](issue-17-origin-trace.pert) の `DETAIL_TRIAL`。status への新表示、性能基準、実データ移行、公開、最終受入の判断は本記録で行わない。
 - 実行：branch `codex/issue-17-origin-trace-r2-wip`、試用前 HEAD `3739d23`。同 revision から build した binary の SHA-256 は `bda096ce37dbfc6ccc4ae4eb7eeec1a1bf7631ef70498fffc06c167231791ce8`。/tmp の専用仮設 repository でのみ操作した。`init` 後に、既存のテスト fixture と同じ format 7 config を置いた。これは5/6→7 migration の実行ではない。
+- PERT 実績：`DETAIL_TRIAL` は19:26:25 JST に着手、19:31:11 JST に完了。`TRIAL` milestone は reached。経過4分46秒は期間であり、投入工数としては記録していない。
 
 ## 仮設文書と手順
 
