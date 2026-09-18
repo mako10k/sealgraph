@@ -1,6 +1,6 @@
 # Issue #17 R3-c1 初回所有者レビュー入力
 
-- 状態：要件レビュー Step 2 の入力候補。所有者の経路選択待ち。独立レビューは未実施。
+- 状態：要件レビュー Step 2 完了。所有者は `REVIEW` を選択（[経路記録](issue-17-origin-trace-requirement-r3-first-review-route-2026-09-18.md)）。独立レビューは未実施。
 - exact 対象：[R3-c1 要件差分候補](issue-17-origin-trace-requirement-r3-candidate-2026-09-18.md)全文
 - 対象 SHA-256：`1179004a32f3e105823bcdd714e736def52ccb5716382fa5a5f40263b649d3c3`
 - 基底：Accepted R1 `aa4b31ba8b5612288a32795792f6483102125ffe78a21de0353a0cc9788bc2a7` と Accepted R2-c2 `a1dd1f6afdbb11305d67bc1b6498440e666ff50a2c60c56f6b22f7dfdd0ed4b2`。R3 は R2 の存在判定を維持した限定差分。
@@ -33,6 +33,6 @@
 
 ## 所有者の次の経路選択
 
-Step 2 の選択肢は `REVISE`（候補を改訂）、`REVIEW_THEN_REVISE`（質問付きレビュー後に改訂）、`REVIEW_THEN_DECIDE`（質問付きレビュー後に採否判断）、`REVIEW`（上記質問案でレビュー後に採否判断）の四つ。未選択である。独立レビュー後も、同じ exact 要件の採用には Step 4 の所有者判断を要する。変更した本文は新 revision として Step 1 からやり直す。
+Step 2 の選択肢は `REVISE`（候補を改訂）、`REVIEW_THEN_REVISE`（質問付きレビュー後に改訂）、`REVIEW_THEN_DECIDE`（質問付きレビュー後に採否判断）、`REVIEW`（上記質問案でレビュー後に採否判断）の四つ。所有者は `REVIEW` を選択し、上記５問に追加質問はない。Step 3 の独立レビュー後は、変更のない候補とレビュー報告を Step 4 の所有者判断へ進める。独立レビュー後も、同じ exact 要件の採用には Step 4 の所有者判断を要する。変更した本文は新 revision として Step 1 からやり直す。
 
 R3-c1 の採用、後継設計の採用、Seal、実装、移行、公開、push は、このレビュー入力で行わない。
