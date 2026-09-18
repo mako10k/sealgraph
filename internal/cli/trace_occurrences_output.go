@@ -103,6 +103,9 @@ func prepareTraceOccurrences(ctx context.Context, repo *repository.Repository, o
 	} else if err := fillTraceOccurrencesPage(&doc, input, previous, cursorContext); err != nil {
 		return traceOccurrencesDocument{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return traceOccurrencesDocument{}, err
+	}
 	if err := repo.RevalidateTraceOccurrenceInput(ctx, input); err != nil {
 		if previous != nil || errors.Is(err, repository.ErrTraceOccurrenceBaselineChanged) || errors.Is(err, repository.ErrTraceOccurrenceBindingChanged) {
 			return traceOccurrencesDocument{}, errPageContextChanged

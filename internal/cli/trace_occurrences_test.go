@@ -215,3 +215,17 @@ func TestTraceOccurrencesRevalidationClassifiesSelectedBaselineChange(t *testing
 		t.Fatalf("baseline revalidation error=%v", err)
 	}
 }
+
+func TestTraceOccurrencesCanceledContextDoesNotProducePage(t *testing.T) {
+	dir := traceOccurrencesFixture(t, "aaaa", "aa", 0)
+	repo, err := repository.OpenStandalone(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	options := traceOccurrencesOptions{ref: singleString{value: "root", set: true}, baseline: singleString{value: "candidate", set: true}, view: singleString{value: "snapshot", set: true}, limit: 1}
+	if _, err := prepareTraceOccurrences(ctx, repo, options); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled listing error=%v", err)
+	}
+}
