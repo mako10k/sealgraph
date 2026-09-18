@@ -177,6 +177,13 @@ batches paths, or retries a possibly committed migration. Success emits
 
 ## 3. Candidate authoring
 
+TODO (Issue #17 TRACE_AUTHOR, ADR 0035 §§2.1/4.1): The accepted authoring
+contract says the retained input filename and byte count appear both on stderr
+and in the operation result, while its exact JSON mutation receipt lists
+`stored_sources` entries without a filename. Resolve whether the combined
+stdout/stderr response fulfills §2.1 or the receipt schema needs an explicit
+revision before declaring the authoring output contract complete.
+
 Format 5 uses one-target whole-record Cause operations:
 
 ```text
