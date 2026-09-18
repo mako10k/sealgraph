@@ -213,7 +213,7 @@ task FULL_VERIFICATION DOCS -> FINISH:
     optimistic 2p
     most_likely 3p
     pessimistic 6p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; AC1-21; repository AGENTS validation"
@@ -484,3 +484,10 @@ work_event NORMATIVE_SYNC_FINISH_20260918:
   task NORMATIVE_SYNC
   kind finish
   occurred_at 2026-09-18T20:42:18+09:00
+
+work_event FULL_VERIFICATION_START_20260918:
+  model 1
+  task FULL_VERIFICATION
+  kind start
+  occurred_at 2026-09-18T20:49:37+09:00
+  planned_value 10/3p
