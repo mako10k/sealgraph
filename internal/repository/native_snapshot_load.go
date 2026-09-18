@@ -46,7 +46,7 @@ func LoadNativeSnapshotV1(ctx context.Context, workDir string, input []byte) ([]
 	if _, err := staged.Fsck(ctx); err != nil {
 		return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: staged native fsck failed; staging retained at %s: %w", staging, err)
 	}
-	if err := verifyNativeSnapshotEquals(ctx, staged, input); err != nil {
+	if _, err := verifyNativeSnapshotEquals(ctx, staged, input); err != nil {
 		return nil, fmt.Errorf("PRE_PUBLICATION_FAILURE: staged native inventory mismatch; staging retained at %s: %w", staging, err)
 	}
 	if err := syncStagingTree(staging); err != nil {
@@ -68,10 +68,11 @@ func LoadNativeSnapshotV1(ctx context.Context, workDir string, input []byte) ([]
 	if _, err := loaded.Fsck(ctx); err != nil {
 		return nil, fmt.Errorf("LOAD_PUBLISHED_READBACK_FAILED: native fsck; do not retry: %w", err)
 	}
-	if err := verifyNativeSnapshotEquals(ctx, loaded, input); err != nil {
+	readback, err := verifyNativeSnapshotEquals(ctx, loaded, input)
+	if err != nil {
 		return nil, fmt.Errorf("LOAD_PUBLISHED_READBACK_FAILED: exact native inventory; do not retry: %w", err)
 	}
-	return encodeNativeLoadReceipt(input, snapshot)
+	return encodeNativeLoadReceipt(input, readback)
 }
 
 func constructNativeStaging(ctx context.Context, staging string, snapshot migration.NativeSnapshotV1) error {
@@ -111,15 +112,15 @@ func constructNativeStaging(ctx context.Context, staging string, snapshot migrat
 	return nil
 }
 
-func verifyNativeSnapshotEquals(ctx context.Context, repo *Repository, input []byte) error {
+func verifyNativeSnapshotEquals(ctx context.Context, repo *Repository, input []byte) (migration.NativeSnapshotV1, error) {
 	actual, err := repo.DumpNativeSnapshotV1(ctx)
 	if err != nil {
-		return err
+		return migration.NativeSnapshotV1{}, err
 	}
 	if !bytes.Equal(actual, input) {
-		return fmt.Errorf("native snapshot exact bytes differ from source document")
+		return migration.NativeSnapshotV1{}, fmt.Errorf("native snapshot exact bytes differ from source document")
 	}
-	return nil
+	return migration.DecodeNativeSnapshotV1(actual)
 }
 
 func verifyNativeLoadModes(root string) error {
