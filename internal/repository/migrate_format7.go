@@ -48,6 +48,9 @@ func (r *Repository) migrateFormat7Locked(ctx context.Context, workDir string, f
 	if err != nil {
 		return Format7MigrationResult{}, fmt.Errorf("capture migration source: %w", err)
 	}
+	if err := validateFsckPhysicalRepository(beforePhysical); err != nil {
+		return Format7MigrationResult{}, fmt.Errorf("validate captured migration source: %w", err)
+	}
 	beforeInventory, err := r.captureFormat6MigrationObservation(ctx)
 	if err != nil {
 		return Format7MigrationResult{}, err
