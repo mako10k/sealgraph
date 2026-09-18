@@ -24,6 +24,7 @@ func TestParseTraceCompareArgsRejectsInvalidSelectionAndBudget(t *testing.T) {
 		{"--ref", "root"}, {"--ref", "root", "--seal", "@abcd", "--max-graph-visits", "1"},
 		{"--seal", "root", "--max-graph-visits", "1"}, {"--ref", "root", "--max-graph-visits", "0"},
 		{"--ref", "root", "--max-graph-visits", "nan"}, {"--ref", "root", "--max-graph-visits", "1", "extra"},
+		{"--ref", "root", "--max-graph-visits", "1", "--estimate", "--estimate"},
 		{"--ref", "root", "--max-alignment-cells", "1", "--max-graph-visits", "1"},
 	} {
 		if _, err := parseTraceCompareArgs(args, &stdout); err == nil {

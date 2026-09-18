@@ -26,11 +26,11 @@ func parseTraceCompareArgs(args []string, stdout io.Writer) (traceCompareCLIOpti
 	flags := flag.NewFlagSet("trace compare", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var ref, seal, visits singleString
-	var estimate bool
+	var estimate singleBool
 	flags.Var(&ref, "ref", "logical REF")
 	flags.Var(&seal, "seal", "immutable Seal selector")
 	flags.Var(&visits, "max-graph-visits", "positive graph visit limit")
-	flags.BoolVar(&estimate, "estimate", false, "also estimate changed current ranges")
+	flags.Var(&estimate, "estimate", "also estimate changed current ranges")
 	if err := flags.Parse(args); err != nil {
 		return traceCompareCLIOptions{}, err
 	}
@@ -54,5 +54,5 @@ func parseTraceCompareArgs(args []string, stdout io.Writer) (traceCompareCLIOpti
 	if err != nil || maxGraphVisits <= 0 {
 		return traceCompareCLIOptions{}, fmt.Errorf("--max-graph-visits requires a positive integer")
 	}
-	return traceCompareCLIOptions{ref: ref, seal: seal, maxGraphVisits: maxGraphVisits, estimate: estimate, output: output}, nil
+	return traceCompareCLIOptions{ref: ref, seal: seal, maxGraphVisits: maxGraphVisits, estimate: estimate.value, output: output}, nil
 }
