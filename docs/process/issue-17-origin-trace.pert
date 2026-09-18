@@ -1,13 +1,13 @@
 # Existing .pert plans should normally be maintained through perttool commands; direct DSL editing bypasses goal/DAG owner-confirmation checks.
 project SEALGRAPH_ISSUE17:
   version 5
-  title "Issue #17 範囲Traceと方向別観測"
-  description "P1のIssue17専用投影。全見積りはscopeからの未計測三点仮説。velocity/納期なし。resourceは同時作業1の仮定。未承認の仕様と未設定の対象環境をblockedとして保持。statusは詳細側試用後に再検討。実装・移行・配布の実行承認ではない。"
+  title "Issue #17 Origin Trace R3 作業投影"
+  description "Accepted R1/R2/R3・ADR0033-0040に対するP3候補の作業投影。P3採用まではPLAN_REVIEWがblocked。三点ポイントは未計測の仮説、velocity・納期なし、1人枠は計算仮定。実装・公開・実移行の承認ではない。"
   duration_unit point
   finish FINISH
 
 milestone START:
-  title "実装計画P1が保存されている"
+  title "旧実装計画P1のPERTが作成済み"
   state reached
 
 resource WRITER:
@@ -19,12 +19,12 @@ milestone CONTRACTS:
   state reached
 
 milestone ENVIRONMENT:
-  title "対象環境と検証条件が確定"
+  title "初期測定条件を記録"
   state planned
 
 milestone READY:
-  title "S0 実装前提が揃った"
-  state planned
+  title "P3採用と先行契約の確認が済み実装選択可能"
+  state reached
 
 milestone TYPES:
   title "S1 後継型とclosure検証"
@@ -35,7 +35,7 @@ milestone AUTHOR:
   state planned
 
 milestone COMPARATOR:
-  title "S3 固定二版の範囲比較"
+  title "P3 原文残存のbyte比較器"
   state planned
 
 milestone SELF_READY:
@@ -51,7 +51,7 @@ milestone DIRECTIONS:
   state planned
 
 milestone TRIAL:
-  title "S6 詳細側の試用結果"
+  title "P8 詳細側の試用と測定"
   state planned
 
 milestone STATUS_DECISION:
@@ -59,7 +59,7 @@ milestone STATUS_DECISION:
   state planned
 
 milestone TRANSPORT:
-  title "S7 転送と移行の検証"
+  title "P9 native transportと元版復元"
   state planned
 
 milestone INTEGRATION:
@@ -67,11 +67,11 @@ milestone INTEGRATION:
   state planned
 
 milestone DOCS:
-  title "S8 文書と公開操作が整合"
+  title "P9 規範文書と公開操作の整合"
   state planned
 
 milestone FINISH:
-  title "S8 全体の適合証拠が揃った（配布・実データ移行は別）"
+  title "P9 全体適合証拠が揃う（公開・実移行は別）"
   state planned
 
 task CONTRACT_REVIEW START -> CONTRACTS:
@@ -87,21 +87,20 @@ task CONTRACT_REVIEW START -> CONTRACTS:
   source "docs/process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md"
 
 task ENVIRONMENT_REVIEW START -> ENVIRONMENT:
-  title "S0 対象環境・資源条件と見積もりを整える"
-  description "対象データ、platform、budget、測定条件と合格基準を確定し、仮ポイントを見直す。外部回答待ち時間は工数外。 三点値は未計測の相対規模見積もり。"
+  title "P8 初期測定条件と実測記録"
+  description "未定の数値性能閾値を着手gateにしない。仮設入力、platform、時間・メモリ・I/Oの測定条件と結果を記録する。既存三点値は未計測仮説。"
   estimate:
     optimistic 1p
     most_likely 2p
     pessimistic 4p
-  status blocked
+  status planned
   requires:
     WRITER 1
-  blocked_reason "workload/platform/性能条件が未設定"
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S0; ADR0032 A4"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; R2速度方針"
 
 task FORMAT_TYPES READY -> TYPES:
-  title "S1 型・codec・closure・歴史reader"
-  description "canonical IDs、空/全被覆/overflow/コピー不一致、旧v5/v6不変を検証。物理Blobの意味は維持。 三点値は未計測の相対規模見積もり。"
+  title "P1 format 7型・全文Blob・closure・歴史reader"
+  description "canonical IDs、SourceSnapshot全文Blob、OriginMapのpとcopy一致、空/全被覆/overflow、typed closure、旧v5/v6 readerを検証。三点値は未計測仮説。"
   estimate:
     optimistic 3p
     most_likely 5p
@@ -109,11 +108,11 @@ task FORMAT_TYPES READY -> TYPES:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S1; AC1/AC2/AC11; ADR0033"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P1; R1/R3 AC1/2/11/16/20; ADR0033/0039"
 
 task TRACE_AUTHOR TYPES -> AUTHOR:
-  title "S2 Trace作成からSeal/表示まで"
-  description "recipeとcontentのatomic更新、originのexact公開、CAS/readback、仮設5/6からの移行、Trace clear/guardとinspection。 三点値は未計測の相対規模見積もり。"
+  title "P2 Trace作成・Sealと元ファイル全文復元"
+  description "Candidate content+mapのatomic更新、Seal、複数source/Untraced/中間Seal。元ファイル変更・削除後にSeal範囲外を含むS全文をexact復元。三点値は未計測仮説。"
   estimate:
     optimistic 3p
     most_likely 5p
@@ -121,11 +120,11 @@ task TRACE_AUTHOR TYPES -> AUTHOR:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S2; AC1/AC2/AC3/AC11"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P2; R1/R3 AC1/2/3/15/20; ADR0033/0035"
 
 task RANGE_COMPARATOR READY -> COMPARATOR:
-  title "S3 行指向の全最適対応と宣言を実装"
-  description "所有者指示により行指向へ変更。行対応を保存済みbyte範囲へ投影し、行途中の抜粋、反復行、変更・削除・境界、宣言競合、改訂budgetを検証。詳細改訂の採用前には開始しない。三点値は未計測の相対規模見積もり。"
+  title "P3 External runのbyte残存比較器"
+  description "旧p、p+delta、間の閉範囲、残余の全有効開始位置を探索。一件でPRESENT、全域不在でABSENT_EXACT、未完了を分離。行指向・全最適対応・全件位置列挙を使わない。三点値は旧仮説のため実装前に再見積り。"
   estimate:
     optimistic 5p
     most_likely 8p
@@ -133,11 +132,11 @@ task RANGE_COMPARATOR READY -> COMPARATOR:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-line-oriented-direction-2026-09-17.md; docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S3; AC4/AC5"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P3; R2 AC4/5/12/13; ADR0036/0037"
 
 task SELF_COMPARE SELF_READY -> SELF:
-  title "S4 binding・宣言と自身比較を接続"
-  description "source_key binding、固定二版の宣言、ReadStable、Candidate/HEADの別基準、NO_TRACE/対象なし/未調査を表示。 三点値は未計測の相対規模見積もり。"
+  title "P4 bindingと自身のpresence観測"
+  description "source_key binding、安定読取り、Candidate/HEAD別基準、各runの一件presenceと選択位置、NO_TRACE/対象なし/未調査を表示。推定・一覧をpresenceの前提にしない。三点値は未計測仮説。"
   estimate:
     optimistic 3p
     most_likely 5p
@@ -145,11 +144,11 @@ task SELF_COMPARE SELF_READY -> SELF:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S4; AC4/AC5/AC8"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P4; R2/R3 AC4/5/8/12/13/16; ADR0038"
 
 task DIRECTION_COMPARE SELF -> DIRECTIONS:
-  title "S5 exact Causeの方向別集計・詳細表示"
-  description "local factsだけを集計。direct/indirect併存、経路、scope/budget、head競合、human/JSON、STALE不変。 三点値は未計測の相対規模見積もり。"
+  title "P5 exact Causeの方向別観測"
+  description "自身・上流・下流のlocal factsを独立集計。direct/indirect、scope/budget、HEAD競合、human/JSON、STALE不変。位置ページ状態を伝播しない。三点値は未計測仮説。"
   estimate:
     optimistic 3p
     most_likely 5p
@@ -157,11 +156,11 @@ task DIRECTION_COMPARE SELF -> DIRECTIONS:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S5; AC6/AC7/AC8/AC9/AC10/AC11"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P5; R1/R2 AC6-11; ADR0036/0038"
 
 task DETAIL_TRIAL DIRECTIONS -> TRIAL:
-  title "S6 詳細側の作成・変更・追跡を試用"
-  description "仮設文書で自身/上流/下流を実際に表示。入力、版、予算、操作と結果を記録。公開完了とは扱わない。 三点値は未計測の相対規模見積もり。"
+  title "P8 詳細側の作成・変更・追跡・位置ページ試用"
+  description "仮設文書で自身/上流/下流、ABSENT後推定、位置一覧と版変更、S全文復元を操作し、status判断材料と測定結果を記録。三点値は未計測仮説。"
   estimate:
     optimistic 1p
     most_likely 2p
@@ -169,11 +168,11 @@ task DETAIL_TRIAL DIRECTIONS -> TRIAL:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S6; AC1-AC11"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; AC1-21"
 
 task STATUS_REVISIT TRIAL -> STATUS_DECISION:
-  title "S6 試用結果からstatus保留を再評価"
-  description "必要性が見えたら表示範囲と副作用を所有者へ提示。未判定なら保留を記録。status実装をこのtaskに含めない。 三点値は未計測の相対規模見積もり。"
+  title "P8 試用後のstatus保留再評価"
+  description "試用結果に基づき必要なら表示範囲と副作用を所有者へ提示。未判定なら保留を記録。status実装は含めない。三点値は未計測仮説。"
   estimate:
     optimistic 1p
     most_likely 1p
@@ -181,11 +180,11 @@ task STATUS_REVISIT TRIAL -> STATUS_DECISION:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S6; ADR0035 section8 owner decision"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; ADR0035/0038 status保留"
 
 task NATIVE_TRANSPORT AUTHOR -> TRANSPORT:
-  title "S7 native snapshotと移行異常系"
-  description "全Blob/opaque orphan/typed closure、exact旧ID、local除外、absent load、公開後出力失敗、legacy transport維持。 三点値は未計測の相対規模見積もり。"
+  title "P9 native transportとS全文復元"
+  description "全Blob/opaque orphan/typed closure、exact旧ID、local除外、absent load、公開後失敗、legacy transport。元ファイル変更・削除後およびdump/load後のS全文exact復元を検証。三点値は未計測仮説。"
   estimate:
     optimistic 3p
     most_likely 5p
@@ -193,11 +192,11 @@ task NATIVE_TRANSPORT AUTHOR -> TRANSPORT:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S7; ADR0032 sections3.3/10; ADR0033/35"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; R3 AC20; ADR0032/0033/0035"
 
 task NORMATIVE_SYNC INTEGRATION -> DOCS:
-  title "S8 規範文書・help・completionの整合"
-  description "各sliceの文書更新を集約し採用契約との整合を確認。format4/5/6の説明と新schemaを混同しない。 三点値は未計測の相対規模見積もり。"
+  title "P9 規範文書・CLI/help/completionの整合"
+  description "各sliceの文書更新を集約し、trace compare v2と独立trace occurrences v1を区別。format4/5/6と新schemaを混同しない。三点値は未計測仮説。"
   estimate:
     optimistic 1p
     most_likely 2p
@@ -205,11 +204,11 @@ task NORMATIVE_SYNC INTEGRATION -> DOCS:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S8; docs/requirements architecture storage-format cli"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; ADR0038/0040"
 
 task FULL_VERIFICATION DOCS -> FINISH:
-  title "S8 全体検証・独立レビュー・証拠整理"
-  description "gofmt/vet/test/npm ci/clone/complexity/deadcodeとcompletion、必要なrace。AC対応と残課題を記録。実repo移行とreleaseなし。 三点値は未計測の相対規模見積もり。"
+  title "P9 AC1-21全体検証・独立レビュー"
+  description "gofmt/vet/test/npm ci/clone/complexity/deadcodeとcompletion、必要なrace、AC対応、残課題を記録。実repo移行・releaseなし。三点値は未計測仮説。"
   estimate:
     optimistic 2p
     most_likely 3p
@@ -217,13 +216,13 @@ task FULL_VERIFICATION DOCS -> FINISH:
   status planned
   requires:
     WRITER 1
-  source "docs/process/issue-17-origin-trace-implementation-plan-2026-09-17.md; S8; AGENTS validation; AC1-AC11"
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; AC1-21; repository AGENTS validation"
 
 gate READY_CONTRACT CONTRACTS -> READY:
   reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
 
-gate READY_ENV ENVIRONMENT -> READY:
-  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+gate READY_ENV ENVIRONMENT -> TRIAL:
+  reason "初期測定条件は詳細側試用の入力。未定の性能閾値はformat 7実装のgateではない。"
 
 gate JOIN_AUTHOR AUTHOR -> SELF_READY:
   reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
@@ -236,3 +235,64 @@ gate JOIN_TRIAL STATUS_DECISION -> INTEGRATION:
 
 gate JOIN_TRANSFER TRANSPORT -> INTEGRATION:
   reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+milestone PLAN_ACCEPTED:
+  title "P3 exact計画が所有者に採用された"
+  state reached
+
+task PLAN_REVIEW CONTRACTS -> PLAN_ACCEPTED:
+  title "P0 P3計画の採否を記録"
+  description "Accepted R3とADR0040に照らしてP3全文を所有者が判断。旧CONTRACT_REVIEW doneをR3採用に読み替えない。承認待ち時間は見積りに含めない。"
+  estimate:
+    optimistic 1p
+    most_likely 1p
+    pessimistic 2p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P0"
+
+gate READY_PLAN PLAN_ACCEPTED -> READY:
+  reason "P3候補の採用後に初めて後継実装計画として選べる。"
+
+milestone ESTIMATE:
+  title "P6 変更後範囲推定を検証"
+
+task ESTIMATE_COMPARE SELF -> ESTIMATE:
+  title "P6 ABSENT_EXACT後の範囲推定"
+  description "不在確定後だけ変更後範囲候補と根拠を示し、候補なし・複数・未完了でも不在判定を維持。一致位置一覧とは別。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P6; R2 AC14; ADR0037/0038"
+
+gate JOIN_ESTIMATE ESTIMATE -> TRIAL:
+  reason "詳細側試用ではABSENT後の推定も確認する。"
+
+milestone OCCURRENCES:
+  title "P7 一致位置一覧とページングを検証"
+
+task OCCURRENCES_LIST AUTHOR -> OCCURRENCES:
+  title "P7 trace occurrences読取一覧"
+  description "snapshot/current/both、重複位置、既定100件、cursorの版束縛・失効、v1 JSON/human、未完了、baseline選択を検証。presence比較器を呼び替えない。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status planned
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P7; R3 AC16-21; ADR0039/0040"
+
+gate JOIN_OCCURRENCES OCCURRENCES -> TRIAL:
+  reason "詳細側試用では位置一覧とページ継続も確認する。"
+
+work_event PLAN_REVIEW_ACCEPTED_20260918:
+  model 1
+  task PLAN_REVIEW
+  kind finish
+  occurred_at 2026-09-18T12:06:04+09:00
