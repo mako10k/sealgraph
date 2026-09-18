@@ -23,6 +23,7 @@ readers never interpret formats 1 through 4.
 │   └── <REF>/
 │       ├── .candidate               # mutable, unsealed, runtime
 │       └── .track                   # local source binding
+├── local/                           # non-canonical Trace bindings/declarations
 ├── cache/                           # disposable derived graph index
 ├── logs/                            # optional/local/rebuildable
 └── locks/                           # runtime coordination only
@@ -31,7 +32,8 @@ readers never interpret formats 1 through 4.
 Canonical state consists of `config`, immutable objects, and one current REF
 manifest per logical REF. Each manifest contains its HEAD and immutable scoped
 tag bindings.
-Candidate/index, cache, logs, locks, and temporary files are not canonical
+Candidate/index, local Trace bindings and declarations, cache, logs, locks,
+and temporary files are not canonical
 provenance and must not be tracked by an outer Git repository.
 
 The `.track` entry accepted by ADR 0019 is versioned local source-binding state.
@@ -297,7 +299,7 @@ state remains disposable and never repairs canonical state.
 
 An outer Git repository tracks canonical `.sealgraph/config`, `objects/**`,
 and `refs/seals/**/.ref` manifests as ordinary exact-byte files. It must not
-stage `index/**`, `cache/**`, `locks/**`, `logs/**`, or
+stage `index/**`, `local/**`, `cache/**`, `locks/**`, `logs/**`, or
 temporary paths. LFS, clean/smudge filters, working-tree encoding, and
 line-ending transformation over canonical paths are unsupported.
 
@@ -305,6 +307,7 @@ New standalone `init` repositories include this recommended `.gitignore`:
 
 ```gitignore
 /index/
+/local/
 /cache/
 /locks/
 /logs/

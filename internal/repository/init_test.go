@@ -23,6 +23,7 @@ func TestInitGitignorePolicy(t *testing.T) {
 	}
 	for path, ignored := range map[string]bool{
 		"index/design/.candidate": true, "index/design/.track": true,
+		"local/trace-sources/a.json": true, "local/trace-correspondences/a.json": true,
 		"cache/graph": true, "locks/writer": true, "logs/recovery/record.json": true,
 		"objects/ab/.tmp-object-123":         true,
 		"refs/seals/design/.tmp-ref-123":     true,
@@ -32,6 +33,7 @@ func TestInitGitignorePolicy(t *testing.T) {
 		"refs/seals/design/.ref":                false,
 		"refs/seals/index/.ref":                 false, "refs/seals/cache/.ref": false,
 		"refs/seals/locks/.ref": false, "refs/seals/logs/.ref": false,
+		"refs/seals/local/.ref": false,
 	} {
 		t.Run(path, func(t *testing.T) {
 			cmd := exec.Command("git", "-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "--quiet", "--", ".sealgraph/"+path)

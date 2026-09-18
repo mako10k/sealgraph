@@ -16,6 +16,7 @@ const (
 
 const recommendedGitignore = `# Local runtime state; keep config, objects and REF manifests tracked.
 /index/
+/local/
 /cache/
 /locks/
 /logs/
