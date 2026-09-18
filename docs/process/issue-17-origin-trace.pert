@@ -177,7 +177,7 @@ task STATUS_REVISIT TRIAL -> STATUS_DECISION:
     optimistic 1p
     most_likely 1p
     pessimistic 3p
-  status planned
+  status active
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; ADR0035/0038 status保留"
@@ -426,3 +426,10 @@ work_event DETAIL_TRIAL_FINISH_20260918:
   task DETAIL_TRIAL
   kind finish
   occurred_at 2026-09-18T19:31:11+09:00
+
+work_event STATUS_REVISIT_START_20260918:
+  model 1
+  task STATUS_REVISIT
+  kind start
+  occurred_at 2026-09-18T19:42:05+09:00
+  planned_value 4/3p
