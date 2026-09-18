@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mako10k/sealgraph/internal/repository"
 )
 
 func TestTraceComparePublicEstimateAndCorrespondence(t *testing.T) {
@@ -102,5 +105,30 @@ func TestTraceComparePublicRejectsLegacyBudgetWithoutSuccessJSON(t *testing.T) {
 	var value any
 	if err := json.Unmarshal([]byte(stdout), &value); err == nil {
 		t.Fatalf("unexpected success JSON: %s", stdout)
+	}
+}
+
+func TestTraceComparePublicDirectionGraphAndBudget(t *testing.T) {
+	dir, repo := traceComparePreparedFixture(t)
+	mustRunCLI(t, dir, "seal", "root")
+	if _, err := repo.Add(context.Background(), repository.AddOptions{REF: "child", Content: []byte("child"), RootSet: true, Cause: &repository.CauseInput{Target: "root"}}); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "seal", "child")
+	code, output, stderr := runCLI(t, dir, nil, "trace", "compare", "--ref", "root", "--max-graph-visits", "100", "--format", "json")
+	if code != 0 || stderr != "" {
+		t.Fatalf("direction compare: code=%d stdout=%q stderr=%q", code, output, stderr)
+	}
+	graph := decodeCLIJSON(t, output)["graph"].(map[string]any)
+	if graph["own"].(map[string]any)["compared_run_count"] != float64(2) || graph["downstream"].(map[string]any)["seal_count"] != float64(1) || graph["upstream"].(map[string]any)["seal_count"] != float64(0) || graph["scope"].(map[string]any)["complete"] != true {
+		t.Fatalf("direction graph=%s", output)
+	}
+	code, limited, stderr := runCLI(t, dir, nil, "trace", "compare", "--ref", "root", "--max-graph-visits", "1", "--format", "json")
+	if code != 0 || stderr != "" {
+		t.Fatalf("limited compare: code=%d stdout=%q stderr=%q", code, limited, stderr)
+	}
+	limitedGraph := decodeCLIJSON(t, limited)["graph"].(map[string]any)
+	if limitedGraph["scope"].(map[string]any)["complete"] != false || limitedGraph["own"].(map[string]any)["compared_run_count"] != float64(2) {
+		t.Fatalf("budget erased own facts=%s", limited)
 	}
 }
