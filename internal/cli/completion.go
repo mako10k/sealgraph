@@ -83,9 +83,15 @@ func completionForOption(prior []string) (string, []string, bool) {
 	case "--view":
 		return "plain", []string{"snapshot", "current", "both"}, true
 	case "--from":
-		return "plain", []string{"5", "6"}, true
+		if prior[0] == "migrate" {
+			return "plain", []string{"5", "6"}, true
+		}
+		return "file", nil, true
 	case "--to":
-		return "plain", []string{"6", "7"}, true
+		if prior[0] == "migrate" {
+			return "plain", []string{"6", "7"}, true
+		}
+		return "", nil, false
 	default:
 		return "", nil, false
 	}

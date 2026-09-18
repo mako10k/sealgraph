@@ -32,6 +32,12 @@ func TestTraceSourceCompletionUsesSourceKeys(t *testing.T) {
 			t.Fatalf("%s completion=%q", action, got)
 		}
 	}
+	for _, action := range []string{"rebind", "unbind"} {
+		got := mustRunCLI(t, dir, "__completion", "--bash", "trace", "source", action, "manual-A", "--from", "")
+		if got != "__sealgraph_completion_mode=file\n" {
+			t.Fatalf("%s --from completion=%q", action, got)
+		}
+	}
 }
 
 func TestRunTraceSourceBindingMutationAndInspectionJSON(t *testing.T) {

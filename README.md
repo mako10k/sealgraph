@@ -33,8 +33,7 @@ rewriting retained records. Format 7 retains full original source files as
 immutable Blobs, maps ordered content runs to them, and provides separate
 one-hit presence comparison, optional changed-range estimates, and paged
 occurrence listing. Native snapshot dump/load transports the complete canonical
-format-7 inventory. The
-normative requirements are in
+format-7 inventory. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
 with accepted Issue #17 R1/R2/R3 and their successor ADRs. Public syntax and
