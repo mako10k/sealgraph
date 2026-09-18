@@ -519,3 +519,10 @@ func formatAwareJSON(format int, v2, v3 any) any {
 	}
 	return v2
 }
+
+func formatAwareJSONV4(format int, v2, v3, v4 any) any {
+	if format == 7 {
+		return v4
+	}
+	return formatAwareJSON(format, v2, v3)
+}

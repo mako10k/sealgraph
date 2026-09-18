@@ -1287,7 +1287,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return writeRawContent(stdout, stderr, "show", result.Content)
 	}
 	if output.JSON && !*rawContent {
-		return writeInspectionJSON(stdout, stderr, "show", formatAwareJSON(repo.Format(), showJSON(result), showJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "show", formatAwareJSONV4(repo.Format(), showJSON(result), showJSONV3(result), showJSONV4(result)))
 	}
 	printShowHuman(stdout, result, repo.Format())
 	return 0
@@ -1347,7 +1347,7 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 		return writeRawContent(stdout, stderr, "candidate show", inspection.Content)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate show", formatAwareJSON(repo.Format(), candidateShowJSON(inspection), candidateShowJSONV3(inspection)))
+		return writeInspectionJSON(stdout, stderr, "candidate show", formatAwareJSONV4(repo.Format(), candidateShowJSON(inspection), candidateShowJSONV3(inspection), candidateShowJSONV4(inspection)))
 	}
 	printCandidateInspectionHuman(stdout, inspection, repo.Format())
 	return 0
@@ -1374,7 +1374,7 @@ func runCandidateCompare(ctx context.Context, workDir string, args []string, std
 		return commandError(stderr, "candidate compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate compare", formatAwareJSON(repo.Format(), candidateCompareJSON(result), candidateCompareJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "candidate compare", formatAwareJSONV4(repo.Format(), candidateCompareJSON(result), candidateCompareJSONV3(result), candidateCompareJSONV4(result)))
 	}
 	printCandidateDiffHuman(stdout, result, repo.Format())
 	return 0
@@ -1437,7 +1437,7 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 		return commandError(stderr, "log", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "log", formatAwareJSON(repo.Format(), logJSON(result), logJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "log", formatAwareJSONV4(repo.Format(), logJSON(result), logJSONV3(result), logJSONV4(result)))
 	}
 	printLogHuman(stdout, result, repo.Format())
 	return 0
@@ -1478,7 +1478,7 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "linklog", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "linklog", formatAwareJSON(repo.Format(), linkLogJSON(result), linkLogJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "linklog", formatAwareJSONV4(repo.Format(), linkLogJSON(result), linkLogJSONV3(result), linkLogJSONV4(result)))
 	}
 	printLinkLogHuman(stdout, result, repo.Format())
 	return 0
@@ -1506,7 +1506,7 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSON(repo.Format(), compareJSON(result), compareJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSONV4(repo.Format(), compareJSON(result), compareJSONV3(result), compareJSONV4(result)))
 	}
 	printSealDiffHuman(stdout, result, repo.Format())
 	return 0
@@ -1671,7 +1671,7 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 		return commandError(stderr, "impact", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "impact", formatAwareJSON(repo.Format(), impactJSON(result), impactJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "impact", formatAwareJSONV4(repo.Format(), impactJSON(result), impactJSONV3(result), impactJSONV4(result)))
 	}
 	printImpactsHuman(stdout, result)
 	return 0
@@ -1694,7 +1694,7 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 		return commandError(stderr, "graph", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "graph", formatAwareJSON(repo.Format(), graphJSON(nodes), graphJSONV3(nodes)))
+		return writeInspectionJSON(stdout, stderr, "graph", formatAwareJSONV4(repo.Format(), graphJSON(nodes), graphJSONV3(nodes), graphJSONV4(nodes)))
 	}
 	printGraphHuman(stdout, nodes, repo.Format())
 	return 0
