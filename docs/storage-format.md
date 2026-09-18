@@ -1,10 +1,10 @@
 # Storage format
 
-Status: the checked-in runtime initializes native format 5 and, after the
-explicit config-only migration, writes native format 6 while retaining strict
-format-5 history. It also supports the explicit `universal-blob-v1`
-extract/load boundary for format 4. Ordinary runtime readers never interpret
-formats 1 through 4.
+Status: the checked-in runtime initializes native format 5 and supports
+explicit config-only transitions to formats 6 and 7. Format 7 retains strict
+format-5/6 history and adds the typed origin records in §14. The separate
+`universal-blob-v1` extract/load boundary handles format 4; ordinary runtime
+readers never interpret formats 1 through 4.
 
 ## 1. Layout
 
@@ -387,6 +387,68 @@ Candidate v5 file as a preliminary step. It constructs and validates the exact
 Candidate-v6 projection in memory, creates Provenance v2 and Seal v6, performs
 the existing expected-old and coherent-observation revalidation, and only then
 uses the one-REF CAS workflow.
+
+## 14. Canonical format-7 successor and full-source retention
+
+Accepted [ADR 0033](adr/0033-origin-trace-storage-and-migration.md) §2 governs
+the exact canonical records, historical reader matrix, typed closure, native
+snapshot transport, and migration. Accepted [ADR 0039](adr/0039-origin-trace-derived-occurrence-positions.md)
+keeps all matching positions derived rather than persisted. The config bytes
+are:
+
+```text
+repository_format = 7
+object_format = sha256
+ref_format = manifest-v1
+```
+
+The physical store remains the same SHA-256 loose-Blob store and REF-manifest
+layout. New immutable typed records are `sealgraph/source-snapshot/v1` with
+member order `schema,source_key,content`, and `sealgraph/origin-map/v1` with
+order `schema,content,runs`. `SourceSnapshot.content` names the immutable Blob
+of the **entire** original file, not only the bytes copied into a Seal. An
+External run has `kind,length,snapshot,source_start`; an Untraced run has
+`kind,length`. Runs cover the content in order with positive lengths, valid
+source ranges, and exact copy equality. Adjacent compatible runs have the
+canonical merging rules of ADR 0033 §2.2. Only one verified start is stored
+for an External run; matching positions elsewhere in the original or current
+file are derived when requested.
+
+`sealgraph/provenance/v3` has `schema,root,draft,cause_links,origin`;
+`sealgraph/seal/v7` retains `schema,material,provenance` and pairs Material v1
+only with Provenance v3. `sealgraph/candidate/v7` has
+`schema,ref,expected_ref_head,content,attachments,root,draft,cause_links,origin`
+and is a mutable candidate file with one LF after canonical JSON. `origin` is
+an exact OriginMap ID or null. The OriginMap content ID must equal the
+Material/Candidate content ID. The typed closure is Seal v7 → Provenance v3 →
+OriginMap v1 → SourceSnapshot v1 → full source Blob; Material and content
+remain in the existing closure. None of these records redefines a Cause Link
+or STALE.
+
+Format 7 strictly reads historical Seal v5/Provenance v1, Seal v6/Provenance
+v2, and Candidate v5/v6 records without rewriting their bytes or IDs. New
+publication writes Seal v7/Provenance v3 and Candidate v7. Historical
+Candidates are projected in memory with `origin:null` only for a successor
+operation. A non-null origin is preserved through content-identical Candidate
+edits; a changed content requires a simultaneous valid trace update or an
+explicit trace clear. Seal publication carries the Candidate's exact origin
+ID into Provenance and validates the typed closure before one-REF CAS.
+
+`sealgraph migrate repository --from 5 --to 7` and `--from 6 --to 7` require
+the actual source format to match. They validate the source and an exact-byte
+private format-7 stage, then atomically replace only config and read back the
+complete retained inventory. Object, REF, tag, Candidate bytes and IDs are
+unchanged; migration creates no historical Seal, OriginMap, or durable receipt.
+The existing 5→6 transition and receipt remain separate. An uncertain
+post-commit result is reconciled by readback, without automatic retry.
+
+The format-7 `sealgraph/native-snapshot/v1` dump includes all retained Blob
+payloads, REF manifests/tags, and Candidates, including full source Blobs and
+opaque unreferenced Blobs. Its arrays are sorted and its bytes are canonical
+as specified by ADR 0033 §2.5. Local source bindings, correspondence records,
+cache, logs, and working files are excluded. `native-blobs-v1` load validates
+and stages that exact snapshot, then publishes only into an absent target and
+reads back the result. It never merges into or repairs an existing repository.
 
 Seal v6 retains exact member order `schema, material, provenance`; schema is
 `sealgraph/seal/v6` and provenance must decode as

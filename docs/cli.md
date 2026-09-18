@@ -1,9 +1,11 @@
 # CLI contract
 
 Status: the checked-in standalone CLI creates repository format 5 and opens
-formats 5 and 6. Accepted ADRs 0023, 0025, 0026, and 0027 define the format-5
-boundary; accepted ADRs 0029, 0030, and 0031 define format-6 Link metadata,
-storage/migration, and output.
+formats 5, 6, and 7. Accepted ADRs 0023, 0025–0027 govern format 5;
+ADRs 0029–0031 govern format 6. Accepted Issue #17 R1/R2/R3 and ADRs
+0033, 0035–0040 govern the format-7 additions in §9. The older sections
+retain the format-5/6 contracts; original ADR `Proposed` headings are
+historical and their acceptance records establish current authority.
 
 ## 0. Discovery, diagnostics, and output
 
@@ -457,6 +459,10 @@ version. There is no batch, force, automatic relink, or automatic stale repair.
 In a format-6 repository, sealing Candidate v5 first constructs and validates
 its exact Candidate-v6 projection in memory, then creates Provenance v2 and Seal
 v6; it never rewrites the Candidate file as a hidden preliminary action.
+In format 7, successor publication creates Provenance v3 and Seal v7. A
+historical Candidate is projected in memory with `origin:null`; an existing
+OriginMap ID is copied exactly from the Candidate and validated with its
+content before publication.
 
 ## 4. Local source and explicit manifests
 
@@ -569,6 +575,14 @@ metadata changes. Human output labels generation, displays complete bounded
 canonical metadata values, and distinguishes historical projected empty
 metadata from stored v2 empty metadata.
 
+In format 7, those same nine inspection commands use `/v4` schemas as fixed
+by ADR 0035 §4.2. The v3 member order is retained; Seal and Candidate views
+append nullable `origin_map_id`, and `compare` and `candidate compare`
+changes append `origin`. `fsck/v4` appends `origin_maps` and
+`source_snapshots` typed counts. `status/v3`, `stale/v2`, and source
+comparison keep their established meanings. Historical Seal and Candidate
+origin IDs display as null without rewriting their stored bytes.
+
 Format-6 Assessment-free change identity is
 `sealgraph/upstream-change/v2`. Its `after_cause_links` contains complete
 format-6 Cause Links including metadata, and format-6 operations emit and
@@ -595,3 +609,83 @@ the latest record, or performs reset/reflog/undo semantics.
 Any future sidecar uses the same supported native `.sealgraph` bytes, offers read-only
 Git views where approved, and never turns Git commit/merge success into a Seal,
 automatic relink, or approval.
+
+## 9. Format-7 origin trace
+
+Accepted [Issue #17 R1/R2/R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)
+and [ADRs 0033–0040](adr/0033-origin-trace-storage-and-migration.md) govern
+this successor. Trace authoring is format-7-only; these commands never migrate
+a repository implicitly or create a Candidate/Seal on the caller's behalf.
+
+```sh
+sealgraph trace set REF --recipe PATH [--content-file PATH|-] [--format human|json]
+sealgraph trace clear REF [--format human|json]
+sealgraph trace show (--ref REF | --seal SELECTOR) [--format human|json]
+sealgraph trace compare (--ref REF | --seal SELECTOR) \
+  --max-graph-visits N [--estimate] [--format human|json]
+sealgraph trace occurrences \
+  (--ref REF --baseline candidate|head | --seal SELECTOR) \
+  --run-index N --view snapshot|current|both \
+  [--limit N] [--cursor TOKEN] [--format human|json]
+
+sealgraph trace source bind KEY --file PATH [--format human|json]
+sealgraph trace source rebind KEY --from OLD_PATH --file PATH [--format human|json]
+sealgraph trace source unbind KEY --from PATH [--format human|json]
+sealgraph trace source show KEY [--format human|json]
+sealgraph trace source list [--format human|json]
+
+sealgraph trace correspondence put --file PATH [--format human|json]
+sealgraph trace correspondence show ID [--format human|json]
+sealgraph trace correspondence list [--format human|json]
+sealgraph trace correspondence remove ID [--format human|json]
+```
+
+`trace set` requires an existing Candidate and one UTF-8
+`sealgraph/trace-recipe/v1` file. Its source entries identify either a named
+safe file plus opaque `source_key`, or an existing SourceSnapshot ID. The
+ordered External/Untraced runs cover all Candidate content with exact copy
+equality. New source files are retained **in full** as immutable Blobs, with
+file names and byte counts disclosed before storage; `trace set` does not bind
+their keys to current files. `trace clear` explicitly removes only the
+Candidate origin. Success uses `sealgraph/trace-mutation/v2`.
+
+`trace source` manages non-canonical source-key bindings to current safe
+files. Show/list do not open those files. `trace correspondence` manages local
+version-bound declarations used only when changed-range estimation is
+requested. Neither record changes a Seal, Cause, STALE, or native snapshot.
+
+`trace show` reads immutable origin records and reports Candidate and HEAD
+separately for `--ref`; it does not read a current file or embed raw full
+source bytes. It emits `sealgraph/trace-show/v1`. `trace compare` emits
+`sealgraph/trace-compare/v2`: for each External run, one exact byte hit in a
+stable current file establishes `PRESENT`; full search without a hit gives
+`ABSENT_EXACT`; failed/incomplete observation remains `UNDETERMINED`. Its
+selected match is one representative, not every match or proof of historical
+continuity. `--estimate` adds changed-range candidates only for
+`ABSENT_EXACT` runs; estimation failure does not erase completed presence.
+Own, upstream, and downstream facts stay separate. `--max-graph-visits` bounds
+graph observation without changing completed local facts. File changes do not
+alter STALE, and no Trace field is added to `status/v3`.
+
+`trace occurrences` is a separate, read-only listing for one zero-based
+External run index. `--ref` requires an explicit Candidate or HEAD baseline;
+`--seal` selects one exact immutable Seal and cannot be combined with
+`--baseline`. It derives overlapping byte matches from saved full source S,
+stable current file F, or both, keeping the views distinct. The default page
+has at most 100 entries; `--limit` is positive and applies across both views.
+Entries are ordered by view (`snapshot` then `current`) and increasing byte
+start. `has_more=true` marks a prefix rather than a complete set. An opaque
+cursor binds the selected baseline, run, view, page limit, and exact observed
+versions; a changed context fails with `PAGE_CONTEXT_CHANGED`, while an
+invalid token fails with `PAGE_TOKEN_INVALID`. Read/search interruption yields
+an `INCOMPLETE` page with a reason and no continuation, rather than an empty
+confirmed set. The schema is `sealgraph/trace-occurrences/v1`. This command
+does not run the one-hit comparator or changed-range estimator.
+
+`sealgraph dump --format native-blobs-v1` and
+`sealgraph load --format native-blobs-v1 --file PATH --max-input-bytes N`
+transport the complete format-7 canonical inventory, including full source
+Blobs and opaque orphans, but not local bindings or correspondence. Load
+publishes only to an absent target. Migration from format 5/6 is the explicit
+config-only operation in §2, not part of dump/load. The command registry and
+read-only Bash completion expose these same operations and option values.

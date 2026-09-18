@@ -1,10 +1,14 @@
 # Sealgraph requirements
 
-Status: normative format-5 and format-6 contract. Accepted ADRs 0023, 0025,
-0026, and 0027 define the format-5 boundary. Accepted ADRs 0029, 0030, and
-0031 add the format-6 Cause Link metadata, storage/migration, and CLI/output
-boundary. New repositories initialize as format 5; format 6 is entered only by
-the explicit 5-to-6 migration. Both fail closed on format 4 in ordinary use.
+Status: normative format-5, format-6, and format-7 contract. Accepted ADRs
+0023, 0025–0027 define format 5; ADRs 0029–0031 add format 6. The accepted
+Issue #17 [R1](process/issue-17-origin-trace-requirement-r1-acceptance-2026-09-17.md),
+[R2](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md),
+and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md),
+with accepted ADRs 0032–0040, govern the format-7 origin-trace additions in
+§17. Their acceptance records govern where original ADR files retain historical
+`Proposed` text. New repositories still initialize as format 5; later formats
+require explicit migration. Ordinary use fails closed on format 4.
 
 ## 1. Purpose
 
@@ -66,7 +70,7 @@ Seal-level `actor`, `created_at`, event `message`, and equivalent operation
 metadata are outside material/provenance identity. When needed, such a claim is
 ordinary separately sealed content linked to its exact subject generation.
 
-Formats 5 and 6 have no intrinsic parent field. Revision evidence exists only inside a
+Formats 5, 6, and 7 have no intrinsic parent field. Revision evidence exists only inside a
 Cause Link made by one immutable observer. A target MAY have multiple asserted
 previous revisions and multiple observers; branching is valid. An assertion
 MUST NOT imply preference, truth, trust, approval, or same-REF ownership.
@@ -650,3 +654,54 @@ Seal v6 MUST pair only with Provenance v2; Seal v5 MUST pair only with
 Provenance v1. Material remains v1. Mixed-generation observations are valid
 only through these exact pairings and never project metadata into historical
 identity.
+
+## 17. Format-7 content origin trace
+
+This section applies the accepted Issue #17 R1, R2, and R3 requirement
+revisions. The exact accepted snapshots and their acceptance records remain the
+authority for detailed acceptance conditions AC1–AC21. Accepted ADRs 0033,
+0035–0040 specify the storage, search, observation, CLI, and paging contracts.
+The earlier sections continue to govern format-5/6 behavior and common
+invariants unless the accepted successor contract explicitly extends them.
+
+A format-7 Seal MAY carry an OriginMap for its content. Its positive-length
+runs cover the complete content in order: an External run identifies one
+SourceSnapshot and a validated `source_start` in the full immutable source
+bytes; an Untraced run records the Seal's own expression. Several External
+runs MAY use different source files. A SourceSnapshot MUST retain the entire
+source file as an immutable Blob, including bytes outside every referenced
+run, so the exact original file can be recovered after a working file changes
+or disappears. An intermediate Seal MAY be used when that helps keep Seals
+small. Cause Links still target whole exact Seals; an OriginMap does not create
+a Cause or revision edge.
+
+For each External run, let P be its exact source bytes and F the full stable
+current file selected by that source key's local binding. One contiguous P in
+F establishes `PRESENT`; exhaustive absence establishes `ABSENT_EXACT`; a
+failed or incomplete read/search establishes `UNDETERMINED`. The saved
+`source_start` is one verified position in the original full source S and a
+search hint, not a record of every matching position. Finding one match is
+sufficient for presence; diff, changed-range estimation, and listing every
+match are not prerequisites. `ABSENT_EXACT` alone does not establish deletion.
+Changed-range estimation is separate and may fail without changing a completed
+presence result. Neither byte equality nor a numerical offset difference
+proves historical identity, editorial intent, or semantic equivalence.
+
+When an operation needs every match, it derives overlapping byte-start
+positions from the selected immutable S, a stable F, or both, and labels the
+version. It does not persist all positions in a Seal or OriginMap. Listing has
+a finite default page, continuation, and version-bound cursor; an unfinished
+or non-final page cannot claim the complete set. `trace occurrences` is this
+read-only listing operation and remains distinct from the one-hit presence
+check in `trace compare` and its optional changed-range estimate. The selected
+comparison match is one representative discovery, not necessarily the lowest
+offset or the original edited location.
+
+The detailed comparison reports a Seal's own state and exact Cause-based
+upstream and downstream observations separately. File differences do not
+change the existing derived STALE definition. Trace state is not added to
+`status/v3` by this revision; detailed views provide the initial trial.
+Sealgraph validates structural consistency but does not audit semantic claims,
+content contradictions, or the usefulness of a Cause. The format-7 migration
+and transport contract is in [storage-format.md](storage-format.md) §14; the
+public operations and schemas are in [cli.md](cli.md) §9.

@@ -1,10 +1,11 @@
 # Architecture
 
-Status: the checked-in runtime implements the accepted format-5 and format-6
-typed-Blob, parentless Candidate, Cause-scoped revision, generic Link metadata,
-explicit format-5-to-6 migration, isolated format-4 extraction, atomic universal
-migration load, inspection, REF manifest, scoped tag, move, and recovery core.
-Git views remain separately sequenced.
+Status: the checked-in runtime implements formats 5, 6, and 7. Format 7 adds
+typed origin records, full-source retention, detail-side comparison and
+occurrence listing, native snapshot transport, and explicit 5/6-to-7
+migration (§9). The format-5/6 Candidate, Cause-scoped revision, Link metadata,
+REF, migration, and recovery boundaries remain. Git views remain separately
+sequenced.
 
 ## 1. Design center
 
@@ -71,7 +72,7 @@ modify unrelated Git policy silently.
 
 ## 3. Package boundaries
 
-### `internal/domain`, `internal/domain/v5`, and `internal/domain/v6`
+### `internal/domain`, `internal/domain/v5`, `internal/domain/v6`, and `internal/domain/v7`
 
 Pure semantic types:
 
@@ -88,7 +89,7 @@ format-6 types.
 No filesystem, Git, CLI, clock, environment, or current-REF lookup occurs
 here. A Seal contains no owner REF.
 
-### `internal/canonical/v5` and `internal/canonical/v6`
+### `internal/canonical/v5`, `internal/canonical/v6`, and `internal/canonical/v7`
 
 - deterministic Material, Provenance, Seal, and Candidate encoding;
 - exact member order and JSON escaping;
@@ -252,10 +253,11 @@ records exact object format, commit, path, blob, and file-mode identity. Both
 adapters materialize exact bytes through `add`; neither is visible to `seal`,
 which remains Candidate-only.
 
-Portable source-occurrence provenance is separately sealed application content
-and may be named by an exact Cause Link. Local binding fields, Git commit
-ancestry, file-history heuristics, and working-file timestamps do not enter
-Seal identity or create Revision facts automatically.
+Format-7 OriginMaps and full SourceSnapshots are typed, identity-bearing Seal
+provenance as described in §9. A separate local source-key binding selects a
+current comparison file. Its path, Git commit ancestry, file-history
+heuristics, and working-file timestamps do not enter Seal identity or create
+Revision facts automatically.
 
 The Bash completion wrapper delegates parsing and candidate selection to a
 hidden read-only CLI protocol. Repository-aware completion reads only REF,
@@ -280,7 +282,7 @@ native reader and shared domain packages.
 
 ## 4. Native object store
 
-Formats 5 and 6 retain:
+Formats 5, 6, and 7 retain:
 
 - immutable loose objects;
 - Git-compatible SHA-256 blob envelope and path where practical;
@@ -364,3 +366,45 @@ Do not prebuild remote storage, signatures, daemon/server, MCP, arbitrary link
 kinds, automatic branch choice, automatic relink/reseal, recursive repair, or
 batch publication. New persisted fields require storage-format changes,
 deterministic fixtures, compatibility consideration, and an approved ADR.
+
+## 9. Format-7 origin trace boundaries
+
+Accepted Issue #17 R1/R2/R3 and ADRs 0033, 0035–0040 govern this successor.
+`internal/domain/v7` and `internal/canonical/v7` define and encode
+SourceSnapshot, OriginMap, Provenance v3, Seal v7, and Candidate v7. The
+repository validates the complete typed closure and exact source-copy bytes;
+SourceSnapshot retains the whole original file, including ranges outside the
+Seal content. Candidate authoring pairs content and OriginMap updates. Sealing
+copies the exact origin ID into Provenance and uses the existing one-REF
+publication boundary. Historical format-5/6 bytes and IDs remain immutable.
+
+Local `trace source` bindings map opaque source keys to safe current files.
+They are non-canonical comparison inputs and are excluded from Seal identity
+and native dump/load. Local correspondence declarations are version-bound
+estimation evidence; they cannot override exact byte presence. The standalone
+entry point reads only explicit local files and never discovers Git.
+
+The presence comparator searches each External run's exact bytes in a stable
+current file. It checks the recorded old position, the position adjusted by
+file-size delta, the intervening interval, then the remaining valid starts;
+one hit is enough for presence, while absence requires complete search. The
+separate optional estimate path runs only after exact absence. `trace compare`
+reports the selected Candidate or Seal's own facts and exact Cause-based
+upstream/downstream facts independently. It neither changes derived STALE nor
+turns matching offsets into a history or meaning claim.
+
+`trace occurrences` is a separate read-only, paged derivation from the full
+immutable source S, stable current F, or both. It includes overlapping
+matches, orders each view by byte start, and binds continuation to the chosen
+baseline and exact observed versions. It does not store all matches, invoke
+the estimate path, or make the one-hit comparator enumerate all positions.
+`status/v3` remains without Trace state while the detail-side trial is
+evaluated.
+
+The repository's format-7 migration changes only config after source capture,
+private staging and fsck, and it reads back the retained inventory after
+publication. Native snapshot dump/load moves the complete canonical Blob,
+REF, and Candidate inventory, including full source Blobs, while leaving local
+bindings and correspondence behind. CLI parsing and presentation own the
+versioned receipts and JSON schemas; neither transport nor migration fabricates
+an origin for historical Seals.
