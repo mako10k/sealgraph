@@ -18,10 +18,18 @@ type traceCompareRangeJSON struct {
 }
 
 type traceCompareEstimateJSON struct {
-	State      string  `json:"state"`
-	Method     *string `json:"method"`
-	Candidates []any   `json:"candidates"`
-	Reason     *string `json:"reason"`
+	State      string                              `json:"state"`
+	Method     *string                             `json:"method"`
+	Candidates []traceCompareEstimateCandidateJSON `json:"candidates"`
+	Reason     *string                             `json:"reason"`
+}
+
+type traceCompareEstimateCandidateJSON struct {
+	CurrentRanges  []traceCompareRangeJSON `json:"current_ranges"`
+	EvidenceKind   string                  `json:"evidence_kind"`
+	Method         string                  `json:"method"`
+	Reason         string                  `json:"reason"`
+	DeclarationIDs []string                `json:"declaration_ids"`
 }
 
 type traceCompareRangeResultJSON struct {
@@ -78,7 +86,7 @@ func buildTraceCompareLocal(result repository.TraceCompareOwnResult) traceCompar
 		item := traceCompareRangeResultJSON{
 			RunIndex: run.RunIndex, SourceSnapshotID: run.SourceSnapshotID.String(), SourceKey: run.SourceKey,
 			OldRange: traceCompareRangeJSON{Start: run.OldStart, Length: run.Length}, Presence: string(run.Presence), PresenceReason: run.PresenceReason,
-			Examined: "EXAMINED", Estimate: traceCompareEstimateJSON{State: "NOT_REQUESTED", Candidates: []any{}},
+			Examined: "EXAMINED", Estimate: traceCompareEstimateJSON{State: "NOT_REQUESTED", Candidates: []traceCompareEstimateCandidateJSON{}},
 		}
 		if run.CurrentBlobID != nil {
 			id := run.CurrentBlobID.String()
