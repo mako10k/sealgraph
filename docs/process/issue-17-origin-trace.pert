@@ -283,7 +283,7 @@ task OCCURRENCES_LIST AUTHOR -> OCCURRENCES:
     optimistic 3p
     most_likely 5p
     pessimistic 10p
-  status planned
+  status done
   requires:
     WRITER 1
   source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P7; R3 AC16-21; ADR0039/0040"
@@ -374,3 +374,16 @@ work_event ESTIMATE_COMPARE_FINISH_20260918:
   task ESTIMATE_COMPARE
   kind finish
   occurred_at 2026-09-18T17:29:11+09:00
+
+work_event OCCURRENCES_LIST_START_20260918:
+  model 1
+  task OCCURRENCES_LIST
+  kind start
+  occurred_at 2026-09-18T18:25:04+09:00
+  planned_value 5.5p
+
+work_event OCCURRENCES_LIST_FINISH_20260918:
+  model 1
+  task OCCURRENCES_LIST
+  kind finish
+  occurred_at 2026-09-18T18:41:30+09:00
