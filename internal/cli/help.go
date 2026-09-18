@@ -49,10 +49,10 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"trace": {
 		Path: "trace", Summary: "Author or inspect one content origin trace.",
-		Usage:       []string{"sealgraph trace <set|clear|show> ..."},
-		Subcommands: []string{"set", "clear", "show"},
+		Usage:       []string{"sealgraph trace <set|clear|show|source> ..."},
+		Subcommands: []string{"set", "clear", "show", "source"},
 		Details:     []string{"Origin authoring is available only in repository format 7. Trace operations never create an implicit Candidate or Seal."},
-		Related:     []string{"trace set", "trace clear", "trace show", "add", "seal"},
+		Related:     []string{"trace set", "trace clear", "trace show", "trace source", "add", "seal"},
 	},
 	"trace set": {
 		Path: "trace set", Summary: "Set the content and origin map of one existing Candidate atomically.",
@@ -75,6 +75,34 @@ var commandHelpRegistry = map[string]commandHelp{
 		Details: []string{"SourceSnapshot records identify full immutable source Blobs. The original source bytes are not embedded in this view."},
 		Related: []string{"trace set", "candidate show", "show"},
 	},
+	"trace source": {
+		Path: "trace source", Summary: "Manage non-canonical source-key to current-file bindings.",
+		Usage:       []string{"sealgraph trace source <bind|rebind|unbind|show|list> ..."},
+		Subcommands: []string{"bind", "rebind", "unbind", "show", "list"},
+		Details:     []string{"Bindings are local observation inputs and never alter SourceSnapshots, Candidates, Seals, or Cause Links."},
+		Related:     []string{"trace set", "trace show", "source"},
+	},
+	"trace source bind": {
+		Path: "trace source bind", Summary: "Bind one absent source key to a current file.",
+		Usage:   []string{"sealgraph trace source bind KEY --file PATH [--format human|json]"},
+		Options: []helpOption{{"--file PATH", "required portable relative regular-file path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"The same path is idempotent; a different path requires trace source rebind."},
+		Related: []string{"trace source rebind", "trace source show", "trace set"},
+	},
+	"trace source rebind": {
+		Path: "trace source rebind", Summary: "Replace one binding after checking its observed old path.",
+		Usage:   []string{"sealgraph trace source rebind KEY --from OLD_PATH --file PATH [--format human|json]"},
+		Options: []helpOption{{"--from OLD_PATH", "required exact observed old path"}, {"--file PATH", "required new portable relative regular-file path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Related: []string{"trace source show", "trace source bind", "trace set"},
+	},
+	"trace source unbind": {
+		Path: "trace source unbind", Summary: "Remove one binding after checking its observed old path.",
+		Usage:   []string{"sealgraph trace source unbind KEY --from PATH [--format human|json]"},
+		Options: []helpOption{{"--from PATH", "required exact observed current path"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Related: []string{"trace source show", "trace source bind"},
+	},
+	"trace source show": inspectionHelp("trace source show", "Show one local source-key binding without opening its file.", "sealgraph trace source show KEY [--format human|json]", nil),
+	"trace source list": inspectionHelp("trace source list", "List local source-key bindings without opening their files.", "sealgraph trace source list [--format human|json]", nil),
 	"source": {
 		Path: "source", Summary: "Manage and compare non-canonical local REF-to-file source bindings.", Usage: []string{"sealgraph source <bind|rebind|unbind|show|list|compare> ..."},
 		Subcommands: []string{"bind", "rebind", "unbind", "show", "list", "compare"}, Details: []string{"A local source binding is not Git tracked state and never changes a candidate by itself."}, Related: []string{"add", "status"},

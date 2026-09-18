@@ -190,6 +190,24 @@ then UTF-8 path bytes. `trace clear` also uses `v2` and returns an empty
 `stored_sources` array. See [ADR 0041](adr/0041-trace-mutation-receipt-input-file.md)
 and its [acceptance record](process/issue-17-adr-0041-acceptance-2026-09-18.md).
 
+Current-file observation uses a separate local binding keyed by the exact
+`SourceSnapshot.source_key` string:
+
+```sh
+sealgraph trace source bind KEY --file PATH [--format human|json]
+sealgraph trace source rebind KEY --from OLD_PATH --file PATH [--format human|json]
+sealgraph trace source unbind KEY --from PATH [--format human|json]
+sealgraph trace source show KEY [--format human|json]
+sealgraph trace source list [--format human|json]
+```
+
+The binding is not inferred from the Trace recipe's input filename and is not
+part of a Candidate, Seal, or dump. Bind is idempotent for the same path;
+rebind and unbind require the exact observed old path. Mutation JSON uses
+`sealgraph/trace-source-mutation/v1`; show and list use
+`sealgraph/trace-source-list/v1`. These commands do not read current file bytes
+for show/list or change immutable origin records.
+
 Format 5 uses one-target whole-record Cause operations:
 
 ```text
