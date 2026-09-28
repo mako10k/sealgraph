@@ -625,6 +625,8 @@ a repository implicitly or create a Candidate/Seal on the caller's behalf.
 
 ```sh
 sealgraph trace set REF --recipe PATH [--content-file PATH|-] [--format human|json]
+sealgraph trace set REF --source-file PATH --source-key KEY \
+  (--content STRING | --content-file PATH|-) [--format human|json]
 sealgraph trace clear REF [--format human|json]
 sealgraph trace show (--ref REF | --seal SELECTOR) [--format human|json]
 sealgraph trace compare (--ref REF | --seal SELECTOR) \
@@ -646,11 +648,15 @@ sealgraph trace correspondence list [--format human|json]
 sealgraph trace correspondence remove ID [--format human|json]
 ```
 
-`trace set` requires an existing Candidate and one UTF-8
+`trace set` requires an existing Candidate. Recipe mode takes one UTF-8
 `sealgraph/trace-recipe/v1` file. Its source entries identify either a named
 safe file plus opaque `source_key`, or an existing SourceSnapshot ID. The
 ordered External/Untraced runs cover all Candidate content with exact copy
-equality. New source files are retained **in full** as immutable Blobs, with
+equality. Direct mode takes a safe `--source-file`, an opaque non-empty UTF-8
+`--source-key`, and exactly one of `--content STRING` or `--content-file PATH|-`.
+It requires non-empty UTF-8 content, finds its earliest byte occurrence in the
+full source file, and sets the complete Candidate content with one External run.
+The modes are exclusive. New source files are retained **in full** as immutable Blobs, with
 file names and byte counts disclosed before storage; `trace set` does not bind
 their keys to current files. `trace clear` explicitly removes only the
 Candidate origin. Success uses `sealgraph/trace-mutation/v2`. Its

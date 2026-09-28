@@ -63,7 +63,7 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 
 func completionForOption(prior []string) (string, []string, bool) {
 	switch prior[len(prior)-1] {
-	case "--file", "--content-file", "--value-file", "--recipe":
+	case "--file", "--source-file", "--content-file", "--value-file", "--recipe":
 		return "file", nil, true
 	case "--format":
 		if prior[0] == "load" {

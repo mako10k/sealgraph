@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	canonicalv7 "github.com/mako10k/sealgraph/internal/canonical/v7"
 	"github.com/mako10k/sealgraph/internal/domain"
@@ -48,16 +50,19 @@ func runTraceSet(ctx context.Context, workDir string, args []string, stdin io.Re
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
-	var recipePath, contentPath singleString
+	var recipePath, sourcePath, sourceKey, contentValue, contentPath singleString
 	ref, _, err := sourceREFAndFlags(args, "trace set", func(flags *flag.FlagSet) {
 		flags.Var(&recipePath, "recipe", "trace recipe file")
+		flags.Var(&sourcePath, "source-file", "full source file for direct matching")
+		flags.Var(&sourceKey, "source-key", "opaque source key for direct matching")
+		flags.Var(&contentValue, "content", "exact inline UTF-8 content for direct matching")
 		flags.Var(&contentPath, "content-file", "exact content file or - for stdin")
 	})
 	if err != nil {
-		return usageDiagnostic(stderr, "trace set", err.Error(), "provide an existing REF and exactly one --recipe PATH")
+		return usageDiagnostic(stderr, "trace set", err.Error(), "provide an existing REF and either --recipe PATH or --source-file PATH")
 	}
-	if !recipePath.set || recipePath.value == "" || contentPath.set && contentPath.value == "" {
-		return usageError(stderr, "trace set requires one --recipe PATH and a non-empty --content-file when supplied")
+	if !validTraceSetInputs(recipePath, sourcePath, sourceKey, contentValue, contentPath) {
+		return usageError(stderr, "trace set requires --recipe PATH, or --source-file PATH --source-key KEY and exactly one of --content STRING or --content-file PATH|-")
 	}
 	if err := domain.ValidateREF(ref); err != nil {
 		return usageError(stderr, "invalid trace REF: %v", err)
@@ -69,6 +74,10 @@ func runTraceSet(ctx context.Context, workDir string, args []string, stdin io.Re
 	if repo.Format() != 7 {
 		return commandError(stderr, "trace set", fmt.Errorf("trace authoring requires repository format 7"))
 	}
+	options := repository.TraceSetOptions{REF: ref, BeforeStore: traceSourceDisclosure(stderr)}
+	if sourcePath.set {
+		return runTraceSetDirect(ctx, workDir, stdin, stdout, stderr, repo, output, options, sourcePath, sourceKey, contentValue, contentPath)
+	}
 	recipeBytes, err := readTraceInput(workDir, recipePath.value)
 	if err != nil {
 		return commandError(stderr, "trace set recipe", err)
@@ -77,7 +86,6 @@ func runTraceSet(ctx context.Context, workDir string, args []string, stdin io.Re
 	if err != nil {
 		return commandError(stderr, "trace set recipe", err)
 	}
-	options := repository.TraceSetOptions{REF: ref, BeforeStore: traceSourceDisclosure(stderr)}
 	if contentPath.set {
 		options.ContentSet = true
 		if contentPath.value == "-" {
@@ -97,6 +105,49 @@ func runTraceSet(ctx context.Context, workDir string, args []string, stdin io.Re
 		return commandError(stderr, "trace set", err)
 	}
 	return writeTraceSetReceipt(output, stdout, stderr, ref, result)
+}
+
+func validTraceSetInputs(recipePath, sourcePath, sourceKey, contentValue, contentPath singleString) bool {
+	if recipePath.set == sourcePath.set || contentPath.set && contentPath.value == "" {
+		return false
+	}
+	if recipePath.set {
+		return recipePath.value != "" && !sourceKey.set && !contentValue.set
+	}
+	return sourcePath.value != "" && sourceKey.set && sourceKey.value != "" && utf8.ValidString(sourceKey.value) && contentValue.set != contentPath.set
+}
+
+func runTraceSetDirect(ctx context.Context, workDir string, stdin io.Reader, stdout, stderr io.Writer, repo *repository.Repository, output inspectionOutput, options repository.TraceSetOptions, sourcePath, sourceKey, contentValue, contentPath singleString) int {
+	options.ContentSet = true
+	var err error
+	if contentValue.set {
+		options.Content = []byte(contentValue.value)
+	} else if contentPath.value == "-" {
+		options.Content, err = io.ReadAll(stdin)
+	} else {
+		options.Content, err = readTraceInput(workDir, contentPath.value)
+	}
+	if err != nil {
+		return commandError(stderr, "trace set content", err)
+	}
+	if len(options.Content) == 0 || !utf8.Valid(options.Content) {
+		return usageError(stderr, "trace set content must be non-empty UTF-8")
+	}
+	sourceBytes, err := readTraceInput(workDir, sourcePath.value)
+	if err != nil {
+		return commandError(stderr, "trace set source", err)
+	}
+	start := bytes.Index(sourceBytes, options.Content)
+	if start < 0 {
+		return commandError(stderr, "trace set", fmt.Errorf("content does not occur in source file %q", sourcePath.value))
+	}
+	options.Sources = []repository.TraceSourceInput{{Name: "source", SourceKey: sourceKey.value, Content: sourceBytes, DisplayPath: sourcePath.value}}
+	options.Runs = []repository.TraceRunInput{{Kind: "external", Length: uint64(len(options.Content)), SourceName: "source", SourceStart: uint64(start)}}
+	result, err := repo.TraceSet(ctx, options)
+	if err != nil {
+		return commandError(stderr, "trace set", err)
+	}
+	return writeTraceSetReceipt(output, stdout, stderr, options.REF, result)
 }
 
 func readTraceInput(workDir, path string) ([]byte, error) {

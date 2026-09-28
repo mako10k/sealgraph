@@ -56,9 +56,9 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"trace set": {
 		Path: "trace set", Summary: "Set the content and origin map of one existing Candidate atomically.",
-		Usage:   []string{"sealgraph trace set REF --recipe PATH [--content-file PATH|-] [--format human|json]"},
-		Options: []helpOption{{"--recipe PATH", "required portable relative UTF-8 JSON recipe file"}, {"--content-file PATH|-", "optional exact content bytes; default is existing Candidate content"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
-		Details: []string{"The recipe covers all content bytes with external and untraced runs. External source files are stored in full as immutable Blobs; file names and byte counts appear before storage and in the success result. JSON uses trace-mutation/v2 with nullable input_file for reused snapshots. Source bindings are not created."},
+		Usage:   []string{"sealgraph trace set REF --recipe PATH [--content-file PATH|-] [--format human|json]", "sealgraph trace set REF --source-file PATH --source-key KEY (--content STRING | --content-file PATH|-) [--format human|json]"},
+		Options: []helpOption{{"--recipe PATH", "portable relative UTF-8 JSON recipe file; conflicts with --source-file"}, {"--source-file PATH", "full source file for direct substring matching"}, {"--source-key KEY", "non-empty opaque UTF-8 key for direct matching"}, {"--content STRING", "exact inline UTF-8 content for direct matching"}, {"--content-file PATH|-", "exact content file or stdin; optional with recipe, required alternative to --content with --source-file"}, {"--format human|json", "optional, once; default terminal=human, non-terminal=JSON"}},
+		Details: []string{"Direct matching selects the first byte occurrence and writes one External run. Recipe mode retains its existing behavior. External source files are stored in full as immutable Blobs; file names and byte counts appear before storage and in the success result. JSON uses trace-mutation/v2 with nullable input_file for reused snapshots. Source bindings are not created."},
 		Related: []string{"add", "trace clear", "trace show", "seal"},
 	},
 	"trace clear": {

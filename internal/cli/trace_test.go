@@ -75,6 +75,121 @@ func TestTraceCLIAuthorAndRecoverFullSources(t *testing.T) {
 	assertRestoredTraceSources(t, dir, fields[2], a, b)
 }
 
+func TestTraceSetDirectInputsUseEarliestByteMatchAndRetainFullSource(t *testing.T) {
+	for _, input := range []string{"inline", "file", "stdin"} {
+		t.Run(input, func(t *testing.T) {
+			dir := traceCLIFixture(t)
+			source := "先abaaba末"
+			expectedStart := uint64(len("先"))
+			if input == "inline" {
+				source = string([]byte{0xff}) + "abaaba末"
+				expectedStart = 1
+			}
+			if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "old")
+			args := []string{"trace", "set", "root", "--source-file", "source.txt", "--source-key", "key-A"}
+			var stdin []byte
+			switch input {
+			case "inline":
+				args = append(args, "--content", "aba")
+			case "file":
+				if err := os.WriteFile(filepath.Join(dir, "content.txt"), []byte("aba"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				args = append(args, "--content-file", "content.txt")
+			case "stdin":
+				stdin = []byte("aba")
+				args = append(args, "--content-file", "-")
+			}
+			args = append(args, "--format", "json")
+			code, output, notice := runCLI(t, dir, stdin, args...)
+			if code != 0 || !strings.Contains(notice, `"source.txt"`) {
+				t.Fatalf("direct set: code=%d output=%q notice=%q", code, output, notice)
+			}
+			receipt := decodeCLIJSON(t, output)
+			sources := receipt["stored_sources"].([]any)
+			if len(sources) != 1 || sources[0].(map[string]any)["input_file"] != "source.txt" || sources[0].(map[string]any)["byte_length"] != float64(len(source)) {
+				t.Fatalf("receipt=%s", output)
+			}
+			assertDirectTraceSealed(t, dir, source, expectedStart)
+		})
+	}
+}
+
+func assertDirectTraceSealed(t *testing.T, dir, source string, expectedStart uint64) {
+	t.Helper()
+	repo, err := repository.OpenStandalone(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := repo.CurrentREFHead(context.Background(), "root")
+	if err != nil || head != nil {
+		t.Fatalf("direct set published REF HEAD: head=%v err=%v", head, err)
+	}
+	sealed := strings.Fields(mustRunCLI(t, dir, "seal", "root"))
+	if err := os.Remove(filepath.Join(dir, "source.txt")); err != nil {
+		t.Fatal(err)
+	}
+	origin := loadSealedTraceOrigin(t, dir, sealed[2])
+	if len(origin.Map.Runs) != 1 || origin.Map.Runs[0].SourceStart != expectedStart || origin.Map.Runs[0].Length != 3 || len(origin.Sources) != 1 || string(origin.Sources[0].Content) != source {
+		t.Fatalf("origin=%+v", origin)
+	}
+}
+
+func TestTraceSetDirectFailuresPreserveCandidate(t *testing.T) {
+	dir := traceCLIFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("ababa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "old")
+	before := mustRunCLI(t, dir, "candidate", "show", "root", "--format", "json")
+	for _, extra := range [][]string{{"--content", "missing"}, {"--content", ""}, {"--content", string([]byte{0xff})}, {"--content", "aba", "--content-file", "-"}, {"--content", "aba", "--recipe", "recipe.json"}} {
+		args := append([]string{"trace", "set", "root", "--source-file", "source.txt", "--source-key", "key-A"}, extra...)
+		code, _, _ := runCLI(t, dir, nil, args...)
+		if code == 0 {
+			t.Fatalf("accepted invalid input %v", extra)
+		}
+		after := mustRunCLI(t, dir, "candidate", "show", "root", "--format", "json")
+		if before != after {
+			t.Fatalf("failed direct set changed Candidate: %v", extra)
+		}
+	}
+	if code, _, _ := runCLI(t, dir, nil, "trace", "set", "missing-ref", "--source-file", "source.txt", "--source-key", "key-A", "--content", "aba"); code == 0 {
+		t.Fatal("direct set created a missing Candidate")
+	}
+	if code, _, _ := runCLI(t, dir, nil, "trace", "set", "root", "--source-file", "missing.txt", "--source-key", "key-A", "--content", "aba"); code == 0 {
+		t.Fatal("direct set accepted a missing source file")
+	}
+	if before != mustRunCLI(t, dir, "candidate", "show", "root", "--format", "json") {
+		t.Fatal("read failure changed Candidate")
+	}
+}
+
+func TestTraceSetDirectMatchesEquivalentRecipeOrigin(t *testing.T) {
+	dir := traceCLIFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("ababa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, dir, "add", "root", "--root", "--clear-cause-links", "--content", "old")
+	if code, _, _ := runCLI(t, dir, nil, "trace", "set", "root", "--source-file", "source.txt", "--source-key", "key-A", "--content", "aba"); code != 0 {
+		t.Fatal("direct trace set failed")
+	}
+	direct := mustRunCLI(t, dir, "candidate", "show", "root", "--format", "json")
+	recipe := `{"schema":"sealgraph/trace-recipe/v1","sources":[{"name":"a","source_key":"key-A","file":"source.txt"}],"runs":[{"kind":"external","length":3,"source":"a","source_start":0}]}`
+	if err := os.WriteFile(filepath.Join(dir, "recipe.json"), []byte(recipe), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := runCLI(t, dir, nil, "trace", "set", "root", "--recipe", "recipe.json"); code != 0 {
+		t.Fatal("recipe trace set failed")
+	}
+	viaRecipe := mustRunCLI(t, dir, "candidate", "show", "root", "--format", "json")
+	if direct != viaRecipe {
+		t.Fatalf("direct and recipe produced different Candidates: direct=%s recipe=%s", direct, viaRecipe)
+	}
+}
+
 func assertTraceShow(t *testing.T, dir string, candidate, seal bool) {
 	t.Helper()
 	output := mustRunCLI(t, dir, "trace", "show", "--ref", "root", "--format", "json")
@@ -92,6 +207,18 @@ func assertTraceShow(t *testing.T, dir string, candidate, seal bool) {
 
 func assertRestoredTraceSources(t *testing.T, dir, sealText, a, b string) {
 	t.Helper()
+	origin := loadSealedTraceOrigin(t, dir, sealText)
+	restored := make(map[string]string)
+	for _, source := range origin.Sources {
+		restored[source.Snapshot.SourceKey] = string(source.Content)
+	}
+	if restored["key-A"] != a || restored["key-B"] != b || len(restored) != 2 {
+		t.Fatalf("restored full source bytes=%v", restored)
+	}
+}
+
+func loadSealedTraceOrigin(t *testing.T, dir, sealText string) repository.LoadedTraceOrigin {
+	t.Helper()
 	id, err := domain.ParseObjectID(sealText)
 	if err != nil {
 		t.Fatal(err)
@@ -108,13 +235,7 @@ func assertRestoredTraceSources(t *testing.T, dir, sealText, a, b string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored := make(map[string]string)
-	for _, source := range origin.Sources {
-		restored[source.Snapshot.SourceKey] = string(source.Content)
-	}
-	if restored["key-A"] != a || restored["key-B"] != b || len(restored) != 2 {
-		t.Fatalf("restored full source bytes=%v", restored)
-	}
+	return origin
 }
 
 func TestTraceCLIClearAndCandidateHEADSeparation(t *testing.T) {

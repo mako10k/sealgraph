@@ -1,5 +1,7 @@
 # Issue #17 R4-c1 — ADR 0042 設計判断入力（2026-09-28）
 
+この記録は SHA-256 `270d6982…` の旧候補に対する履歴である。現在の ADR 0042 本文は、所有者指定のインライン `--content STRING` を追加した別の draft Seal `bfbe9ce2c2b4dabd1f5985b888b670bca584e1736408e78b56190a451d935ee7` に対応する。以下の判断入力と独立レビューは旧候補にだけ適用する。
+
 - レビュー対象: [ADR 0042 日本語全文](../adr/0042-direct-substring-trace-authoring.md)、SHA-256 `270d6982869e58e6f99e32d8ca0d7d237fa5aba35e229c227b7edb8d39123afe`
 - 提案の由来: [draft Seal と直接 Cause の記録](issue-17-r4-adr-0042-proposed-seal-2026-09-28.md)。draft Seal は所有者採用を意味しない。
 - 独立レビュー: [現在の exact 版の指摘分類](issue-17-r4-adr-0042-independent-review-2026-09-28.md)。INSIDE に確定的矛盾なし。レビューは採否を代行しない。

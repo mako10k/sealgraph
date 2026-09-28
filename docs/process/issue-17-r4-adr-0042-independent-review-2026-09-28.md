@@ -1,5 +1,7 @@
 # Issue #17 R4-c1 ADR 0042 独立レビュー — 2026-09-28
 
+このレビューは SHA-256 `270d6982…` の旧候補に限定される。インライン `--content STRING` を追加した現行候補には適用しない。
+
 - 対象: [ADR 0042 日本語全文](../adr/0042-direct-substring-trace-authoring.md)、SHA-256 `270d6982869e58e6f99e32d8ca0d7d237fa5aba35e229c227b7edb8d39123afe`
 - 対応する draft Seal: `d0d8af5c7b9f5e3aad661f604bed22eb78b8f733504f2f032250ae731ee0f38e`
 - 上位: [Accepted R4-c1 要件](issue-17-direct-substring-r4-acceptance-2026-09-18.md)、Accepted ADR 0033/0035/0039/0040/0041 の各 exact 本文と承認記録。

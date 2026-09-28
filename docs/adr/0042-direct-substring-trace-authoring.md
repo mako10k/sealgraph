@@ -11,7 +11,7 @@
 
 R4-c1 は、利用者が元ファイルの byte 位置と JSON recipe を書かずに、指定した非空 UTF-8 文字列を既存 Candidate の内容全体として登録できることを要求する。元ファイル内の最小 byte offset を単一 External run の `source_start` に保存し、元ファイル全文を SourceSnapshot に保持する。現在の `trace set` は recipe を必須とし、位置指定を利用者に求める。
 
-`source_key` は ADR 0033 の不透明な識別子であり、パスや REF から推測できない。入力文字列をコマンド引数に置くと shell 履歴やプロセス引数に残り得るため、既存の `--content-file PATH|-` を直接入力にも使用する。
+`source_key` は ADR 0033 の不透明な識別子であり、パスや REF から推測できない。利用者は文字列を `--content STRING` でインライン指定でき、ファイルまたは標準入力を使いたい場合は既存の `--content-file PATH|-` を選べる。両者は一回の操作では排他的とする。
 
 ## Decision candidate
 
@@ -19,12 +19,12 @@ R4-c1 は、利用者が元ファイルの byte 位置と JSON recipe を書か�
 
 ```sh
 sealgraph trace set REF --source-file PATH --source-key KEY \
-  --content-file PATH|- [--format human|json]
+  (--content STRING | --content-file PATH|-) [--format human|json]
 ```
 
-`--source-file`、`--source-key`、`--content-file` はこのモードで各一回必須とする。`--recipe` と `--source-file` は排他的で、recipe モードに `--source-key` を混ぜることも拒否する。recipe モードの既存引数と動作は維持する。`KEY` は空でない UTF-8 の不透明値を利用者が指定し、パス、REF、ファイル内容から生成しない。`PATH` は既存 recipe の file と同じ作業ディレクトリ相対の安全な通常ファイルで、`.sealgraph/`、絶対パス、`..`、symlink を拒否する。`--content-file` は既存の安全な相対ファイルまたは標準入力 `-` を受ける。入力文字列を argv に直接置く flag は追加しない。
+`--source-file` と `--source-key` はこのモードで各一回必須とし、`--content` または `--content-file` のちょうど一方を各一回指定する。`--recipe` と `--source-file` は排他的で、recipe モードに `--source-key` または `--content` を混ぜることも拒否する。recipe モードの既存引数と動作は維持する。`KEY` は空でない UTF-8 の不透明値を利用者が指定し、パス、REF、ファイル内容から生成しない。`PATH` は既存 recipe の file と同じ作業ディレクトリ相対の安全な通常ファイルで、`.sealgraph/`、絶対パス、`..`、symlink を拒否する。`--content-file` は既存の安全な相対ファイルまたは標準入力 `-` を受ける。`--content` は指定された UTF-8 文字列の exact bytes を使う。
 
-両入力を安定して読み、内容 bytes が空、または有効な UTF-8 でなければ失敗する。元ファイル全文に対して内容 bytes の連続一致を byte 0 から探索し、最初の一致を `source_start` とする。これは重複・重なりを含む一致のうち最小 byte offset である。一件もなければ失敗する。登録後の `trace compare` の `selected_match_start` は従来の探索順に従い、登録時の `source_start` と同じ位置を保証しない。全位置の列挙は `trace occurrences` の責務とする。
+元ファイルと、指定された場合の content file を安定して読む。指定内容の bytes が空、または有効な UTF-8 でなければ失敗する。元ファイル全体の UTF-8 妥当性は要求せず、byte 列として照合・保存する。元ファイル全文に対して内容 bytes の連続一致を byte 0 から探索し、最初の一致を `source_start` とする。これは重複・重なりを含む一致のうち最小 byte offset である。一件もなければ失敗する。登録後の `trace compare` の `selected_match_start` は従来の探索順に従い、登録時の `source_start` と同じ位置を保証しない。全位置の列挙は `trace occurrences` の責務とする。
 
 成功時は、読み取った内容 bytes を Candidate content 全体とし、一つの External run がその全体を覆う。元ファイル全文を SourceSnapshot の immutable Blob として保存する。既存 Candidate 一件の content と OriginMap を `trace set` の一回の原子的更新として公開し、root、draft、Cause、attachments、expected REF HEAD を維持する。Candidate がなければ既存 `add` を案内して失敗する。local binding、Seal、REF HEAD は暗黙に作成・変更しない。読み取り、入力検証、競合で失敗した場合は Candidate と REF HEAD を変えない。保存途中に残る未参照 Blob の扱いは既存 `trace set` と同じ。
 
@@ -38,7 +38,7 @@ sealgraph trace set REF --source-file PATH --source-key KEY \
 | --- | --- | --- |
 | 提案: `trace set` の排他的な直接入力モード | Candidate 更新、receipt、失敗境界を既存経路と共有できる | 既存コマンドに二つの入力モードができるため、排他検証と help が必要 |
 | 別の `trace set-substring` コマンド | 入力形は独立して見える | 同じ Candidate 更新と receipt の公開契約が二か所に分かれる |
-| インラインの `--text STRING` | 短い入力では操作が少ない | 入力 bytes が argv や shell 履歴に残りやすい |
+| `--content-file` のみ | 入力 bytes を argv に置かずに済む | インライン指定のたびにファイルか標準入力を用意する手間がある |
 | recipe の自動生成だけを提供 | 現行 CLI を変更しない | R4-c1 の直接入力を公開操作として満たさない |
 
 ## Claim / Evidence / Action
