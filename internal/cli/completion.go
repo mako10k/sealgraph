@@ -46,10 +46,12 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 		}
 	}
 	path := prior[0]
-	if len(prior) > 1 {
-		if _, ok := commandHelpRegistry[path+" "+prior[1]]; ok {
-			path += " " + prior[1]
+	for i := 1; i < len(prior); i++ {
+		next := path + " " + prior[i]
+		if _, ok := commandHelpRegistry[next]; !ok {
+			break
 		}
+		path = next
 	}
 	if strings.HasPrefix(current, "-") {
 		if entry, ok := commandHelpRegistry[path]; ok {
@@ -61,19 +63,35 @@ func bashCompletion(workDir string, words []string) (string, []string) {
 
 func completionForOption(prior []string) (string, []string, bool) {
 	switch prior[len(prior)-1] {
-	case "--file", "--content-file", "--value-file":
+	case "--file", "--source-file", "--content-file", "--value-file", "--recipe":
 		return "file", nil, true
 	case "--format":
-		if prior[0] == "load" || (prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract") {
+		if prior[0] == "load" {
+			return "plain", []string{"universal-blob-v1", "native-blobs-v1"}, true
+		}
+		if prior[0] == "dump" {
+			return "plain", []string{"native-blobs-v1"}, true
+		}
+		if prior[0] == "migrate" && len(prior) > 1 && prior[1] == "extract" {
 			return "plain", []string{"universal-blob-v1"}, true
 		}
 		return "plain", []string{"human", "json"}, true
 	case "--source-format":
 		return "plain", []string{"4"}, true
+	case "--baseline":
+		return "plain", []string{"candidate", "head"}, true
+	case "--view":
+		return "plain", []string{"snapshot", "current", "both"}, true
 	case "--from":
-		return "plain", []string{"5"}, true
+		if prior[0] == "migrate" {
+			return "plain", []string{"5", "6"}, true
+		}
+		return "file", nil, true
 	case "--to":
-		return "plain", []string{"6"}, true
+		if prior[0] == "migrate" {
+			return "plain", []string{"6", "7"}, true
+		}
+		return "", nil, false
 	default:
 		return "", nil, false
 	}
@@ -124,8 +142,30 @@ func repositoryCompletionValues(workDir, path string) []string {
 		return nil
 	}
 	switch path {
-	case "seal", "candidate show", "candidate compare", "candidate discard":
+	case "seal", "candidate show", "candidate compare", "candidate discard", "trace set", "trace clear":
 		return names.Candidates
+	case "trace correspondence show", "trace correspondence remove":
+		records, err := repo.TraceCorrespondenceList()
+		if err != nil {
+			return nil
+		}
+		ids := make([]string, 0, len(records))
+		for _, record := range records {
+			ids = append(ids, record.ID)
+		}
+		return ids
+	case "trace source show", "trace source rebind", "trace source unbind":
+		bindings, err := repo.TraceSourceList()
+		if err != nil {
+			return nil
+		}
+		keys := make([]string, 0, len(bindings))
+		for _, binding := range bindings {
+			if !strings.ContainsAny(binding.SourceKey, "\r\n") {
+				keys = append(keys, binding.SourceKey)
+			}
+		}
+		return keys
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
 	case "recover", "recover show":

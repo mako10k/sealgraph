@@ -10,11 +10,13 @@ import (
 const (
 	configBytes        = "repository_format = 5\nobject_format = sha256\nref_format = manifest-v1\n"
 	format6ConfigBytes = "repository_format = 6\nobject_format = sha256\nref_format = manifest-v1\n"
+	format7ConfigBytes = "repository_format = 7\nobject_format = sha256\nref_format = manifest-v1\n"
 	format4ConfigBytes = "repository_format = 4\nobject_format = sha256\nref_format = manifest-v1\n"
 )
 
 const recommendedGitignore = `# Local runtime state; keep config, objects and REF manifests tracked.
 /index/
+/local/
 /cache/
 /locks/
 /logs/
@@ -128,6 +130,8 @@ func repositoryFormat(repositoryDir string) (int, error) {
 		return 5, nil
 	case format6ConfigBytes:
 		return 6, nil
+	case format7ConfigBytes:
+		return 7, nil
 	case format4ConfigBytes:
 		return 0, errors.New(format4MigrationGuide)
 	default:

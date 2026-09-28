@@ -1,10 +1,22 @@
 # Sealgraph requirements
 
-Status: normative format-5 and format-6 contract. Accepted ADRs 0023, 0025,
-0026, and 0027 define the format-5 boundary. Accepted ADRs 0029, 0030, and
-0031 add the format-6 Cause Link metadata, storage/migration, and CLI/output
-boundary. New repositories initialize as format 5; format 6 is entered only by
-the explicit 5-to-6 migration. Both fail closed on format 4 in ordinary use.
+Status: normative format-5, format-6, and format-7 contract. Accepted ADRs
+0023, 0025–0027 define format 5; ADRs 0029–0031 add format 6. The accepted
+Issue #17 [R1](process/issue-17-origin-trace-requirement-r1-acceptance-2026-09-17.md),
+[R2](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md),
+and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md),
+plus [R4-c1](process/issue-17-direct-substring-r4-acceptance-2026-09-18.md),
+govern the format-7 additions in §17. ADR 0033 governs storage; ADRs 0036–0038
+replace conflicting comparison clauses of ADRs 0032/0034/0035; ADRs 0039/0040
+add derived positions and paging; ADR 0041 succeeds the format-7 trace
+mutation receipt; [ADR 0042](adr/0042-direct-substring-trace-authoring.md)
+adds direct substring Trace authoring alongside recipe input
+([acceptance record](process/issue-17-r4-adr-0042-acceptance-2026-09-28.md)).
+Unreplaced clauses of the earlier ADRs remain in force as
+specified by their acceptance records. Those records also govern where an
+original ADR file retains historical `Proposed` text. New repositories still
+initialize as format 5; later formats
+require explicit migration. Ordinary use fails closed on format 4.
 
 ## 1. Purpose
 
@@ -66,7 +78,7 @@ Seal-level `actor`, `created_at`, event `message`, and equivalent operation
 metadata are outside material/provenance identity. When needed, such a claim is
 ordinary separately sealed content linked to its exact subject generation.
 
-Formats 5 and 6 have no intrinsic parent field. Revision evidence exists only inside a
+Formats 5, 6, and 7 have no intrinsic parent field. Revision evidence exists only inside a
 Cause Link made by one immutable observer. A target MAY have multiple asserted
 previous revisions and multiple observers; branching is valid. An assertion
 MUST NOT imply preference, truth, trust, approval, or same-REF ownership.
@@ -112,8 +124,9 @@ Selector forms are `REF`, repository-wide `@SEAL_TOKEN`, and scoped
 `REF@TOKEN`. A repository-wide `SEAL_TOKEN` is 4 through 64 lower-case hex
 characters, resolves uniquely across the native ODB, and must decode as a
 canonical Seal generation permitted by the current repository format. Format 5
-therefore accepts Seal v5 only; format 6 accepts valid Seal v5 and Seal v6
-objects with their exact required Provenance pairing. `REF@hex` instead resolves
+therefore accepts Seal v5 only; format 6 accepts valid Seal v5 and Seal v6,
+and format 7 accepts Seal v5/v6/v7, each with its exact required Provenance
+pairing. `REF@hex` instead resolves
 uniquely within the REF's current HEAD plus observed structural revision closure;
 unrelated loose objects do not participate in that scoped prefix match.
 `REF@non-hex`
@@ -242,7 +255,7 @@ repository or machine must verify.
 
 ## 6. Working candidate
 
-`add`, `link`, `unlink`, and, in format 6, `link-metadata set/remove` edit the
+`add`, `link`, `unlink`, and, in formats 6 and 7, `link-metadata set/remove` edit the
 next Candidate state for one destination REF. Attachment mutation commands are
 intentionally absent.
 
@@ -273,7 +286,7 @@ associates positional arguments, changes another target, or creates a Seal.
 Multiple targets require separate reviewed Candidate mutations. `derive` and
 `add --parent` are absent.
 
-In format 6, legacy `add`/`link` authoring preserves existing metadata on the
+In formats 6 and 7, legacy `add`/`link` authoring preserves existing metadata on the
 same exact target and creates empty metadata for a new target. Only
 `link-metadata set` adds or replaces one complete namespace entry, and only
 `link-metadata remove` removes one existing namespace. Both operations require
@@ -359,6 +372,8 @@ comparisons advances to `/v3`; `status/v3` and `stale/v2` remain unchanged.
 Format-6 shared Link records include complete metadata, typed Seal/Provenance
 generations, and detailed per-target/per-namespace comparison records as fixed
 by ADR 0031. A changed meaning MUST NOT be emitted under an older schema.
+In format 7, these nine inspection schemas advance to `/v4` as fixed by
+Accepted ADR 0035 §4.2; `status/v3` and `stale/v2` retain their meanings.
 
 Format-6 Assessment-free change identity uses
 `sealgraph/upstream-change/v2`. It retains ADR 0028's established member order,
@@ -650,3 +665,67 @@ Seal v6 MUST pair only with Provenance v2; Seal v5 MUST pair only with
 Provenance v1. Material remains v1. Mixed-generation observations are valid
 only through these exact pairings and never project metadata into historical
 identity.
+
+## 17. Format-7 content origin trace
+
+This section applies the accepted Issue #17 R1, R2, R3, and R4-c1 requirement
+revisions. Their exact accepted snapshots and acceptance records remain the
+authority for detailed acceptance conditions: R1–R3 AC1–AC21 and R4-c1 AC1–AC4.
+Accepted ADR 0033
+specifies storage, ADRs 0036–0038 the revised search and observation, ADRs
+0039/0040 derived positions and paging, ADR 0041 the trace mutation
+receipt, and ADR 0042 the direct substring input mode. The unaffected portions
+of ADRs 0032/0034/0035 remain applicable.
+The earlier sections continue to govern format-5/6 behavior and common
+invariants unless the accepted successor contract explicitly extends them.
+
+A format-7 Seal MAY carry an OriginMap for its content. Its positive-length
+runs cover the complete content in order: an External run identifies one
+SourceSnapshot and a validated `source_start` in the full immutable source
+bytes; an Untraced run records the Seal's own expression. Several External
+runs MAY use different source files. A SourceSnapshot MUST retain the entire
+source file as an immutable Blob, including bytes outside every referenced
+run, so the exact original file can be recovered after a working file changes
+or disappears. An intermediate Seal MAY be used when that helps keep Seals
+small. Cause Links still target whole exact Seals; an OriginMap does not create
+a Cause or revision edge.
+
+R4-c1 requires an operation that sets an existing Candidate's complete content
+directly from non-empty UTF-8 bytes found contiguously in one source file, without a
+user-authored recipe or byte offset. The earliest matching byte offset becomes
+the single External run's `source_start`, and the complete source file is
+retained as a SourceSnapshot. Absence or invalid input fails without changing
+the Candidate or REF HEAD. Existing recipe authoring remains available; this
+direct operation does not implicitly create a binding or Seal. ADR 0042 and
+[cli.md](cli.md) §9 define the two public input forms.
+
+For each External run, let P be its exact source bytes and F the full stable
+current file selected by that source key's local binding. One contiguous P in
+F establishes `PRESENT`; exhaustive absence establishes `ABSENT_EXACT`; a
+failed or incomplete read/search establishes `UNDETERMINED`. The saved
+`source_start` is one verified position in the original full source S and a
+search hint, not a record of every matching position. Finding one match is
+sufficient for presence; diff, changed-range estimation, and listing every
+match are not prerequisites. `ABSENT_EXACT` alone does not establish deletion.
+Changed-range estimation is separate and may fail without changing a completed
+presence result. Neither byte equality nor a numerical offset difference
+proves historical identity, editorial intent, or semantic equivalence.
+
+When an operation needs every match, it derives overlapping byte-start
+positions from the selected immutable S, a stable F, or both, and labels the
+version. It does not persist all positions in a Seal or OriginMap. Listing has
+a finite default page, continuation, and version-bound cursor; an unfinished
+or non-final page cannot claim the complete set. `trace occurrences` is this
+read-only listing operation and remains distinct from the one-hit presence
+check in `trace compare` and its optional changed-range estimate. The selected
+comparison match is one representative discovery, not necessarily the lowest
+offset or the original edited location.
+
+The detailed comparison reports a Seal's own state and exact Cause-based
+upstream and downstream observations separately. File differences do not
+change the existing derived STALE definition. Trace state is not added to
+`status/v3` by this revision; detailed views provide the initial trial.
+Sealgraph validates structural consistency but does not audit semantic claims,
+content contradictions, or the usefulness of a Cause. The format-7 migration
+and transport contract is in [storage-format.md](storage-format.md) §14; the
+public operations and schemas are in [cli.md](cli.md) §9.

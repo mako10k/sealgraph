@@ -497,8 +497,20 @@ type fsckDocumentV3 struct {
 	Unreferenced  []string `json:"unreferenced_blob_ids"`
 }
 
+type fsckDocumentV4 struct {
+	fsckDocumentV3
+	OriginMaps      int `json:"origin_maps"`
+	SourceSnapshots int `json:"source_snapshots"`
+}
+
 func fsckJSONV3(value repository.FsckReport) fsckDocumentV3 {
 	return fsckDocumentV3{"sealgraph/fsck/v3", "ok", value.Blobs, value.Seals, value.SealsV5, value.SealsV6, value.Materials, value.Provenances, value.ProvenancesV1, value.ProvenancesV2, value.CandidatesV5, value.CandidatesV6, value.REFs, value.Tags, value.ActiveSeals, idsJSON(value.HistoricalOrDetachedSeals), idsJSON(value.UnreferencedBlobs)}
+}
+
+func fsckJSONV4(value repository.FsckReport) fsckDocumentV4 {
+	document := fsckJSONV3(value)
+	document.Schema = "sealgraph/fsck/v4"
+	return fsckDocumentV4{document, value.OriginMaps, value.SourceSnapshots}
 }
 
 func formatAwareJSON(format int, v2, v3 any) any {
@@ -506,4 +518,11 @@ func formatAwareJSON(format int, v2, v3 any) any {
 		return v3
 	}
 	return v2
+}
+
+func formatAwareJSONV4(format int, v2, v3, v4 any) any {
+	if format == 7 {
+		return v4
+	}
+	return formatAwareJSON(format, v2, v3)
 }

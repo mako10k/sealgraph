@@ -81,6 +81,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runInit(workDir, args[1:], stdout, stderr), true
 	case "add":
 		return runAdd(ctx, workDir, args[1:], stdin, stdout, stderr), true
+	case "trace":
+		return runTrace(ctx, workDir, args[1:], stdin, stdout, stderr), true
 	case "source":
 		return runSource(ctx, workDir, args[1:], stdout, stderr), true
 	case "link":
@@ -392,6 +394,8 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 		return runGraph(ctx, workDir, args[1:], stdout, stderr)
 	case "fsck":
 		return runFsck(ctx, workDir, args[1:], stdout, stderr)
+	case "dump":
+		return runDump(ctx, workDir, args[1:], stdout, stderr)
 	case "migrate":
 		return runMigrate(ctx, workDir, args[1:], stdout, stderr)
 	case "load":
@@ -436,28 +440,55 @@ func runMigrateRepository(ctx context.Context, workDir string, args []string, st
 	if flags.NArg() != 0 {
 		return usageError(stderr, "migrate repository accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
-	if !from.set || from.value != "5" || !to.set || to.value != "6" {
-		return usageError(stderr, "migrate repository requires exactly --from 5 --to 6")
+	if !from.set || !to.set {
+		return usageError(stderr, "migrate repository requires exactly --from 5 --to 6, --from 5 --to 7, or --from 6 --to 7")
 	}
-	result, err := repository.MigrateRepository5To6(ctx, workDir)
+	if from.value == "5" && to.value == "6" {
+		result, err := repository.MigrateRepository5To6(ctx, workDir)
+		if err != nil {
+			return commandError(stderr, "migrate repository", err)
+		}
+		receipt := repositoryMigrationReceipt{
+			Schema: "sealgraph/repository-migrate/v1", FromFormat: 5, ToFormat: 6, Result: "MIGRATED",
+			RetainedSealsV5: result.RetainedSealsV5, RetainedProvenancesV1: result.RetainedProvenancesV1, RetainedCandidatesV5: result.RetainedCandidatesV5,
+		}
+		if output.JSON {
+			return writeCommittedMigrationJSON(stdout, stderr, receipt)
+		}
+		var human bytes.Buffer
+		printHumanReceipt(&human, "REPOSITORY MIGRATED",
+			humanField{"Format", "5 -> 6"}, humanField{"Result", "MIGRATED"},
+			humanField{"Retained Seals v5", strconv.Itoa(result.RetainedSealsV5)},
+			humanField{"Retained Provenances v1", strconv.Itoa(result.RetainedProvenancesV1)},
+			humanField{"Retained Candidates v5", strconv.Itoa(result.RetainedCandidatesV5)},
+		)
+		return writeCommittedMigrationBytes(stdout, stderr, human.Bytes())
+	}
+	if to.value != "7" || (from.value != "5" && from.value != "6") {
+		return usageError(stderr, "migrate repository requires exactly --from 5 --to 6, --from 5 --to 7, or --from 6 --to 7")
+	}
+	fromFormat, _ := strconv.Atoi(from.value)
+	result, err := repository.MigrateRepositoryTo7(ctx, workDir, fromFormat)
 	if err != nil {
 		return commandError(stderr, "migrate repository", err)
 	}
-	receipt := repositoryMigrationReceipt{
-		Schema: "sealgraph/repository-migrate/v1", FromFormat: 5, ToFormat: 6, Result: "MIGRATED",
-		RetainedSealsV5: result.RetainedSealsV5, RetainedProvenancesV1: result.RetainedProvenancesV1, RetainedCandidatesV5: result.RetainedCandidatesV5,
+	receipt := repositoryMigration7Receipt{
+		Schema: "sealgraph/repository-migrate/v2", FromFormat: fromFormat, ToFormat: 7, Result: "MIGRATED",
+		RetainedSealsV5: result.RetainedSealsV5, RetainedSealsV6: result.RetainedSealsV6,
+		RetainedCandidatesV5: result.RetainedCandidatesV5, RetainedCandidatesV6: result.RetainedCandidatesV6,
 	}
 	if output.JSON {
-		return writeCommittedMigrationJSON(stdout, stderr, receipt)
+		return writeCommittedMigration7JSON(stdout, stderr, receipt)
 	}
 	var human bytes.Buffer
 	printHumanReceipt(&human, "REPOSITORY MIGRATED",
-		humanField{"Format", "5 -> 6"}, humanField{"Result", "MIGRATED"},
+		humanField{"Format", fmt.Sprintf("%d -> 7", fromFormat)}, humanField{"Result", "MIGRATED"},
 		humanField{"Retained Seals v5", strconv.Itoa(result.RetainedSealsV5)},
-		humanField{"Retained Provenances v1", strconv.Itoa(result.RetainedProvenancesV1)},
+		humanField{"Retained Seals v6", strconv.Itoa(result.RetainedSealsV6)},
 		humanField{"Retained Candidates v5", strconv.Itoa(result.RetainedCandidatesV5)},
+		humanField{"Retained Candidates v6", strconv.Itoa(result.RetainedCandidatesV6)},
 	)
-	return writeCommittedMigrationBytes(stdout, stderr, human.Bytes())
+	return writeCommittedMigration7Bytes(stdout, stderr, human.Bytes())
 }
 
 func runMigrateExtract(ctx context.Context, workDir string, args []string, stdout, stderr io.Writer) int {
@@ -550,8 +581,10 @@ func runInit(workDir string, args []string, stdout, stderr io.Writer) int {
 func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("load", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var format singleString
+	var format, file, maxInputBytes singleString
 	flags.Var(&format, "format", "required versioned dump format")
+	flags.Var(&file, "file", "named native snapshot input file")
+	flags.Var(&maxInputBytes, "max-input-bytes", "positive maximum native snapshot input size")
 	if err := flags.Parse(args); err != nil {
 		return flagUsageError(stderr, "load", err)
 	}
@@ -559,10 +592,26 @@ func runLoad(ctx context.Context, workDir string, args []string, stdin io.Reader
 		return usageError(stderr, "load accepts no positional arguments; unexpected argument %q", flags.Arg(0))
 	}
 	if !format.set {
-		return usageError(stderr, "load requires --format universal-blob-v1")
+		return usageError(stderr, "load requires --format universal-blob-v1 or native-blobs-v1")
+	}
+	if format.value == "native-blobs-v1" {
+		if !file.set || file.value == "" {
+			return usageError(stderr, "load native-blobs-v1 requires exactly one non-empty --file PATH")
+		}
+		if !maxInputBytes.set {
+			return usageError(stderr, "load native-blobs-v1 requires exactly one --max-input-bytes N")
+		}
+		maxBytes, err := parseNativeMaxInput(maxInputBytes.value)
+		if err != nil {
+			return usageError(stderr, "%v", err)
+		}
+		return runNativeLoad(ctx, workDir, file.value, maxBytes, stdout, stderr)
 	}
 	if format.value != "universal-blob-v1" {
-		return usageError(stderr, "load format %q is unsupported; expected universal-blob-v1", format.value)
+		return usageError(stderr, "load format %q is unsupported; expected universal-blob-v1 or native-blobs-v1", format.value)
+	}
+	if file.set || maxInputBytes.set {
+		return usageError(stderr, "load universal-blob-v1 accepts stdin only; --file and --max-input-bytes require native-blobs-v1")
 	}
 	input, err := io.ReadAll(stdin)
 	if err != nil {
@@ -1238,7 +1287,7 @@ func runShow(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return writeRawContent(stdout, stderr, "show", result.Content)
 	}
 	if output.JSON && !*rawContent {
-		return writeInspectionJSON(stdout, stderr, "show", formatAwareJSON(repo.Format(), showJSON(result), showJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "show", formatAwareJSONV4(repo.Format(), showJSON(result), showJSONV3(result), showJSONV4(result)))
 	}
 	printShowHuman(stdout, result, repo.Format())
 	return 0
@@ -1298,7 +1347,7 @@ func runCandidateShow(ctx context.Context, workDir string, args []string, stdout
 		return writeRawContent(stdout, stderr, "candidate show", inspection.Content)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate show", formatAwareJSON(repo.Format(), candidateShowJSON(inspection), candidateShowJSONV3(inspection)))
+		return writeInspectionJSON(stdout, stderr, "candidate show", formatAwareJSONV4(repo.Format(), candidateShowJSON(inspection), candidateShowJSONV3(inspection), candidateShowJSONV4(inspection)))
 	}
 	printCandidateInspectionHuman(stdout, inspection, repo.Format())
 	return 0
@@ -1325,7 +1374,7 @@ func runCandidateCompare(ctx context.Context, workDir string, args []string, std
 		return commandError(stderr, "candidate compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "candidate compare", formatAwareJSON(repo.Format(), candidateCompareJSON(result), candidateCompareJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "candidate compare", formatAwareJSONV4(repo.Format(), candidateCompareJSON(result), candidateCompareJSONV3(result), candidateCompareJSONV4(result)))
 	}
 	printCandidateDiffHuman(stdout, result, repo.Format())
 	return 0
@@ -1388,7 +1437,7 @@ func runLog(ctx context.Context, workDir string, args []string, stdout, stderr i
 		return commandError(stderr, "log", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "log", formatAwareJSON(repo.Format(), logJSON(result), logJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "log", formatAwareJSONV4(repo.Format(), logJSON(result), logJSONV3(result), logJSONV4(result)))
 	}
 	printLogHuman(stdout, result, repo.Format())
 	return 0
@@ -1429,7 +1478,7 @@ func runLinkLog(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "linklog", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "linklog", formatAwareJSON(repo.Format(), linkLogJSON(result), linkLogJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "linklog", formatAwareJSONV4(repo.Format(), linkLogJSON(result), linkLogJSONV3(result), linkLogJSONV4(result)))
 	}
 	printLinkLogHuman(stdout, result, repo.Format())
 	return 0
@@ -1457,7 +1506,7 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 		return commandError(stderr, "compare", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSON(repo.Format(), compareJSON(result), compareJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSONV4(repo.Format(), compareJSON(result), compareJSONV3(result), compareJSONV4(result)))
 	}
 	printSealDiffHuman(stdout, result, repo.Format())
 	return 0
@@ -1622,7 +1671,7 @@ func runImpact(ctx context.Context, workDir string, args []string, stdout, stder
 		return commandError(stderr, "impact", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "impact", formatAwareJSON(repo.Format(), impactJSON(result), impactJSONV3(result)))
+		return writeInspectionJSON(stdout, stderr, "impact", formatAwareJSONV4(repo.Format(), impactJSON(result), impactJSONV3(result), impactJSONV4(result)))
 	}
 	printImpactsHuman(stdout, result)
 	return 0
@@ -1645,7 +1694,7 @@ func runGraph(ctx context.Context, workDir string, args []string, stdout, stderr
 		return commandError(stderr, "graph", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "graph", formatAwareJSON(repo.Format(), graphJSON(nodes), graphJSONV3(nodes)))
+		return writeInspectionJSON(stdout, stderr, "graph", formatAwareJSONV4(repo.Format(), graphJSON(nodes), graphJSONV3(nodes), graphJSONV4(nodes)))
 	}
 	printGraphHuman(stdout, nodes, repo.Format())
 	return 0
@@ -1668,7 +1717,13 @@ func runFsck(ctx context.Context, workDir string, args []string, stdout, stderr 
 		return commandError(stderr, "fsck", err)
 	}
 	if output.JSON {
-		return writeInspectionJSON(stdout, stderr, "fsck", formatAwareJSON(repo.Format(), fsckJSON(report), fsckJSONV3(report)))
+		var document any = fsckJSON(report)
+		if repo.Format() == 6 {
+			document = fsckJSONV3(report)
+		} else if repo.Format() == 7 {
+			document = fsckJSONV4(report)
+		}
+		return writeInspectionJSON(stdout, stderr, "fsck", document)
 	}
 	printFsckHuman(stdout, report, repo.Format())
 	return 0

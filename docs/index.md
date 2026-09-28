@@ -46,8 +46,24 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`adr/0029-extensible-cause-link-metadata.md`](adr/0029-extensible-cause-link-metadata.md)
 - [`adr/0030-format6-link-metadata-storage-and-migration.md`](adr/0030-format6-link-metadata-storage-and-migration.md)
 - [`adr/0031-format6-link-metadata-cli-and-output.md`](adr/0031-format6-link-metadata-cli-and-output.md)
+- [`adr/0032-content-origin-trace-and-directional-observation.md`](adr/0032-content-origin-trace-and-directional-observation.md) — 履歴上 Accepted: Issue #17 R1 の範囲 Trace と方向別観測（[承認記録](process/adr-0032-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0036 で改訂。
+- [`adr/0033-origin-trace-storage-and-migration.md`](adr/0033-origin-trace-storage-and-migration.md) — Accepted: 保存形式と移行（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。
+- [`adr/0034-origin-trace-correspondence.md`](adr/0034-origin-trace-correspondence.md) — 履歴上 Accepted: R1 の対応判定（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0037 で改訂。
+- [`adr/0035-origin-trace-cli-and-observation-output.md`](adr/0035-origin-trace-cli-and-observation-output.md) — 履歴上 Accepted: R1 の CLI と観測出力（[承認記録](process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md)）。比較関連条項は ADR 0038 で改訂。
+- [`adr/0036-origin-trace-r2-presence-and-directional-observation.md`](adr/0036-origin-trace-r2-presence-and-directional-observation.md) — Accepted: 原文残存・方向別観測。ADR 0032 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0037-origin-trace-r2-search-and-estimation.md`](adr/0037-origin-trace-r2-search-and-estimation.md) — Accepted: 完全一致探索と独立した変更後範囲推定。ADR 0034 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0038-origin-trace-r2-cli-and-observation-output.md`](adr/0038-origin-trace-r2-cli-and-observation-output.md) — Accepted: 軽い比較と任意の推定を分ける CLI/schema。ADR 0035 の比較関連部分を改訂（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`adr/0039-origin-trace-derived-occurrence-positions.md`](adr/0039-origin-trace-derived-occurrence-positions.md) — Accepted: 全文からの一致位置導出と件数上限付き提示の後継設計判断（[承認・非 draft Seal 記録](process/issue-17-adr-0039-acceptance-2026-09-18.md)）。旧 [draft Seal](process/issue-17-adr-0039-proposed-seal-2026-09-18.md) は履歴。後継要件 R3 と公開契約 ADR 0040 に反映済み。
+- [`adr/0040-origin-trace-occurrence-listing-and-paging.md`](adr/0040-origin-trace-occurrence-listing-and-paging.md) — Accepted: R3 と ADR 0039 に基づく一致位置一覧の CLI、版固定ページング、新しい出力 schema（[承認記録](process/issue-17-adr-0040-acceptance-2026-09-18.md)、[非 draft Seal・読み戻し記録](process/issue-17-adr-0040-seal-2026-09-18.md)）。[初回独立レビュー](process/issue-17-adr-0040-independent-review-2026-09-18.md)と[baseline 選択の差分レビュー](process/issue-17-adr-0040-selector-rereview-2026-09-18.md)あり。`trace occurrences` を実装済み。
+- [`adr/0041-trace-mutation-receipt-input-file.md`](adr/0041-trace-mutation-receipt-input-file.md) — Accepted: format 7 の `trace set/clear` 成功 receipt v2 に入力ファイル名を含める後継判断（[承認記録](process/issue-17-adr-0041-acceptance-2026-09-18.md)）。
+- [`adr/0042-direct-substring-trace-authoring.md`](adr/0042-direct-substring-trace-authoring.md) — Accepted: `--content STRING` と `--content-file PATH|-` を併存させた直接部分文字列 Trace 登録（[承認記録](process/issue-17-r4-adr-0042-acceptance-2026-09-28.md)）。ADR 本文の `Proposed` は採用前の exact snapshot。
 
 ## Agent-auditable design
+
+- Issue #17 は [R2 差分要件](process/issue-17-origin-trace-requirement-r2-candidate-2026-09-17.md)を Accepted（[承認記録](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md)）。原文の完全一致確認と変更後範囲推定を分離する。[独立レビュー](process/issue-17-r2-c2-independent-review-2026-09-17.md)は採用判断の入力。[行指向の旧指示](process/issue-17-line-oriented-direction-2026-09-17.md)と[当時の詳細候補](process/issue-17-line-oriented-comparison-candidate-2026-09-17.md)は撤回後の履歴であり、今後の実装根拠にしない。旧 ADR 0032/0034/0035 の比較関連部分と[旧実装計画](process/issue-17-origin-trace-implementation-plan-2026-09-17.md)は R2 と不整合。ADR 0036～0038 と[新計画 P2](process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md)は[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)の exact snapshots で Accepted。[R2 と４文書の Seal 実行記録](process/issue-17-r2-downstream-seal-2026-09-17.md)に ID と読み戻し結果を示す。
+- 2026-09-18 の所有者方針に基づく[ADR 0039](adr/0039-origin-trace-derived-occurrence-positions.md)は、位置を全文から必要時に導出する後継判断として Accepted。当時残っていた R2 の後継要件改訂と ADR 0036～0038・計画 P2 の整合は、その後の R3 要件採用と P3 計画へ反映された。
+- [Issue #17 R3-c1 要件差分](process/issue-17-origin-trace-requirement-r3-candidate-2026-09-18.md)は[承認記録](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)により Accepted、[非 draft Seal 記録](process/issue-17-origin-trace-requirement-r3-seal-2026-09-18.md)あり。[初回レビュー入力](process/issue-17-origin-trace-requirement-r3-review-input-2026-09-18.md)、[独立レビュー](process/issue-17-origin-trace-requirement-r3-independent-review-2026-09-18.md)、[ADR 0036～0039・P2 の整合案](process/issue-17-origin-trace-r3-downstream-alignment-proposal-2026-09-18.md)を参照。公開契約は ADR 0040/0041 と P3 計画に反映され、R1–R3 の内部全体検証は[検証記録](process/issue-17-full-verification-2026-09-18.md)にある。
+- [Issue #17 R4-c1 直接部分文字列要件](process/issue-17-direct-substring-requirement-r4-c1-2026-09-18.md)は[承認記録](process/issue-17-direct-substring-r4-acceptance-2026-09-18.md)により Accepted。ADR 0042 の[所有者採用記録](process/issue-17-r4-adr-0042-acceptance-2026-09-28.md)と[実装](process/issue-17-r4-c1-direct-trace-implementation-2026-09-28.md)・[内部検証](process/issue-17-r4-c1-direct-trace-verification-2026-09-28.md)を参照。[旧候補の独立レビュー](process/issue-17-r4-adr-0042-independent-review-2026-09-28.md)はインライン入力追加前の版に限る。
 
 - [`decisions/sealgraph-design.think`](decisions/sealgraph-design.think)
 - [`decisions/2026-08-14-reseal-required.think`](decisions/2026-08-14-reseal-required.think)
@@ -62,6 +78,12 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`proposals/link-metadata-and-sealgraphql.md`](proposals/link-metadata-and-sealgraphql.md)
 
 ## Planning
+
+- [`process/issue-17-origin-trace.pert`](process/issue-17-origin-trace.pert) — Issue #17 専用PERT旧投影（保存承認済み、比較関連部分は R2 と不整合。次作業の選択に使わない）。
+
+- [`process/issue-17-origin-trace-implementation-plan-2026-09-17.md`](process/issue-17-origin-trace-implementation-plan-2026-09-17.md) — Issue #17 の旧 P1 候補（行指向・全最適比較を含む履歴）。
+- [`process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md`](process/issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) — Issue #17 の R2 実装計画 P2、Accepted（[４文書承認記録](process/issue-17-r2-downstream-acceptance-2026-09-17.md)）。
+- [`process/issue-17-r2-wip-handoff-2026-09-17.md`](process/issue-17-r2-wip-handoff-2026-09-17.md) — 2026-09-17 の保存範囲と次回再開点。
 
 - [`process/implementation-plan.md`](process/implementation-plan.md)
 - [`process/backlog.md`](process/backlog.md)

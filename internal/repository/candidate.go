@@ -12,6 +12,7 @@ import (
 
 	canonicalv5 "github.com/mako10k/sealgraph/internal/canonical/v5"
 	canonicalv6 "github.com/mako10k/sealgraph/internal/canonical/v6"
+	canonicalv7 "github.com/mako10k/sealgraph/internal/canonical/v7"
 	"github.com/mako10k/sealgraph/internal/domain"
 	domainv5 "github.com/mako10k/sealgraph/internal/domain/v5"
 )
@@ -74,7 +75,12 @@ func (s candidateStore) LoadSnapshot(ref string) (candidateSnapshot, error) {
 }
 
 func (s candidateStore) decode(data []byte) (domainv5.Candidate, error) {
-	if s.format == 6 {
+	if s.format == 7 {
+		if candidate, err := canonicalv7.DecodeCandidate(data); err == nil {
+			return candidate, nil
+		}
+	}
+	if s.format >= 6 {
 		if candidate, err := canonicalv6.DecodeCandidate(data); err == nil {
 			return candidate, nil
 		}
@@ -93,7 +99,10 @@ func (s candidateStore) decode(data []byte) (domainv5.Candidate, error) {
 func (s candidateStore) SaveIfUnchanged(candidate domainv5.Candidate, expected []byte, expectedPresent bool) error {
 	var data []byte
 	var err error
-	if s.format == 6 {
+	if s.format == 7 {
+		candidate.Schema = "sealgraph/candidate/v7"
+		data, err = canonicalv7.EncodeCandidate(candidate)
+	} else if s.format == 6 {
 		candidate.Schema = "sealgraph/candidate/v6"
 		data, err = canonicalv6.EncodeCandidate(candidate)
 	} else {

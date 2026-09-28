@@ -1,0 +1,92 @@
+[
+  {
+    "case": "compare_hit_1m",
+    "read_calls": 173,
+    "read_bytes": 4221015,
+    "write_calls": 2,
+    "write_bytes": 3490,
+    "trace_lines": 214,
+    "trace_bytes": 11489
+  },
+  {
+    "case": "compare_moved_1m",
+    "read_calls": 172,
+    "read_bytes": 3977623,
+    "write_calls": 2,
+    "write_bytes": 3488,
+    "trace_lines": 214,
+    "trace_bytes": 11436
+  },
+  {
+    "case": "compare_miss_1m",
+    "read_calls": 171,
+    "read_bytes": 3967055,
+    "write_calls": 2,
+    "write_bytes": 3498,
+    "trace_lines": 224,
+    "trace_bytes": 12262
+  },
+  {
+    "case": "compare_hit_16m",
+    "read_calls": 202,
+    "read_bytes": 67381235,
+    "write_calls": 4,
+    "write_bytes": 3511,
+    "trace_lines": 447,
+    "trace_bytes": 30508
+  },
+  {
+    "case": "compare_miss_16m",
+    "read_calls": 200,
+    "read_bytes": 67381219,
+    "write_calls": 1,
+    "write_bytes": 3493,
+    "trace_lines": 463,
+    "trace_bytes": 32421
+  },
+  {
+    "case": "occurrences_repeated_1m_page100",
+    "read_calls": 133,
+    "read_bytes": 4206551,
+    "write_calls": 2,
+    "write_bytes": 6011,
+    "trace_lines": 168,
+    "trace_bytes": 9165
+  },
+  {
+    "case": "dump_1m",
+    "read_calls": 183,
+    "read_bytes": 39871,
+    "write_calls": 2,
+    "write_bytes": 1400340,
+    "trace_lines": 249,
+    "trace_bytes": 13893
+  },
+  {
+    "case": "dump_16m",
+    "read_calls": 222,
+    "read_bytes": 408365,
+    "write_calls": 4,
+    "write_bytes": 22371876,
+    "trace_lines": 461,
+    "trace_bytes": 30976
+  },
+  {
+    "case": "load_1m",
+    "read_calls": 517,
+    "read_bytes": 2899758,
+    "write_calls": 60,
+    "write_bytes": 5649,
+    "trace_lines": 844,
+    "trace_bytes": 48874
+  },
+  {
+    "case": "load_16m",
+    "read_calls": 632,
+    "read_bytes": 45825578,
+    "write_calls": 306,
+    "write_bytes": 67292,
+    "trace_lines": 1612,
+    "trace_bytes": 102273
+  }
+]

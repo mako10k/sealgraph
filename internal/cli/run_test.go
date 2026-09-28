@@ -725,7 +725,7 @@ func TestCLIBashCompletionUsesCanonicalVocabularyAndMetadataOnly(t *testing.T) {
 	if output := mustRunCLI(t, dir, "__completion", "--bash", "source", "bind", "x", "--file", ""); output != "__sealgraph_completion_mode=file\n" {
 		t.Fatalf("file completion=%q", output)
 	}
-	if output := mustRunCLI(t, dir, "__completion", "--bash", "load", "--format", ""); output != "__sealgraph_completion_mode=plain\nuniversal-blob-v1\n" {
+	if output := mustRunCLI(t, dir, "__completion", "--bash", "load", "--format", ""); output != "__sealgraph_completion_mode=plain\nuniversal-blob-v1\nnative-blobs-v1\n" {
 		t.Fatalf("load format completion=%q", output)
 	}
 	if output := mustRunCLI(t, dir, "__completion", "--bash", "migrate", "extract", "--source-format", ""); output != "__sealgraph_completion_mode=plain\n4\n" {
@@ -1054,7 +1054,7 @@ func TestCLIFormat5DumpIsAbsentAndTagsMoveWithREF(t *testing.T) {
 	if code, _, stderr := runCLI(t, dir, nil, "init"); code != 0 {
 		t.Fatal(stderr)
 	}
-	if code, stdout, stderr := runCLI(t, dir, nil, "dump", "--format", "universal-blob-v1"); code != 2 || stdout != "" || !strings.Contains(stderr, `unknown command "dump"`) {
+	if code, stdout, stderr := runCLI(t, dir, nil, "dump", "--format", "universal-blob-v1"); code != 2 || stdout != "" || !strings.Contains(stderr, `unsupported; expected native-blobs-v1`) {
 		t.Fatalf("dump code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	for _, args := range [][]string{{"graph"}, {"stale", "--scan"}} {

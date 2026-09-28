@@ -1,0 +1,501 @@
+# Existing .pert plans should normally be maintained through perttool commands; direct DSL editing bypasses goal/DAG owner-confirmation checks.
+project SEALGRAPH_ISSUE17:
+  version 5
+  title "Issue #17 Origin Trace R3 作業投影"
+  description "Accepted R1/R2/R3・ADR0033-0041とAccepted P3の実装・検証工程の投影。FINISHは内部適合証拠の到達であり、公開・実repository移行・所有者の最終受入ではない。三点ポイントは事前の相対見積り、WRITER 1枠は計算仮定であり投入工数ではない。"
+  duration_unit point
+  finish FINISH
+
+milestone START:
+  title "旧実装計画P1のPERTが作成済み"
+  state reached
+
+resource WRITER:
+  title "作業担当1枠（計算用の仮定）"
+  capacity 1
+
+milestone CONTRACTS:
+  title "詳細契約の採用版が確定"
+  state reached
+
+milestone ENVIRONMENT:
+  title "初期測定条件を記録"
+  state reached
+
+milestone READY:
+  title "P3採用と先行契約の確認が済み実装選択可能"
+  state reached
+
+milestone TYPES:
+  title "S1 後継型とclosure検証"
+  state reached
+
+milestone AUTHOR:
+  title "S2 Trace作成とSeal公開"
+  state reached
+
+milestone COMPARATOR:
+  title "P3 原文残存のbyte比較器"
+  state reached
+
+milestone SELF_READY:
+  title "自身比較の前提"
+  state reached
+
+milestone SELF:
+  title "S4 自身のTrace比較"
+  state reached
+
+milestone DIRECTIONS:
+  title "S5 方向別の詳細観測"
+  state reached
+
+milestone TRIAL:
+  title "P8 詳細側の試用と測定"
+  state reached
+
+milestone STATUS_DECISION:
+  title "status保留の継続または再検討方針を記録"
+  state reached
+
+milestone TRANSPORT:
+  title "P9 native transportと元版復元"
+  state reached
+
+milestone INTEGRATION:
+  title "全体適合確認の前提"
+  state reached
+
+milestone DOCS:
+  title "P9 規範文書と公開操作の整合"
+  state reached
+
+milestone FINISH:
+  title "P9 全体適合証拠が揃う（公開・実移行は別）"
+  state reached
+
+task CONTRACT_REVIEW START -> CONTRACTS:
+  title "S0 詳細契約の採用版を確定"
+  description "ADR0033-35の差分と未決事項を提示し、所有者の採否を記録。工数は資料整理分のみで判断待ち時間を含まない。 三点値は未計測の相対規模見積もり。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/adr-0033-0035-origin-trace-acceptance-2026-09-17.md"
+
+task ENVIRONMENT_REVIEW START -> ENVIRONMENT:
+  title "P8 初期測定条件と実測記録"
+  description "未定の数値性能閾値を着手gateにしない。仮設入力、platform、時間・メモリ・I/Oの測定条件と結果を記録する。既存三点値は未計測仮説。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; R2速度方針"
+
+task FORMAT_TYPES READY -> TYPES:
+  title "P1 format 7型・全文Blob・closure・歴史reader"
+  description "canonical IDs、SourceSnapshot全文Blob、OriginMapのpとcopy一致、空/全被覆/overflow、typed closure、旧v5/v6 readerを検証。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 9p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P1; R1/R3 AC1/2/11/16/20; ADR0033/0039"
+
+task TRACE_AUTHOR TYPES -> AUTHOR:
+  title "P2 Trace作成・Sealと元ファイル全文復元"
+  description "Candidate content+mapのatomic更新、Seal、複数source/Untraced/中間Seal。元ファイル変更・削除後にSeal範囲外を含むS全文をexact復元。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 9p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P2; R1/R3 AC1/2/3/15/20; ADR0033/0035"
+
+task RANGE_COMPARATOR READY -> COMPARATOR:
+  title "P3 External runのbyte残存比較器"
+  description "旧p、p+delta、間の閉範囲、残余の全有効開始位置を探索。一件でPRESENT、全域不在でABSENT_EXACT、未完了を分離。行指向・全最適対応・全件位置列挙を使わない。三点値は旧仮説のため実装前に再見積り。"
+  estimate:
+    optimistic 5p
+    most_likely 8p
+    pessimistic 16p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P3; R2 AC4/5/12/13; ADR0036/0037"
+
+task SELF_COMPARE SELF_READY -> SELF:
+  title "P4 bindingと自身のpresence観測"
+  description "source_key binding、安定読取り、Candidate/HEAD別基準、各runの一件presenceと選択位置、NO_TRACE/対象なし/未調査を表示。推定・一覧をpresenceの前提にしない。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P4; R2/R3 AC4/5/8/12/13/16; ADR0038"
+
+task DIRECTION_COMPARE SELF -> DIRECTIONS:
+  title "P5 exact Causeの方向別観測"
+  description "自身・上流・下流のlocal factsを独立集計。direct/indirect、scope/budget、HEAD競合、human/JSON、STALE不変。位置ページ状態を伝播しない。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P5; R1/R2 AC6-11; ADR0036/0038"
+
+task DETAIL_TRIAL DIRECTIONS -> TRIAL:
+  title "P8 詳細側の作成・変更・追跡・位置ページ試用"
+  description "仮設文書で自身/上流/下流、ABSENT後推定、位置一覧と版変更、S全文復元を操作し、status判断材料と測定結果を記録。三点値は未計測仮説。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; AC1-21"
+
+task STATUS_REVISIT TRIAL -> STATUS_DECISION:
+  title "P8 試用後のstatus保留再評価"
+  description "試用結果に基づき必要なら表示範囲と副作用を所有者へ提示。未判定なら保留を記録。status実装は含めない。三点値は未計測仮説。"
+  estimate:
+    optimistic 1p
+    most_likely 1p
+    pessimistic 3p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P8; ADR0035/0038 status保留"
+
+task NATIVE_TRANSPORT AUTHOR -> TRANSPORT:
+  title "P9 native transportとS全文復元"
+  description "全Blob/opaque orphan/typed closure、exact旧ID、local除外、absent load、公開後失敗、legacy transport。元ファイル変更・削除後およびdump/load後のS全文exact復元を検証。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; R3 AC20; ADR0032/0033/0035"
+
+task NORMATIVE_SYNC INTEGRATION -> DOCS:
+  title "P9 規範文書・CLI/help/completionの整合"
+  description "各sliceの文書更新を集約し、trace compare v2と独立trace occurrences v1を区別。format4/5/6と新schemaを混同しない。三点値は未計測仮説。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; ADR0038/0040"
+
+task FULL_VERIFICATION DOCS -> FINISH:
+  title "P9 AC1-21全体検証・独立レビュー"
+  description "gofmt/vet/test/npm ci/clone/complexity/deadcodeとcompletion、必要なrace、AC対応、残課題を記録。実repo移行・releaseなし。三点値は未計測仮説。"
+  estimate:
+    optimistic 2p
+    most_likely 3p
+    pessimistic 6p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P9; AC1-21; repository AGENTS validation"
+
+gate READY_CONTRACT CONTRACTS -> READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate READY_ENV ENVIRONMENT -> TRIAL:
+  reason "初期測定条件は詳細側試用の入力。未定の性能閾値はformat 7実装のgateではない。"
+
+gate JOIN_AUTHOR AUTHOR -> SELF_READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_COMPARATOR COMPARATOR -> SELF_READY:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_TRIAL STATUS_DECISION -> INTEGRATION:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+gate JOIN_TRANSFER TRANSPORT -> INTEGRATION:
+  reason "P1の依存関係。全incoming完了が必要。実行承認を意味しない。"
+
+milestone PLAN_ACCEPTED:
+  title "P3 exact計画が所有者に採用された"
+  state reached
+
+task PLAN_REVIEW CONTRACTS -> PLAN_ACCEPTED:
+  title "P0 P3計画の採否を記録"
+  description "Accepted R3とADR0040に照らしてP3全文を所有者が判断。旧CONTRACT_REVIEW doneをR3採用に読み替えない。承認待ち時間は見積りに含めない。"
+  estimate:
+    optimistic 1p
+    most_likely 1p
+    pessimistic 2p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P0"
+
+gate READY_PLAN PLAN_ACCEPTED -> READY:
+  reason "P3候補の採用後に初めて後継実装計画として選べる。"
+
+milestone ESTIMATE:
+  title "P6 変更後範囲推定を検証"
+  state reached
+
+task ESTIMATE_COMPARE SELF -> ESTIMATE:
+  title "P6 ABSENT_EXACT後の範囲推定"
+  description "不在確定後だけ変更後範囲候補と根拠を示し、候補なし・複数・未完了でも不在判定を維持。一致位置一覧とは別。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P6; R2 AC14; ADR0037/0038"
+
+gate JOIN_ESTIMATE ESTIMATE -> TRIAL:
+  reason "詳細側試用ではABSENT後の推定も確認する。"
+
+milestone OCCURRENCES:
+  title "P7 一致位置一覧とページングを検証"
+  state reached
+
+task OCCURRENCES_LIST AUTHOR -> OCCURRENCES:
+  title "P7 trace occurrences読取一覧"
+  description "snapshot/current/both、重複位置、既定100件、cursorの版束縛・失効、v1 JSON/human、未完了、baseline選択を検証。presence比較器を呼び替えない。三点値は未計測仮説。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-implementation-plan-r3-2026-09-18.md; P7; R3 AC16-21; ADR0039/0040"
+
+gate JOIN_OCCURRENCES OCCURRENCES -> TRIAL:
+  reason "詳細側試用では位置一覧とページ継続も確認する。"
+
+task MIGRATE_FORMAT7 TYPES -> MIGRATION:
+  title "P9 format 5/6→7 明示移行コマンド"
+  description "ADR0033 §2.7とADR0035 §4.3のconfig-only migration、旧ID/bytes保持、staged fsck、atomic config公開、readback、v2 receipt、失敗境界、旧5→6維持を仮設repoで実装・検証。実repo移行・releaseなし。三点値は未計測仮説で着手前に再見積り。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 10p
+  status done
+  requires:
+    WRITER 1
+  source "docs/process/issue-17-origin-trace-p3-migration-addendum-2026-09-18.md; Accepted ADR0033 §2.7/0035 §4.3"
+
+work_event PLAN_REVIEW_ACCEPTED_20260918:
+  model 1
+  task PLAN_REVIEW
+  kind finish
+  occurred_at 2026-09-18T12:06:04+09:00
+
+work_event FORMAT_TYPES_START_20260918:
+  model 1
+  task FORMAT_TYPES
+  kind start
+  occurred_at 2026-09-18T13:30:37+09:00
+  planned_value 16/3p
+
+work_event FORMAT_TYPES_FINISH_20260918:
+  model 1
+  task FORMAT_TYPES
+  kind finish
+  occurred_at 2026-09-18T13:51:07+09:00
+
+work_event RANGE_COMPARATOR_START_20260918:
+  model 1
+  task RANGE_COMPARATOR
+  kind start
+  occurred_at 2026-09-18T14:02:30+09:00
+  planned_value 53/6p
+
+work_event RANGE_COMPARATOR_FINISH_20260918:
+  model 1
+  task RANGE_COMPARATOR
+  kind finish
+  occurred_at 2026-09-18T14:13:44+09:00
+
+work_event TRACE_AUTHOR_START_20260918:
+  model 1
+  task TRACE_AUTHOR
+  kind start
+  occurred_at 2026-09-18T14:23:18+09:00
+  planned_value 16/3p
+
+work_event TRACE_AUTHOR_FINISH_20260918:
+  model 1
+  task TRACE_AUTHOR
+  kind finish
+  occurred_at 2026-09-18T16:13:20+09:00
+
+work_event SELF_COMPARE_START_20260918:
+  model 1
+  task SELF_COMPARE
+  kind start
+  occurred_at 2026-09-18T16:21:53+09:00
+  planned_value 5.5p
+
+work_event SELF_COMPARE_FINISH_20260918:
+  model 1
+  task SELF_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:26:16+09:00
+
+work_event DIRECTION_COMPARE_START_20260918:
+  model 1
+  task DIRECTION_COMPARE
+  kind start
+  occurred_at 2026-09-18T17:26:30+09:00
+  planned_value 5.5p
+
+work_event DIRECTION_COMPARE_FINISH_20260918:
+  model 1
+  task DIRECTION_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:27:17+09:00
+
+work_event ESTIMATE_COMPARE_START_20260918:
+  model 1
+  task ESTIMATE_COMPARE
+  kind start
+  occurred_at 2026-09-18T17:27:48+09:00
+  planned_value 5.5p
+
+work_event ESTIMATE_COMPARE_FINISH_20260918:
+  model 1
+  task ESTIMATE_COMPARE
+  kind finish
+  occurred_at 2026-09-18T17:29:11+09:00
+
+work_event OCCURRENCES_LIST_START_20260918:
+  model 1
+  task OCCURRENCES_LIST
+  kind start
+  occurred_at 2026-09-18T18:25:04+09:00
+  planned_value 5.5p
+
+work_event OCCURRENCES_LIST_FINISH_20260918:
+  model 1
+  task OCCURRENCES_LIST
+  kind finish
+  occurred_at 2026-09-18T18:41:30+09:00
+
+work_event NATIVE_TRANSPORT_START_20260918:
+  model 1
+  task NATIVE_TRANSPORT
+  kind start
+  occurred_at 2026-09-18T18:47:37+09:00
+  planned_value 5.5p
+
+work_event NATIVE_TRANSPORT_FINISH_20260918:
+  model 1
+  task NATIVE_TRANSPORT
+  kind finish
+  occurred_at 2026-09-18T18:59:29+09:00
+
+work_event ENVIRONMENT_REVIEW_START_20260918:
+  model 1
+  task ENVIRONMENT_REVIEW
+  kind start
+  occurred_at 2026-09-18T19:11:58+09:00
+  planned_value 13/6p
+
+work_event ENVIRONMENT_REVIEW_FINISH_20260918:
+  model 1
+  task ENVIRONMENT_REVIEW
+  kind finish
+  occurred_at 2026-09-18T19:21:27+09:00
+
+work_event DETAIL_TRIAL_START_20260918:
+  model 1
+  task DETAIL_TRIAL
+  kind start
+  occurred_at 2026-09-18T19:26:25+09:00
+  planned_value 13/6p
+
+work_event DETAIL_TRIAL_FINISH_20260918:
+  model 1
+  task DETAIL_TRIAL
+  kind finish
+  occurred_at 2026-09-18T19:31:11+09:00
+
+work_event STATUS_REVISIT_START_20260918:
+  model 1
+  task STATUS_REVISIT
+  kind start
+  occurred_at 2026-09-18T19:42:05+09:00
+  planned_value 4/3p
+
+work_event STATUS_REVISIT_FINISH_20260918:
+  model 1
+  task STATUS_REVISIT
+  kind finish
+  occurred_at 2026-09-18T19:44:37+09:00
+
+milestone MIGRATION:
+  title "P9 format 5/6→7 明示移行の実装を検証"
+  state reached
+
+gate JOIN_MIGRATION MIGRATION -> INTEGRATION:
+  reason "NORMATIVE_SYNCとFULL_VERIFICATIONはformat 5/6→7の明示移行実装も含めて照合する。実repo移行の許可ではない。"
+
+work_event MIGRATE_FORMAT7_START_20260918:
+  model 1
+  task MIGRATE_FORMAT7
+  kind start
+  occurred_at 2026-09-18T20:00:58+09:00
+  planned_value 5.5p
+
+work_event MIGRATE_FORMAT7_FINISH_20260918:
+  model 1
+  task MIGRATE_FORMAT7
+  kind finish
+  occurred_at 2026-09-18T20:14:00+09:00
+
+work_event NORMATIVE_SYNC_START_20260918:
+  model 1
+  task NORMATIVE_SYNC
+  kind start
+  occurred_at 2026-09-18T20:24:00+09:00
+  planned_value 13/6p
+
+work_event NORMATIVE_SYNC_FINISH_20260918:
+  model 1
+  task NORMATIVE_SYNC
+  kind finish
+  occurred_at 2026-09-18T20:42:18+09:00
+
+work_event FULL_VERIFICATION_START_20260918:
+  model 1
+  task FULL_VERIFICATION
+  kind start
+  occurred_at 2026-09-18T20:49:37+09:00
+  planned_value 10/3p
+
+work_event FULL_VERIFICATION_FINISH_20260918:
+  model 1
+  task FULL_VERIFICATION
+  kind finish
+  occurred_at 2026-09-18T20:56:01+09:00

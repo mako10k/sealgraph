@@ -43,6 +43,10 @@ type Provenance struct {
 	Root       bool        `json:"root"`
 	Draft      bool        `json:"draft"`
 	CauseLinks []CauseLink `json:"cause_links"`
+	// Origin is format-7-only provenance. It is deliberately ignored by the
+	// legacy JSON codecs so v5/v6 bytes and unknown-member rejection remain
+	// unchanged; the v7 codec owns its canonical representation.
+	Origin *domain.ObjectID `json:"-"`
 }
 
 // CauseLink scopes revision assertions and messages to one exact target Seal.
@@ -76,6 +80,8 @@ type Candidate struct {
 	Root            bool             `json:"root"`
 	Draft           bool             `json:"draft"`
 	CauseLinks      []CauseLink      `json:"cause_links"`
+	// Origin is format-7-only candidate state; see Provenance.Origin.
+	Origin *domain.ObjectID `json:"-"`
 }
 
 // ResolvedSeal is the repository reader's typed join of a Seal Blob and the
