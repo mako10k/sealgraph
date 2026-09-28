@@ -31,12 +31,13 @@ Candidate v6 records with bounded, namespaced, canonical JSON Link metadata.
 Explicit config-only migration from format 5 or 6 enters format 7 without
 rewriting retained records. Format 7 retains full original source files as
 immutable Blobs, maps ordered content runs to them, and provides separate
-one-hit presence comparison, optional changed-range estimates, and paged
-occurrence listing. Native snapshot dump/load transports the complete canonical
+one-hit presence comparison, optional changed-range estimates, paged
+occurrence listing, and direct substring Trace authoring alongside recipe input.
+Native snapshot dump/load transports the complete canonical
 format-7 inventory. The normative requirements are in
 [`docs/requirements.md`](docs/requirements.md); the frozen native byte contract
 and migration boundary are in [`docs/storage-format.md`](docs/storage-format.md),
-with accepted Issue #17 R1/R2/R3 and their successor ADRs. Public syntax and
+with accepted Issue #17 R1/R2/R3/R4-c1 and their successor ADRs. Public syntax and
 versioned output are in [`docs/cli.md`](docs/cli.md).
 
 The runtime never opens format 4 as live state and never rewrites it in place.
@@ -201,6 +202,7 @@ sealgraph migrate repository --from 5 --to 6
 sealgraph migrate repository --from 5 --to 7
 sealgraph migrate repository --from 6 --to 7
 sealgraph trace set REF --recipe PATH [--content-file PATH|-]
+sealgraph trace set REF --source-file PATH --source-key KEY (--content STRING | --content-file PATH|-)
 sealgraph trace clear REF
 sealgraph trace show (--ref REF | --seal SELECTOR)
 sealgraph trace compare (--ref REF | --seal SELECTOR) --max-graph-visits N [--estimate]

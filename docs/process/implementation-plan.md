@@ -1,16 +1,111 @@
 # Sealgraph implementation plan
 
-Status: current through the accepted format-6 Cause Link metadata decision set.
-The checked-in runtime and normative documents implement formats 5 and 6; new
-repositories and the tracked dogfood remain format 5 until an explicit
-repository migration is separately authorized. The Cause-scoped revision
-contract, format/runtime slices, and normative sync are complete. `PLAN.pert`
-is the current perttool projection. Attachment mutation and the separately
-gated Git sidecar remain future work.
+Status: the format-6 delivery history below is complete. Issue #17 R1–R3 has
+separate internal verification in [`issue-17-origin-trace.pert`](issue-17-origin-trace.pert);
+R4-c1 has accepted design and internally verified implementation, while Issue
+#17 integration and release remain open. `PLAN.pert`
+projects the earlier format-6 delivery only. Neither completed PERT projection
+asserts that Issue #17 is merged, released, or accepted for use. Attachment
+mutation and the separately gated Git sidecar remain future work.
 
 ## Issue #17 planning
 
-The Japanese [Issue #17 R2 implementation plan P2](issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) records the accepted work sequence, exact-presence search, separate changed-range estimation, and detailed-surface trial before revisiting status integration. It does not change the completed format-6 baseline or start implementation. The [earlier P1 plan](issue-17-origin-trace-implementation-plan-2026-09-17.md) remains historical and is not the current execution guide.
+The [Issue #17 WIP handoff](issue-17-wip-handoff-2026-09-18.md) and its linked
+Accepted P3 plan describe the current R1–R3 implementation and verification
+boundary. [R4-c1](issue-17-direct-substring-r4-acceptance-2026-09-18.md) adds
+an Accepted direct-substring Trace authoring requirement. Its exact bytes now
+have a [requirement Seal](issue-17-direct-substring-r4-seal-2026-09-28.md) with
+Cause to Accepted R3. [ADR 0042](../adr/0042-direct-substring-trace-authoring.md)
+has an [owner acceptance record](issue-17-r4-adr-0042-acceptance-2026-09-28.md),
+and its [implementation](issue-17-r4-c1-direct-trace-implementation-2026-09-28.md)
+and [verification](issue-17-r4-c1-direct-trace-verification-2026-09-28.md)
+are recorded with non-draft Seals. The ADR's `Proposed` label is its adopted
+pre-acceptance snapshot; the acceptance record establishes its current status.
+The [earlier independent review](issue-17-r4-adr-0042-independent-review-2026-09-28.md)
+covers only the earlier candidate, before inline `--content` was added.
+The [earlier P1](issue-17-origin-trace-implementation-plan-2026-09-17.md)
+and [P2](issue-17-origin-trace-implementation-plan-r2-2026-09-17.md) plans are
+historical, not current execution guides.
+
+**Issue #17 goal (IG-17):** preserve Accepted R4-c1 as governing authority and
+integrate the reviewed R1–R4 increment against its exact accepted scope.
+R1–R3 and R4-c1 have separate internal verification; the original GitHub Issue
+also describes broader unresolved fragment behavior, so integration scope and
+any issue-wide completion claim require an explicit review. A
+worktree or release-scope decision does not revoke or reclassify the Accepted
+requirement; a narrower release cannot be called complete Issue #17. The next
+public release identity and publication remain separate owner decisions.
+
+## Local worktree minimization and integration plan — 2026-09-28
+
+**Owner goal (WM-0):** retain only worktrees needed for actual concurrent
+development in this repository. There is no fixed target count. Merge work
+that meets its governing acceptance and review conditions; preserve work that
+must stay separate on a remote branch before removing its worktree. A branch
+may remain without a worktree. This plan records decision gates and does not
+authorize a merge, push, branch deletion, or release.
+
+**Branch disposition (pre-integration snapshot on 2026-09-28; refresh before execution):**
+
+| Local branch | Current relation | Planned disposition |
+| --- | --- | --- |
+| `main` (`c23aa34`) | Matches remote; integration target | Keep. |
+| `codex/issue-17-origin-trace-r2-wip` (`c83fe90`) | Seven commits ahead of remote `9c58308`; primary checkout has this plan edit and Accepted ADR 0042 with R4-c1 implementation evidence | Keep as the IG-17 development line. Reconcile this plan, review the exact R1–R4 integration scope, and push the active branch for review. Merge claims follow the reviewed scope. |
+| `plan/normalize-recovery-completion` (`b116644`) | Ancestor of `main`; matches remote | No merge or new push. Remove redundant local pointer after final ancestry and remote readback; retain remote history. |
+| `release/v0.1.0-beta.5` (`a18c2f9`) | Ancestor of `main`; remote branch and published tag exist | No merge or new push. Remove redundant local pointer after tag, ancestry, and remote readback; retain tag and remote history. |
+| `release/v0.1.0-beta.6` (`2143304`) | Ancestor of `main`; matches remote and published tag exists | No merge or new push. Remove redundant local pointer after tag, ancestry, and remote readback; retain tag and remote history. |
+
+The only remaining local worktree is `/home/katsumata-m/sealgraph` on IG-17.
+The performance experiment stash was dropped at the owner's direction; its
+idle managed worktree was archived and its redundant local branch deleted.
+The clean Candidate comparison worktree and local branch were also removed
+after GitHub readback confirmed the remote branch at `17cfa7a`. That separate
+requirement packet remains unmerged on the remote branch. The primary checkout
+is the active Issue #17 workspace. Accepted R4-c1, published tags, and remote
+branches remain in scope for their separate decisions.
+
+1. **WM-1 — Reconfirm current fit.** Before cleanup, read back every worktree's
+   branch, exact HEAD, dirty state, stash, remote SHA, and whether a live task or
+   process still uses it. Identify unique work and its owner. Exit: each
+   worktree is classified as active parallel development, merge candidate, or
+   preservation-only, with no unaccounted changes. This inventory is a
+   prerequisite to the remaining steps, not permission to remove anything.
+2. **WM-2 — Decide merge eligibility.** The committed status-performance change
+   is already in the Issue #17 branch; no second merge is needed. The separate
+   Candidate-comparison R4 packet needs its own requirement lifecycle decision
+   before any normative integration. IG-17 has completed R4-c1 internal
+   verification; compare the accepted R1–R4 increment with the broader Issue
+   body before calling Issue #17 complete. Review the exact candidate
+   SHA and validate the integration scope. Merge eligible work through the
+   chosen review route only after its acceptance boundary and validation are
+   satisfied. Exit: each proposed merge has an explicit scope, reviewed source
+   SHA, target, and readback; unresolved work remains separate.
+3. **WM-3 — Preserve independent work before closing a worktree.** The
+   Candidate comparison branch's exact remote SHA was verified before its
+   worktree was removed. Verify the primary branch's exact remote continuation
+   after each integration-ready push. Exit: every
+   worktree proposed for removal has a verified remote continuation for all
+   unique work, or an explicit owner disposition of material not retained.
+4. **WM-4 — Remove only idle worktrees, then verify.** For each worktree, apply
+   WM-1 and its own WM-3 preservation gate; WM-2 can continue independently.
+   The performance and Candidate comparison worktrees are closed. Keep a
+   worktree when real concurrent development needs it; reassess it when that
+   work stops. Read back `git worktree list`, branch/stash state, and remote
+   continuation SHAs. WM-0 is met: the primary checkout is the only remaining
+   worktree, and Candidate comparison's unique commits remain on its remote
+   branch. Historical branch cleanup is a separate local-pointer decision.
+
+The applicable existing PERTs stop at format-6 delivery and Issue #17 R1–R3
+internal verification respectively. This operational goal is mapped here to
+those existing boundaries; neither PERT's zero remaining tasks closes WM-0.
+Effort and calendar duration for WM-2 and the remaining IG-17 continuation
+depend on integration-scope review and the selected PR/merge route. The next
+integration checkpoint is an exact R1–R4 scope comparison and branch review;
+historical local-pointer cleanup follows its own ancestry and remote-ref check.
+External review and
+publication waits remain separate. The next release version, tag, artifacts,
+real-repository migration, and GitHub publication each require their own
+frozen scope and authorization.
 
 ## Current format-6 Link metadata frontier
 

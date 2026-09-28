@@ -4,11 +4,15 @@ Status: normative format-5, format-6, and format-7 contract. Accepted ADRs
 0023, 0025–0027 define format 5; ADRs 0029–0031 add format 6. The accepted
 Issue #17 [R1](process/issue-17-origin-trace-requirement-r1-acceptance-2026-09-17.md),
 [R2](process/issue-17-origin-trace-requirement-r2-acceptance-2026-09-17.md),
-and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md)
+and [R3](process/issue-17-origin-trace-requirement-r3-acceptance-2026-09-18.md),
+plus [R4-c1](process/issue-17-direct-substring-r4-acceptance-2026-09-18.md),
 govern the format-7 additions in §17. ADR 0033 governs storage; ADRs 0036–0038
 replace conflicting comparison clauses of ADRs 0032/0034/0035; ADRs 0039/0040
 add derived positions and paging; ADR 0041 succeeds the format-7 trace
-mutation receipt. Unreplaced clauses of the earlier ADRs remain in force as
+mutation receipt; [ADR 0042](adr/0042-direct-substring-trace-authoring.md)
+adds direct substring Trace authoring alongside recipe input
+([acceptance record](process/issue-17-r4-adr-0042-acceptance-2026-09-28.md)).
+Unreplaced clauses of the earlier ADRs remain in force as
 specified by their acceptance records. Those records also govern where an
 original ADR file retains historical `Proposed` text. New repositories still
 initialize as format 5; later formats
@@ -664,12 +668,14 @@ identity.
 
 ## 17. Format-7 content origin trace
 
-This section applies the accepted Issue #17 R1, R2, and R3 requirement
-revisions. The exact accepted snapshots and their acceptance records remain the
-authority for detailed acceptance conditions AC1–AC21. Accepted ADR 0033
+This section applies the accepted Issue #17 R1, R2, R3, and R4-c1 requirement
+revisions. Their exact accepted snapshots and acceptance records remain the
+authority for detailed acceptance conditions: R1–R3 AC1–AC21 and R4-c1 AC1–AC4.
+Accepted ADR 0033
 specifies storage, ADRs 0036–0038 the revised search and observation, ADRs
-0039/0040 derived positions and paging, and ADR 0041 the trace mutation
-receipt. The unaffected portions of ADRs 0032/0034/0035 remain applicable.
+0039/0040 derived positions and paging, ADR 0041 the trace mutation
+receipt, and ADR 0042 the direct substring input mode. The unaffected portions
+of ADRs 0032/0034/0035 remain applicable.
 The earlier sections continue to govern format-5/6 behavior and common
 invariants unless the accepted successor contract explicitly extends them.
 
@@ -683,6 +689,15 @@ run, so the exact original file can be recovered after a working file changes
 or disappears. An intermediate Seal MAY be used when that helps keep Seals
 small. Cause Links still target whole exact Seals; an OriginMap does not create
 a Cause or revision edge.
+
+R4-c1 requires an operation that sets an existing Candidate's complete content
+directly from non-empty UTF-8 bytes found contiguously in one source file, without a
+user-authored recipe or byte offset. The earliest matching byte offset becomes
+the single External run's `source_start`, and the complete source file is
+retained as a SourceSnapshot. Absence or invalid input fails without changing
+the Candidate or REF HEAD. Existing recipe authoring remains available; this
+direct operation does not implicitly create a binding or Seal. ADR 0042 and
+[cli.md](cli.md) §9 define the two public input forms.
 
 For each External run, let P be its exact source bytes and F the full stable
 current file selected by that source key's local binding. One contiguous P in

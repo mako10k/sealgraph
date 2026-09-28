@@ -2,10 +2,11 @@
 
 Status: the checked-in standalone CLI creates repository format 5 and opens
 formats 5, 6, and 7. Accepted ADRs 0023, 0025–0027 govern format 5;
-ADRs 0029–0031 govern format 6. Accepted Issue #17 R1/R2/R3 and ADR 0033
+ADRs 0029–0031 govern format 6. Accepted Issue #17 R1/R2/R3/R4-c1 and ADR 0033
 govern the format-7 storage boundary; ADR 0035 governs CLI clauses retained
 after ADRs 0036–0038 revise comparison, ADRs 0039/0040 add derived occurrence
-positions and paging, and ADR 0041 updates the trace mutation receipt (§9).
+positions and paging, ADR 0041 updates the trace mutation receipt, and
+ADR 0042 adds direct substring authoring (§9).
 The older sections retain the format-5/6 contracts; original ADR `Proposed`
 headings are historical and their acceptance records establish current
 authority.
