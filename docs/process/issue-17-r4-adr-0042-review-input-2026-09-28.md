@@ -2,6 +2,7 @@
 
 - レビュー対象: [ADR 0042 日本語全文](../adr/0042-direct-substring-trace-authoring.md)、SHA-256 `270d6982869e58e6f99e32d8ca0d7d237fa5aba35e229c227b7edb8d39123afe`
 - 提案の由来: [draft Seal と直接 Cause の記録](issue-17-r4-adr-0042-proposed-seal-2026-09-28.md)。draft Seal は所有者採用を意味しない。
+- 独立レビュー: [現在の exact 版の指摘分類](issue-17-r4-adr-0042-independent-review-2026-09-28.md)。INSIDE に確定的矛盾なし。レビューは採否を代行しない。
 - 現在段階: Proposed CLI 設計。採否は未決。
 - 上位: [Accepted R4-c1 要件](issue-17-direct-substring-r4-acceptance-2026-09-18.md)と[要件 Seal](issue-17-direct-substring-r4-seal-2026-09-28.md)、Accepted ADR 0033/0035/0039/0040/0041 の該当契約。
 
