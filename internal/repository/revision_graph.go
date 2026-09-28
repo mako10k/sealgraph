@@ -218,15 +218,14 @@ func sortPaths(paths [][]domain.ObjectID) {
 		if len(paths[i]) != len(paths[j]) {
 			return len(paths[i]) < len(paths[j])
 		}
-		return idPathKey(paths[i]) < idPathKey(paths[j])
+		for index := range paths[i] {
+			left, right := paths[i][index].Hex, paths[j][index].Hex
+			if left != right {
+				return left < right
+			}
+		}
+		return false
 	})
-}
-func idPathKey(path []domain.ObjectID) string {
-	value := ""
-	for _, id := range path {
-		value += id.String() + "\x00"
-	}
-	return value
 }
 
 func (r *Repository) Stale(ctx context.Context, frontier, scan bool) ([]RefStatus, string, error) {

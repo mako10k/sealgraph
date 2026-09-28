@@ -26,6 +26,18 @@ func TestStaleFactsMemoizeSharedCauseSubgraphWithoutChangingPaths(t *testing.T) 
 	}
 }
 
+func TestSortPathsUsesLengthThenFullIDOrder(t *testing.T) {
+	a := benchmarkObjectID(1)
+	b := benchmarkObjectID(2)
+	c := benchmarkObjectID(3)
+	paths := [][]domain.ObjectID{{b, a}, {a, c}, {c}, {a, b}}
+	sortPaths(paths)
+	want := [][]domain.ObjectID{{c}, {a, b}, {a, c}, {b, a}}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+}
+
 func TestFrontierMemoizesSharedCauseClosure(t *testing.T) {
 	graph, heads := sharedCauseBenchmarkGraph(2, 3)
 	stale := benchmarkObjectID(4)
