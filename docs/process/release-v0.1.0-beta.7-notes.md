@@ -1,7 +1,7 @@
 # SealGraph v0.1.0-beta.7
 
-Standalone Linux amd64 prerelease candidate. These notes describe the changes
-since v0.1.0-beta.6; publication is tracked separately.
+Standalone Linux amd64 prerelease. These notes describe the changes since
+v0.1.0-beta.6.
 
 ## What's new
 
