@@ -1,0 +1,2200 @@
+{
+  "schema": "sealgraph/issue-22-planning-observation/v1",
+  "source": "PLAN.pert",
+  "initial_source_digest": "sha256:13035ece3306a1ecbf310ebba81387b99ef986f19ddfa1d34d3ac290f39f1c54",
+  "velocity_observation": {
+    "id": "perttool.velocity-observation",
+    "version": 1,
+    "history_model_version": 1,
+    "selected_task_ids": [
+      "ADR11_DESIGN",
+      "CAUSE_REVISION_CONTRACT",
+      "CAUSE_REVISION_FORMAT_SLICE",
+      "CAUSE_REVISION_NORMATIVE_SYNC",
+      "CAUSE_REVISION_RUNTIME_SLICE",
+      "CONTENT_INGEST",
+      "DOGFOOD_HERMETIC",
+      "DOGFOOD_RECURRING",
+      "DOGFOOD_TRACKED",
+      "EXTERNAL_SPEC_GATE",
+      "FORMAT3_LOGICAL_DUMP",
+      "FORMAT4_DOGFOOD_LOAD",
+      "FORMAT4_NATIVE_CORE",
+      "FORMAT4_REVISION_GRAPH",
+      "FORMAT6_METADATA_CLI_SLICE",
+      "FORMAT6_METADATA_NORMATIVE_SYNC",
+      "FORMAT6_METADATA_STORAGE_SLICE",
+      "FORMAT_SPEC",
+      "GRAPH_ENGINE",
+      "HISTORY_INSPECTION",
+      "LINK_METADATA_CONTRACT",
+      "MATERIAL_IDENTITY_V3",
+      "NATIVE_SLICE",
+      "NATIVE_V2_SLICE",
+      "OPERATOR_CONTRACT",
+      "RECOVERY_ACCEPTANCE",
+      "RECOVERY_CONTRACT",
+      "RECOVERY_CORE",
+      "RECOVERY_MOVE",
+      "RECOVERY_SEAL_TAG",
+      "RELEASE_GATE",
+      "RUNTIME_BOOTSTRAP",
+      "TAG_CONTRACT"
+    ],
+    "evidence": "declared",
+    "candidates": [
+      {
+        "id": "declared_elapsed_hour_throughput",
+        "measure": "elapsed_hour_throughput",
+        "evidence_class": "declared_actual",
+        "state": "available",
+        "numerator": {
+          "numerator": "19",
+          "denominator": "1",
+          "unit": "point",
+          "display": "19"
+        },
+        "denominator": {
+          "numerator": "2187899",
+          "denominator": "3600",
+          "unit": "hour",
+          "display": "607.749722"
+        },
+        "rate": {
+          "numerator": "68400",
+          "denominator": "2187899",
+          "unit": "point_per_hour"
+        },
+        "adoptable_velocity_token": "68400p/2187899h",
+        "included_task_ids": [
+          "DOGFOOD_RECURRING",
+          "FORMAT6_METADATA_CLI_SLICE",
+          "FORMAT6_METADATA_NORMATIVE_SYNC",
+          "FORMAT6_METADATA_STORAGE_SLICE",
+          "RELEASE_GATE"
+        ],
+        "excluded": [
+          {
+            "task_id": "ADR11_DESIGN",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "ADR11_DESIGN",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CONTENT_INGEST",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CONTENT_INGEST",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_HERMETIC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_HERMETIC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_TRACKED",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_TRACKED",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "EXTERNAL_SPEC_GATE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "EXTERNAL_SPEC_GATE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT3_LOGICAL_DUMP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT3_LOGICAL_DUMP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_DOGFOOD_LOAD",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_DOGFOOD_LOAD",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_NATIVE_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_NATIVE_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_REVISION_GRAPH",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_REVISION_GRAPH",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT_SPEC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT_SPEC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "GRAPH_ENGINE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "GRAPH_ENGINE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "HISTORY_INSPECTION",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "HISTORY_INSPECTION",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "LINK_METADATA_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "LINK_METADATA_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "MATERIAL_IDENTITY_V3",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "MATERIAL_IDENTITY_V3",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_V2_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_V2_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "OPERATOR_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "OPERATOR_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_ACCEPTANCE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_ACCEPTANCE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_MOVE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_MOVE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_SEAL_TAG",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_SEAL_TAG",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RUNTIME_BOOTSTRAP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RUNTIME_BOOTSTRAP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "TAG_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "TAG_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          }
+        ],
+        "observation_start": {
+          "kind": "date_time",
+          "source_text": "2026-08-17T12:57:19+09:00",
+          "year": 2026,
+          "month": 8,
+          "day": 17,
+          "hour": 12,
+          "minute": 57,
+          "second": {
+            "numerator": "19",
+            "denominator": "1"
+          },
+          "offset_minutes": 540
+        },
+        "observation_finish": {
+          "kind": "date_time",
+          "source_text": "2026-09-11T20:42:18+09:00",
+          "year": 2026,
+          "month": 9,
+          "day": 11,
+          "hour": 20,
+          "minute": 42,
+          "second": {
+            "numerator": "18",
+            "denominator": "1"
+          },
+          "offset_minutes": 540
+        },
+        "baseline_sources": [
+          {
+            "task_id": "DOGFOOD_RECURRING",
+            "source": "start_baseline",
+            "event_id": "WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_CLI_SLICE",
+            "source": "start_baseline",
+            "event_id": "WE-907ea62b1226b2dad97aa70c53e61557bcc431d59de3b76e825d8d74c546e1b8",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_NORMATIVE_SYNC",
+            "source": "start_baseline",
+            "event_id": "WE-70537108fdaf0743d33a54c5103a46daeb7fab6a81e382ffbb6fe7d17cb42451",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_STORAGE_SLICE",
+            "source": "start_baseline",
+            "event_id": "WE-98e24765abbe922044815a5a40147664b24a2f5a06b2406122d3408a57c8637c",
+            "commit_id": null
+          },
+          {
+            "task_id": "RELEASE_GATE",
+            "source": "start_baseline",
+            "event_id": "WE-08390f259a6d1ba089e15b252f6113362a83caaefb6afd04cca3f90c2c56f119",
+            "commit_id": null
+          }
+        ],
+        "qualifiers": [],
+        "unavailable_causes": []
+      },
+      {
+        "id": "declared_active_date_throughput",
+        "measure": "active_date_throughput",
+        "evidence_class": "declared_actual",
+        "state": "available",
+        "numerator": {
+          "numerator": "19",
+          "denominator": "1",
+          "unit": "point",
+          "display": "19"
+        },
+        "denominator": {
+          "numerator": "2",
+          "denominator": "1",
+          "unit": "day",
+          "display": "2"
+        },
+        "rate": {
+          "numerator": "19",
+          "denominator": "2",
+          "unit": "point_per_day"
+        },
+        "adoptable_velocity_token": "19p/2d",
+        "included_task_ids": [
+          "DOGFOOD_RECURRING",
+          "FORMAT6_METADATA_CLI_SLICE",
+          "FORMAT6_METADATA_NORMATIVE_SYNC",
+          "FORMAT6_METADATA_STORAGE_SLICE",
+          "RELEASE_GATE"
+        ],
+        "excluded": [
+          {
+            "task_id": "ADR11_DESIGN",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "ADR11_DESIGN",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CONTENT_INGEST",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CONTENT_INGEST",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_HERMETIC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_HERMETIC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_TRACKED",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_TRACKED",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "EXTERNAL_SPEC_GATE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "EXTERNAL_SPEC_GATE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT3_LOGICAL_DUMP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT3_LOGICAL_DUMP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_DOGFOOD_LOAD",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_DOGFOOD_LOAD",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_NATIVE_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_NATIVE_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_REVISION_GRAPH",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_REVISION_GRAPH",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT_SPEC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT_SPEC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "GRAPH_ENGINE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "GRAPH_ENGINE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "HISTORY_INSPECTION",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "HISTORY_INSPECTION",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "LINK_METADATA_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "LINK_METADATA_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "MATERIAL_IDENTITY_V3",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "MATERIAL_IDENTITY_V3",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_V2_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_V2_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "OPERATOR_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "OPERATOR_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_ACCEPTANCE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_ACCEPTANCE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_MOVE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_MOVE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_SEAL_TAG",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_SEAL_TAG",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RUNTIME_BOOTSTRAP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RUNTIME_BOOTSTRAP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "TAG_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "TAG_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          }
+        ],
+        "observation_start": {
+          "kind": "date_time",
+          "source_text": "2026-08-17T12:57:19+09:00",
+          "year": 2026,
+          "month": 8,
+          "day": 17,
+          "hour": 12,
+          "minute": 57,
+          "second": {
+            "numerator": "19",
+            "denominator": "1"
+          },
+          "offset_minutes": 540
+        },
+        "observation_finish": {
+          "kind": "date_time",
+          "source_text": "2026-09-11T20:42:18+09:00",
+          "year": 2026,
+          "month": 9,
+          "day": 11,
+          "hour": 20,
+          "minute": 42,
+          "second": {
+            "numerator": "18",
+            "denominator": "1"
+          },
+          "offset_minutes": 540
+        },
+        "baseline_sources": [
+          {
+            "task_id": "DOGFOOD_RECURRING",
+            "source": "start_baseline",
+            "event_id": "WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_CLI_SLICE",
+            "source": "start_baseline",
+            "event_id": "WE-907ea62b1226b2dad97aa70c53e61557bcc431d59de3b76e825d8d74c546e1b8",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_NORMATIVE_SYNC",
+            "source": "start_baseline",
+            "event_id": "WE-70537108fdaf0743d33a54c5103a46daeb7fab6a81e382ffbb6fe7d17cb42451",
+            "commit_id": null
+          },
+          {
+            "task_id": "FORMAT6_METADATA_STORAGE_SLICE",
+            "source": "start_baseline",
+            "event_id": "WE-98e24765abbe922044815a5a40147664b24a2f5a06b2406122d3408a57c8637c",
+            "commit_id": null
+          },
+          {
+            "task_id": "RELEASE_GATE",
+            "source": "start_baseline",
+            "event_id": "WE-08390f259a6d1ba089e15b252f6113362a83caaefb6afd04cca3f90c2c56f119",
+            "commit_id": null
+          }
+        ],
+        "qualifiers": [],
+        "unavailable_causes": []
+      },
+      {
+        "id": "declared_effort_productivity",
+        "measure": "effort_productivity",
+        "evidence_class": "declared_actual",
+        "state": "unavailable",
+        "numerator": null,
+        "denominator": null,
+        "rate": null,
+        "adoptable_velocity_token": null,
+        "included_task_ids": [],
+        "excluded": [
+          {
+            "task_id": "ADR11_DESIGN",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "ADR11_DESIGN",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "ADR11_DESIGN",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "CAUSE_REVISION_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "CONTENT_INGEST",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "CONTENT_INGEST",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "CONTENT_INGEST",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_HERMETIC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_HERMETIC",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "DOGFOOD_HERMETIC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_RECURRING",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "DOGFOOD_RECURRING",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "DOGFOOD_TRACKED",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "DOGFOOD_TRACKED",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "DOGFOOD_TRACKED",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "EXTERNAL_SPEC_GATE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "EXTERNAL_SPEC_GATE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "EXTERNAL_SPEC_GATE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT3_LOGICAL_DUMP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT3_LOGICAL_DUMP",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT3_LOGICAL_DUMP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_DOGFOOD_LOAD",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_DOGFOOD_LOAD",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT4_DOGFOOD_LOAD",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_NATIVE_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_NATIVE_CORE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT4_NATIVE_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT4_REVISION_GRAPH",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT4_REVISION_GRAPH",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT4_REVISION_GRAPH",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT6_METADATA_CLI_SLICE",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT6_METADATA_CLI_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT6_METADATA_NORMATIVE_SYNC",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT6_METADATA_NORMATIVE_SYNC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT6_METADATA_STORAGE_SLICE",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT6_METADATA_STORAGE_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "FORMAT_SPEC",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "FORMAT_SPEC",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "FORMAT_SPEC",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "GRAPH_ENGINE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "GRAPH_ENGINE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "GRAPH_ENGINE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "HISTORY_INSPECTION",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "HISTORY_INSPECTION",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "HISTORY_INSPECTION",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "LINK_METADATA_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "LINK_METADATA_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "LINK_METADATA_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "MATERIAL_IDENTITY_V3",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "MATERIAL_IDENTITY_V3",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "MATERIAL_IDENTITY_V3",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_SLICE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "NATIVE_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "NATIVE_V2_SLICE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "NATIVE_V2_SLICE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "NATIVE_V2_SLICE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "OPERATOR_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "OPERATOR_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "OPERATOR_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_ACCEPTANCE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_ACCEPTANCE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "RECOVERY_ACCEPTANCE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CONTRACT",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "RECOVERY_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_CORE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_CORE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "RECOVERY_CORE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_MOVE",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_MOVE",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "RECOVERY_MOVE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RECOVERY_SEAL_TAG",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RECOVERY_SEAL_TAG",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "RECOVERY_SEAL_TAG",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RELEASE_GATE",
+            "causes": [
+              {
+                "cause": "missing_effort",
+                "task_id": "RELEASE_GATE",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "RUNTIME_BOOTSTRAP",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "RUNTIME_BOOTSTRAP",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "RUNTIME_BOOTSTRAP",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          },
+          {
+            "task_id": "TAG_CONTRACT",
+            "causes": [
+              {
+                "cause": "no_complete_sequence",
+                "task_id": "TAG_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              },
+              {
+                "cause": "missing_effort",
+                "task_id": "TAG_CONTRACT",
+                "event_id": null,
+                "commit_id": null
+              }
+            ]
+          }
+        ],
+        "observation_start": null,
+        "observation_finish": null,
+        "baseline_sources": [],
+        "qualifiers": [],
+        "unavailable_causes": [
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "ADR11_DESIGN",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "CAUSE_REVISION_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "CONTENT_INGEST",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "DOGFOOD_HERMETIC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "DOGFOOD_TRACKED",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "EXTERNAL_SPEC_GATE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "FORMAT3_LOGICAL_DUMP",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "FORMAT4_DOGFOOD_LOAD",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "FORMAT4_NATIVE_CORE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "FORMAT4_REVISION_GRAPH",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "FORMAT_SPEC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "GRAPH_ENGINE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "HISTORY_INSPECTION",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "LINK_METADATA_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "MATERIAL_IDENTITY_V3",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "NATIVE_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "NATIVE_V2_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "OPERATOR_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "RECOVERY_ACCEPTANCE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "RECOVERY_CORE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "RECOVERY_MOVE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "RECOVERY_SEAL_TAG",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "RUNTIME_BOOTSTRAP",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "no_complete_sequence",
+            "task_id": "TAG_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "ADR11_DESIGN",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "CAUSE_REVISION_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "CAUSE_REVISION_FORMAT_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "CAUSE_REVISION_NORMATIVE_SYNC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "CAUSE_REVISION_RUNTIME_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "CONTENT_INGEST",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "DOGFOOD_HERMETIC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "DOGFOOD_RECURRING",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "DOGFOOD_TRACKED",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "EXTERNAL_SPEC_GATE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT3_LOGICAL_DUMP",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT4_DOGFOOD_LOAD",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT4_NATIVE_CORE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT4_REVISION_GRAPH",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT6_METADATA_CLI_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT6_METADATA_NORMATIVE_SYNC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT6_METADATA_STORAGE_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "FORMAT_SPEC",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "GRAPH_ENGINE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "HISTORY_INSPECTION",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "LINK_METADATA_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "MATERIAL_IDENTITY_V3",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "NATIVE_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "NATIVE_V2_SLICE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "OPERATOR_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RECOVERY_ACCEPTANCE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RECOVERY_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RECOVERY_CORE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RECOVERY_MOVE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RECOVERY_SEAL_TAG",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RELEASE_GATE",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "RUNTIME_BOOTSTRAP",
+            "event_id": null,
+            "commit_id": null
+          },
+          {
+            "cause": "missing_effort",
+            "task_id": "TAG_CONTRACT",
+            "event_id": null,
+            "commit_id": null
+          }
+        ]
+      }
+    ]
+  },
+  "velocity_diagnostics": [
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "CONTENT_INGEST",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "1faf75d2237981355168e2c2a1e0449bac54c9c7",
+        "task_id": "CONTENT_INGEST",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "CONTENT_INGEST",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "3ae2da690839f62a882c6fcf29db0bcfb2735d5b",
+        "task_id": "CONTENT_INGEST",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "CONTENT_INGEST",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "81aaa4deb83eb71b0d513a672b6c286facdebed1",
+        "task_id": "CONTENT_INGEST",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "CONTENT_INGEST",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "e84b0abbc91e7f84c7b0e61a413b315b7531b6d6",
+        "task_id": "CONTENT_INGEST",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "DOGFOOD_TRACKED",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "77cc8998f18b016137b298a72bbd85bb709a6cf2",
+        "task_id": "DOGFOOD_TRACKED",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "FORMAT4_DOGFOOD_LOAD",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "5b24d47cb66e2ff2be000d4c9cb32cb59e7957fa",
+        "task_id": "FORMAT4_DOGFOOD_LOAD",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "GIT_SIDECAR",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "0ca28d69d6b6a54b44125b91dd07e88048f28dbe",
+        "task_id": "GIT_SIDECAR",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "OPERATOR_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "1faf75d2237981355168e2c2a1e0449bac54c9c7",
+        "task_id": "OPERATOR_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "OPERATOR_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "3ae2da690839f62a882c6fcf29db0bcfb2735d5b",
+        "task_id": "OPERATOR_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "OPERATOR_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "81aaa4deb83eb71b0d513a672b6c286facdebed1",
+        "task_id": "OPERATOR_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "OPERATOR_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "e84b0abbc91e7f84c7b0e61a413b315b7531b6d6",
+        "task_id": "OPERATOR_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "RELEASE_GATE",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "cb16a8614aa9832c662b29f55da89d6a79b11903",
+        "task_id": "RELEASE_GATE",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "TAG_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "1faf75d2237981355168e2c2a1e0449bac54c9c7",
+        "task_id": "TAG_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "TAG_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "5b24d47cb66e2ff2be000d4c9cb32cb59e7957fa",
+        "task_id": "TAG_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "TAG_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "81aaa4deb83eb71b0d513a672b6c286facdebed1",
+        "task_id": "TAG_CONTRACT",
+        "event_id": null
+      }
+    },
+    {
+      "code": "PTHIS-102",
+      "severity": "warning",
+      "message": "project history is incomplete",
+      "entity_id": "TAG_CONTRACT",
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "actuals",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "cause": "task_identity_replaced",
+        "commit_id": "e84b0abbc91e7f84c7b0e61a413b315b7531b6d6",
+        "task_id": "TAG_CONTRACT",
+        "event_id": null
+      }
+    }
+  ],
+  "standalone_milestone_preview_diagnostics": [
+    {
+      "code": "PTDAG-204",
+      "severity": "error",
+      "message": "Milestone ISSUE22_REVIEWED_HISTORICAL_READY cannot reach the finish",
+      "entity_id": "ISSUE22_REVIEWED_HISTORICAL_READY",
+      "span": {
+        "start": {
+          "offset": 14612,
+          "line": 391,
+          "column": 11
+        },
+        "end": {
+          "offset": 14645,
+          "line": 391,
+          "column": 44
+        }
+      },
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "errors",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {}
+    },
+    {
+      "code": "PTDAG-205",
+      "severity": "error",
+      "message": "Root milestone ISSUE22_REVIEWED_HISTORICAL_READY must have state reached",
+      "entity_id": "ISSUE22_REVIEWED_HISTORICAL_READY",
+      "span": {
+        "start": {
+          "offset": 14612,
+          "line": 391,
+          "column": 11
+        },
+        "end": {
+          "offset": 14645,
+          "line": 391,
+          "column": 44
+        }
+      },
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "errors",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {}
+    }
+  ],
+  "batch_apply_ok": false,
+  "batch_apply_diagnostics": [
+    {
+      "code": "PTDAG-208",
+      "severity": "warning",
+      "message": "Milestone FORMAT6_METADATA_STORAGE is reached by closure; consider advance",
+      "entity_id": "FORMAT6_METADATA_STORAGE",
+      "span": {
+        "start": {
+          "offset": 2960,
+          "line": 125,
+          "column": 11
+        },
+        "end": {
+          "offset": 2984,
+          "line": 125,
+          "column": 35
+        }
+      },
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "workflows",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {}
+    },
+    {
+      "code": "PTDAG-208",
+      "severity": "warning",
+      "message": "Milestone FORMAT6_METADATA_RUNTIME is reached by closure; consider advance",
+      "entity_id": "FORMAT6_METADATA_RUNTIME",
+      "span": {
+        "start": {
+          "offset": 3063,
+          "line": 128,
+          "column": 11
+        },
+        "end": {
+          "offset": 3087,
+          "line": 128,
+          "column": 35
+        }
+      },
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "workflows",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {}
+    },
+    {
+      "code": "PTDAG-208",
+      "severity": "warning",
+      "message": "Milestone FORMAT6_METADATA_READY is reached by closure; consider advance",
+      "entity_id": "FORMAT6_METADATA_READY",
+      "span": {
+        "start": {
+          "offset": 3161,
+          "line": 131,
+          "column": 11
+        },
+        "end": {
+          "offset": 3183,
+          "line": 131,
+          "column": 33
+        }
+      },
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "workflows",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {}
+    },
+    {
+      "code": "PTGOV-101",
+      "severity": "error",
+      "message": "required plan-assurance owner authority was not established against the pre-change document",
+      "entity_id": null,
+      "span": null,
+      "related": [],
+      "help_topic": null,
+      "guide_topic": "editing",
+      "expected_syntax": null,
+      "fixes": [],
+      "data": {
+        "governance_semantics_version": 2,
+        "source_digest": "sha256:13035ece3306a1ecbf310ebba81387b99ef986f19ddfa1d34d3ac290f39f1c54",
+        "actor": null,
+        "accepted_by_owner": [],
+        "affected_scopes": [
+          "goal",
+          "dag"
+        ],
+        "required_owner_confirmations": [
+          "user"
+        ]
+      }
+    }
+  ],
+  "final_plan_sha256": "13035ece3306a1ecbf310ebba81387b99ef986f19ddfa1d34d3ac290f39f1c54",
+  "plan_mutated": false
+}

@@ -1,5 +1,7 @@
 package cli
 
+// R: dispatch standalone commands and coordinate their CLI input and receipts.
+
 import (
 	"bytes"
 	"context"
@@ -97,6 +99,8 @@ func runStandaloneMutation(ctx context.Context, workDir string, args []string, s
 		return runMove(ctx, workDir, args[1:], stdout, stderr), true
 	case "candidate":
 		return runCandidate(ctx, workDir, args[1:], stdout, stderr), true
+	case "review":
+		return runHistoricalReview(ctx, workDir, args[1:], stdin, stdout, stderr), true
 	case "seal":
 		return runSeal(ctx, workDir, args[1:], stdout, stderr), true
 	case "migrate":
@@ -1169,15 +1173,21 @@ func runSeal(ctx context.Context, workDir string, args []string, stdout, stderr 
 	if args[0] == "--all" {
 		return usageError(stderr, "seal --all is forbidden; seal exactly one REF explicitly")
 	}
-	if len(args) != 1 {
-		return usageError(stderr, "seal accepts exactly one REF; unexpected additional REF or argument %q", args[1])
+	reviewed := len(args) == 2 && args[1] == "--review-historical"
+	if len(args) != 1 && !reviewed {
+		return usageError(stderr, "seal accepts exactly one REF and optional --review-historical; unexpected additional REF or argument %q", args[1])
 	}
 	ref := args[0]
 	repo, err := repository.OpenStandalone(workDir)
 	if err != nil {
 		return commandError(stderr, "seal", err)
 	}
-	result, err := repo.Seal(ctx, ref)
+	var result repository.SealResult
+	if reviewed {
+		result, err = repo.SealReviewed(ctx, ref)
+	} else {
+		result, err = repo.Seal(ctx, ref)
+	}
 	if err != nil {
 		return commandError(stderr, "seal", err)
 	}
@@ -2018,8 +2028,12 @@ func domainNavigation(command, message string) (string, []string) {
 		return "the operation requires explicit mutable candidate state for that REF", []string{"create or update it with `sealgraph add` or `sealgraph link`, or inspect the intended REF first"}
 	case strings.Contains(message, "REF not found") || strings.Contains(message, "has no head or candidate"):
 		return "the selected logical REF has no current repository state", []string{"inspect current state with `sealgraph status` or select an existing REF or explicit Seal selector"}
-	case strings.Contains(message, "active revision leaf") || strings.Contains(message, "non-draft Cause") || strings.Contains(message, "Cause closure"):
-		return "normal non-draft publication requires every reachable Cause to be a non-draft active revision leaf", []string{"inspect the named target with `sealgraph show @SEAL_ID` and current review state with `sealgraph stale --frontier`", "relink and review explicitly from upstream to downstream; if historical provenance is intentional, keep the candidate draft"}
+	case strings.Contains(message, "non-draft Cause") || strings.Contains(message, "draft Cause"):
+		return "a draft Cause is provisional and cannot support non-draft publication, including reviewed historical admission", []string{"inspect that exact Cause; preserve provisional dependent work as draft, or leave publication pending until its premises are decided"}
+	case strings.HasPrefix(message, "REVIEW_"):
+		return "recorded historical reliance must cover the exact dependent subject, all Cause versions and the current observation", []string{"inspect `sealgraph review show REF --candidate` and `sealgraph review prepare REF`; review each difference and impact individually before recording a new claim", "leave unreviewed dependencies pending; no automatic relink, re-Seal or force is available"}
+	case strings.Contains(message, "active revision leaf") || strings.Contains(message, "Cause closure"):
+		return "normal non-draft publication requires every reachable Cause to be a non-draft active revision leaf", []string{"inspect the named target with `sealgraph show @SEAL_ID` and current review state with `sealgraph stale --frontier`", "for decided historical reliance, use `sealgraph review prepare REF`, record individual version-bound judgments with `review set`, then explicitly select `seal REF --review-historical`; leave unreviewed impact pending", "draft represents provisional work; historical reliance alone does not require draft, and no automatic relink or re-Seal is performed"}
 	case strings.Contains(message, "open standalone repository"):
 		return "this command requires a valid standalone .sealgraph repository", []string{"run `sealgraph init` only when initializing this directory; otherwise inspect and repair repository state explicitly"}
 	case strings.Contains(message, "outside the observed revision closure"):

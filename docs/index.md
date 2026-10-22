@@ -149,3 +149,5 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`process/dogfooding-receipts/2026-08-14-r0.md`](process/dogfooding-receipts/2026-08-14-r0.md)
 - [`process/dogfooding-receipts/2026-08-14-r1.md`](process/dogfooding-receipts/2026-08-14-r1.md)
 - [`../PLAN.pert`](../PLAN.pert)
+
+- [ADR 0043: Reviewed historical Cause publication](adr/0043-reviewed-historical-cause-publication.md) — Issue #22: explicit individually recorded non-draft historical reliance; stale and pending review remain separate.

@@ -1,5 +1,7 @@
 package repository
 
+// R: build coherent Cause/revision observations and validate publication admission.
+
 import (
 	"context"
 	"fmt"
@@ -261,7 +263,7 @@ func (graph *observedGraph) revisionObservation(id domain.ObjectID) domainv5.Rev
 	return domainv5.RevisionObservation{TargetSeal: id, PreviousStates: states, Assertions: assertions, StructuralPrevious: append([]domain.ObjectID{}, graph.revisions[id.String()]...)}
 }
 
-func (r *Repository) validateProspectiveCandidate(ctx context.Context, candidate domainv5.Candidate) (headObservation, error) {
+func (r *Repository) validateProspectiveCandidate(ctx context.Context, candidate domainv5.Candidate, reviewed bool) (headObservation, error) {
 	observation, err := r.observeHeads(ctx, "seal admission")
 	if err != nil {
 		return headObservation{}, err
@@ -275,6 +277,14 @@ func (r *Repository) validateProspectiveCandidate(ctx context.Context, candidate
 	graph, err := r.buildObservedGraph(ctx, heads, map[string]domainv5.ResolvedSeal{prospective.ID.String(): prospective})
 	if err != nil {
 		return headObservation{}, fmt.Errorf("prospective Candidate graph is invalid: %w", err)
+	}
+	if reviewed {
+		if candidate.Draft || candidate.Root {
+			return headObservation{}, fmt.Errorf("reviewed historical admission requires a non-root non-draft Candidate")
+		}
+		if err := r.validateRecordedHistoricalReview(ctx, candidate, observation); err != nil {
+			return headObservation{}, err
+		}
 	}
 	if candidate.Draft || candidate.Root {
 		return observation, nil
@@ -296,10 +306,10 @@ func (r *Repository) validateProspectiveCandidate(ctx context.Context, candidate
 			return headObservation{}, fmt.Errorf("Cause %s is absent from prospective graph", id)
 		}
 		if resolved.Provenance.Draft {
-			return headObservation{}, fmt.Errorf("normal Seal requires non-draft Cause %s; keep the Candidate draft or select another Cause", id)
+			return headObservation{}, fmt.Errorf("normal Seal requires non-draft Cause %s; keep provisional dependent work draft or leave publication pending", id)
 		}
-		if !graph.isActiveLeaf(id) {
-			return headObservation{}, fmt.Errorf("normal Seal requires Cause %s to be an active revision leaf; keep the Candidate draft or revise the assertion explicitly", id)
+		if !reviewed && !graph.isActiveLeaf(id) {
+			return headObservation{}, fmt.Errorf("normal Seal requires Cause %s to be an active revision leaf; inspect individual historical reliance with review prepare, or leave publication pending", id)
 		}
 		stack = append(stack, graph.causes[id.String()]...)
 	}

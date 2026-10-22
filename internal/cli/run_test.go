@@ -311,7 +311,7 @@ func TestCLIDomainInvariantFailureNavigatesWithoutMutation(t *testing.T) {
 	if code != 1 || stdout != "" {
 		t.Fatalf("seal code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	for _, marker := range []string{"reason: normal non-draft publication requires", "sealgraph stale --frontier", "keep the candidate draft", "help: sealgraph help seal"} {
+	for _, marker := range []string{"reason: normal non-draft publication requires", "sealgraph stale --frontier", "sealgraph review prepare REF", "seal REF --review-historical", "leave unreviewed impact pending", "help: sealgraph help seal"} {
 		if !strings.Contains(stderr, marker) {
 			t.Fatalf("missing %q:\n%s", marker, stderr)
 		}

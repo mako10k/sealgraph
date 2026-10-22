@@ -1,3 +1,4 @@
+// R: coordinate Candidate authoring and guarded single-REF publication.
 // Package repository coordinates the standalone format-5, format-6, and
 // format-7 runtime.
 // Format-4 repositories are rejected at the config boundary and are never
@@ -351,6 +352,15 @@ type SealResult struct {
 }
 
 func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
+	return r.seal(ctx, ref, false)
+}
+
+// SealReviewed explicitly admits individually recorded historical dependencies.
+func (r *Repository) SealReviewed(ctx context.Context, ref string) (SealResult, error) {
+	return r.seal(ctx, ref, true)
+}
+
+func (r *Repository) seal(ctx context.Context, ref string, reviewed bool) (SealResult, error) {
 	return withMutation(ctx, r.writer, "seal REF", func() (SealResult, error) {
 		if err := domain.ValidateREF(ref); err != nil {
 			return SealResult{}, err
@@ -363,7 +373,7 @@ func (r *Repository) Seal(ctx context.Context, ref string) (SealResult, error) {
 			return SealResult{}, err
 		}
 		candidate := snapshot.Candidate
-		observation, err := r.validateSealCandidate(ctx, candidate)
+		observation, err := r.validateSealCandidate(ctx, candidate, reviewed)
 		if err != nil {
 			return SealResult{}, err
 		}
@@ -455,7 +465,7 @@ func (r *Repository) writeCandidateSealBlobs(ctx context.Context, ref string, ca
 	return resolved, nil
 }
 
-func (r *Repository) validateSealCandidate(ctx context.Context, candidate domainv5.Candidate) (headObservation, error) {
+func (r *Repository) validateSealCandidate(ctx context.Context, candidate domainv5.Candidate, reviewed bool) (headObservation, error) {
 	prospective, err := r.prospectiveSeal(candidate)
 	if err != nil {
 		return headObservation{}, fmt.Errorf("derive prospective Seal for %s: %w", candidate.REF, err)
@@ -482,7 +492,7 @@ func (r *Repository) validateSealCandidate(ctx context.Context, candidate domain
 			return headObservation{}, err
 		}
 	}
-	return r.validateProspectiveCandidate(ctx, candidate)
+	return r.validateProspectiveCandidate(ctx, candidate, reviewed)
 }
 
 func (r *Repository) validatePublicationExpectation(ctx context.Context, candidate domainv5.Candidate) error {

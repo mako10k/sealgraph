@@ -416,3 +416,17 @@ REF, and Candidate inventory, including full source Blobs, while leaving local
 bindings and correspondence behind. CLI parsing and presentation own the
 versioned receipts and JSON schemas; neither transport nor migration fabricates
 an origin for historical Seals.
+
+## 10. Explicit reviewed historical publication
+
+[ADR 0043](adr/0043-reviewed-historical-cause-publication.md) adds
+`internal/historicalreview` as the pure bounded record codec. Repository review
+modules derive subject/complete Cause facts, mutate only the dedicated Candidate
+attachment, and inspect a recorded judgment separately from current
+applicability. They reuse immutable Blob storage, prospective graph validation,
+expected-old Candidate replacement, and the existing single-REF publication
+transaction. `SealReviewed` adds the record gate while `Seal` retains strict
+active-leaf admission. All reachable draft Causes remain rejected for non-draft
+publication. CLI owns input limits, explicit selection, and rendering. No Link
+metadata is interpreted; no new canonical typed field or repository format is
+introduced. Graph stale derivation remains unchanged.

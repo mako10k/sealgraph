@@ -472,3 +472,42 @@ metadata arrays are empty, so adding, replacing, or removing metadata changes
 `change_id`. Existing immutable v1 upstream-change and Assessment Blobs are not
 rewritten. Migration fabricates or adopts no Assessment; Assessment-reference
 storage remains separately gated by ADR 0028.
+
+## 15. Contained historical-review evidence
+
+[ADR 0043](adr/0043-reviewed-historical-cause-publication.md) defines the dedicated
+Material attachment `sealgraph-historical-review.json` with media type
+`application/vnd.sealgraph.historical-review+json`. Its ordinary Blob content
+uses `sealgraph/historical-review/v1`; the existing Material/Provenance/Seal and
+Candidate formats 5/6/7 are unchanged. Existing attachments with a conflicting
+media type are preserved and rejected by the dedicated writer. No generic
+attachment authoring surface is added.
+
+Record member order is `schema,ref,subject_seal,other_heads,entries`. Each head
+has `ref,seal`, sorted bytewise by REF. Each entry has
+`target_seal,compared_seals,decision,difference,impact,reason`, sorted by full
+lower-case target SealID. Compared IDs sort bytewise. Duplicate JSON keys,
+unknown members, duplicate array identities, invalid IDs, unsupported decisions,
+null members and oversized records are rejected. Arrays may be empty where the
+complete observation/closure is empty. Input and canonical output are bounded
+to 1 MiB of UTF-8. `retain` requires nonblank difference, impact and reason;
+`unreviewed` permits empty text but cannot pass historical admission.
+Canonical record content uses compact Go JSON encoding in the above field order
+(with standard HTML and Unicode-separator escaping), without a trailing LF.
+Human input is normalized to these bytes; native Blob identity uses the existing
+blob envelope. The codec has a fixed canonical-byte digest fixture.
+
+`subject_seal` is the prospective SealID after removing only this dedicated
+attachment. This avoids self-reference and commits all other subject state.
+`other_heads` is the complete current REF/head set excluding `ref`; the
+publication transaction still independently guards all manifests and the
+subject's expected-old head. The record is immutable evidence of a version-bound
+executor claim. Current stale or current review applicability is derived, never
+persisted as an authoritative flag. Old binaries retain exact bytes and can
+inspect/transport the attachment; their default admission remains strict.
+Migration to a new generation may change prospective subject identity and
+requires explicit renewed review rather than rewriting old record bytes.
+
+The record's `ref` is an application claim scoped to its original destination,
+not intrinsic Seal ownership. REF aliases, moves and drops do not rewrite that
+claim or historical attachment bytes.

@@ -1,0 +1,100 @@
+{
+  "schema": "sealgraph/issue-22-working-tree-manifest/v1",
+  "base_commit": "21195bc273c97c751a0f91085c5b6c7482e7ac9a",
+  "branch": "codex/issue-22-historical-review",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "071ac7d56b76e7907ee9dd464fa50c0c678a048fc701cbcfb6adfd4e0f543042"
+    },
+    {
+      "path": "docs/adr/0043-reviewed-historical-cause-publication.md",
+      "sha256": "cf582560a6afb0660a1306af79e67d2dfa2238e90c4654b947c2e4f1f70a5237"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "ac1fcf848855ff1ef080ba4ea0949e0208225208e9727063e8a03a6e62de60b0"
+    },
+    {
+      "path": "docs/cli.md",
+      "sha256": "ce325c21989ffafa61ce95cfbc6e1a63ab4601fceaa9080c274b731ea93f3ce3"
+    },
+    {
+      "path": "docs/index.md",
+      "sha256": "b56a2575034c94131f47df630a1e3e1c9770abd59eb1e5241b749fa04c0689b2"
+    },
+    {
+      "path": "docs/process/issue-22-authority-and-review-2026-10-22.md",
+      "sha256": "59c382916abf69a220950dd057ebff670e02c5b7206ef59a2edcf0ba9ce5f469"
+    },
+    {
+      "path": "docs/process/issue-22-planning-observation-2026-10-22.json",
+      "sha256": "3341933105e47868dc99cbc9e417e51476a69ed68fcb3356fc0d673ae19da476"
+    },
+    {
+      "path": "docs/requirements.md",
+      "sha256": "ac9c0bb82b9920add3d0378c4a5b5d83c0a815a0748a24a76c3629b85ed4e73f"
+    },
+    {
+      "path": "docs/storage-format.md",
+      "sha256": "3e0e6f2b9b2a7a21d001efc6300733e2d0011de151573a4e2e219d6945985d5d"
+    },
+    {
+      "path": "internal/cli/completion.go",
+      "sha256": "21b7776e0274d41dc77a78df89b30483c5963b97be372d45823c0872b26ece28"
+    },
+    {
+      "path": "internal/cli/help.go",
+      "sha256": "d524ca9be4cff7783346cae42c542a68ca0fe1350e590c1e8a9c8de14a4cfbb3"
+    },
+    {
+      "path": "internal/cli/historical_review.go",
+      "sha256": "b42a30a2693537a914467d8f23638a12740bb1bf3e23d45136b88ca45f8848b6"
+    },
+    {
+      "path": "internal/cli/historical_review_test.go",
+      "sha256": "09bb236939164548f8d0fbafcbc89214cd9ed74e07468da58981930f907bae69"
+    },
+    {
+      "path": "internal/cli/run.go",
+      "sha256": "a3e9c4932a72131d50464a3445a04ec1c5ef75974cd431efd5c22cc43c62e860"
+    },
+    {
+      "path": "internal/cli/run_test.go",
+      "sha256": "a3bcf1c2a7e8e156ea607088e0f5073245f6f6bd4ab7181f500100697c52c7bd"
+    },
+    {
+      "path": "internal/historicalreview/record.go",
+      "sha256": "d8dd26f03397bde03352bca1c3a90208ddfab5c64de9f1d4f14bd81192bff4b1"
+    },
+    {
+      "path": "internal/historicalreview/record_test.go",
+      "sha256": "3b1ab6a64db7213094f8c44b967959d79e736e5ab41b229eecf97ba91a2f9be1"
+    },
+    {
+      "path": "internal/repository/historical_review.go",
+      "sha256": "b4ef4eee5cb43f350374ed373b755ca19e9c98c5de65a2471d7a9d286648b717"
+    },
+    {
+      "path": "internal/repository/historical_review_inspection.go",
+      "sha256": "1ae980c6a5cc0da01f8ea8dce6c2cdd2ca3fd1534dec5a1ae28e322ddc8315e1"
+    },
+    {
+      "path": "internal/repository/historical_review_mutation.go",
+      "sha256": "b3d4692fcf78a9d5e121b2b10c4ddf71c6382e97efb9a7c82b7855655d3a8911"
+    },
+    {
+      "path": "internal/repository/historical_review_test.go",
+      "sha256": "718f62c85f40e66cec047eb226dbe1f4867da175ef18cd2921375493691681ad"
+    },
+    {
+      "path": "internal/repository/observation_v5.go",
+      "sha256": "7fcb7c197f1a42d9728dcf97e1adac56ac0d0351f81defcba6dbf75cb0bfe501"
+    },
+    {
+      "path": "internal/repository/repository.go",
+      "sha256": "cc413364bc44ecb3ea998495165110f150f51394f3d227e08a38dc94797a2709"
+    }
+  ],
+  "excludes": "manifest, final handoff and validation transcript to avoid self-reference; no commit, push or release"
+}

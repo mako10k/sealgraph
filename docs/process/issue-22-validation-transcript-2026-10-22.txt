@@ -1,0 +1,92 @@
+Broad Go suite (before final codec/inspection/diagnostic refinements; unchanged-package results reused)
+
+?   	github.com/mako10k/sealgraph/cmd/git-sealgraph	[no test files]
+?   	github.com/mako10k/sealgraph/cmd/sealgraph	[no test files]
+ok  	github.com/mako10k/sealgraph/internal/canonical	0.027s
+ok  	github.com/mako10k/sealgraph/internal/canonical/v5	0.017s
+ok  	github.com/mako10k/sealgraph/internal/canonical/v6	0.057s
+ok  	github.com/mako10k/sealgraph/internal/canonical/v7	0.024s
+ok  	github.com/mako10k/sealgraph/internal/cli	73.421s
+ok  	github.com/mako10k/sealgraph/internal/domain	0.042s
+?   	github.com/mako10k/sealgraph/internal/domain/v5	[no test files]
+?   	github.com/mako10k/sealgraph/internal/domain/v6	[no test files]
+?   	github.com/mako10k/sealgraph/internal/domain/v7	[no test files]
+?   	github.com/mako10k/sealgraph/internal/fsatomic	[no test files]
+?   	github.com/mako10k/sealgraph/internal/fsread	[no test files]
+ok  	github.com/mako10k/sealgraph/internal/historicalreview	0.039s
+ok  	github.com/mako10k/sealgraph/internal/migration	0.049s
+ok  	github.com/mako10k/sealgraph/internal/migration/format4extract	4.733s
+ok  	github.com/mako10k/sealgraph/internal/pathmanifest	0.043s
+ok  	github.com/mako10k/sealgraph/internal/recovery	0.178s
+ok  	github.com/mako10k/sealgraph/internal/repository	97.225s
+?   	github.com/mako10k/sealgraph/internal/store	[no test files]
+ok  	github.com/mako10k/sealgraph/internal/store/native	2.659s
+?   	github.com/mako10k/sealgraph/internal/store/refmanifest	[no test files]
+ok  	github.com/mako10k/sealgraph/internal/tracecompare	0.016s
+ok  	github.com/mako10k/sealgraph/internal/traceestimate	0.059s
+ok  	github.com/mako10k/sealgraph/internal/traceoccurrence	0.012s
+ok  	github.com/mako10k/sealgraph/internal/tracerecipe	0.029s
+?   	github.com/mako10k/sealgraph/internal/workfile	[no test files]
+
+Final changed-scope selection; includes canonical claims, publication, CAS/head race, help/completion and diagnostics
+
+ok  	github.com/mako10k/sealgraph/internal/historicalreview	0.009s
+ok  	github.com/mako10k/sealgraph/internal/repository	12.370s
+ok  	github.com/mako10k/sealgraph/internal/cli	3.571s
+focused elapsed_seconds=19.08
+
+Readback assertion refactor only, after the above selection
+
+ok  	github.com/mako10k/sealgraph/internal/repository	1.486s
+
+Final go vet ./...; exit 0
+
+
+
+npm ci; exit 0
+
+
+added 2 packages, and audited 3 packages in 2s
+
+found 0 vulnerabilities
+
+Final make completion-check; exit 0
+
+mkdir -p bin
+go build -buildvcs=false -trimpath -ldflags "-X github.com/mako10k/sealgraph/internal/cli.Version=0.1.0-dev" -o bin/sealgraph ./cmd/sealgraph
+bash tests/completion_regression.sh ./bin/sealgraph
+
+Final npm run clone-check; exit 0
+
+
+> clone-check
+> jscpd internal cmd --config .jscpd.json
+
+Using config from .jscpd.json
+Clone found (go)
+ - canonical/v5/structured.go [117:3 - 131:16] (15 lines, 111 tokens)
+   canonical/v6/structured.go [227:3 - 241:16]
+Clone found (go)
+ - repository/load.go [274:30 - 288:22] (15 lines, 97 tokens)
+   repository/native_snapshot_load.go [144:27 - 158:22]
+┌────────┬────────────────┬─────────────┬──────────────┬──────────────┬──────────────────┬───────────────────┐
+│ Format │ Files analyzed │ Total lines │ Total tokens │ Clones found │ Duplicated lines │ Duplicated tokens │
+├────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤
+│ go     │ 143            │ 34316       │ 280676       │ 2            │ 28 (0.08%)       │ 208 (0.07%)       │
+├────────┼────────────────┼─────────────┼──────────────┼──────────────┼──────────────────┼───────────────────┤
+│ Total: │ 143            │ 34316       │ 280676       │ 2            │ 28 (0.08%)       │ 208 (0.07%)       │
+└────────┴────────────────┴─────────────┴──────────────┴──────────────┴──────────────────┴───────────────────┘
+Found 2 clones.
+time: 126.709ms
+
+💡 Auto-refactor with AI: npx skills add https://github.com/kucherenko/jscpd --skill dry-refactoring
+🎩 New: Gangsta Agents — discipline your AI coding → gangsta.page
+💖 Support jscpd project → https://opencollective.com/jscpd
+
+Final make complexity-check; exit 0 after test assertion extraction
+
+go run github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0 -over 20 internal cmd
+
+Final make deadcode-check; exit 0
+
+go run golang.org/x/tools/cmd/deadcode@v0.49.0 -test ./...

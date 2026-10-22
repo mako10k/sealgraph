@@ -32,7 +32,8 @@ Do not silently resolve a material specification conflict. Record it in an ADR o
 - Seals and content-addressed objects are immutable.
 - A movable REF points to the current seal (HEAD) for that logical REF.
 - A Cause Link stores one concrete target SealID plus its observer-scoped previous-revision assertions and messages. `--target REF` and `--previous REF` resolve HEAD at command execution time; dynamic HEAD references are never persisted.
-- Explicit historical links are valid. A normal non-draft seal defaults to requiring a HEAD-consistent dependency closure; draft/historical workflows may intentionally preserve older dependencies.
+- Explicit historical links are valid. Default non-draft publication requires a HEAD-consistent dependency closure. ADR 0043 adds explicit reviewed historical non-draft publication with a version-bound individual review; draft remains provisional. Keep stale facts observable.
+- Before each Cause update or Seal issuance, individually read the original, Candidate, exact Cause versions, differences and impact; record retain/update/pending with reasons. Use automation for read-only inventories and review preparation. Execute each judged Cause update and Seal separately; never loop/script judgment or issuance to obtain stale=0. A Seal or recorded claim does not prove truth, understanding or approval.
 - Staleness is derived from immutable seals plus current REF heads. Do not persist stale as canonical state.
 - Link targets are not copied into the dependent seal; their normalized identities are committed into the dependent seal hash.
 - Direct upstream seal identities are sufficient; transitive provenance is committed Merkle-DAG style.

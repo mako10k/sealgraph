@@ -1,5 +1,7 @@
 package cli
 
+// R: derive read-only shell completion candidates from the CLI registry and repository names.
+
 import (
 	"context"
 	"fmt"
@@ -142,7 +144,7 @@ func repositoryCompletionValues(workDir, path string) []string {
 		return nil
 	}
 	switch path {
-	case "seal", "candidate show", "candidate compare", "candidate discard", "trace set", "trace clear":
+	case "review prepare", "review set", "review clear", "seal", "candidate show", "candidate compare", "candidate discard", "trace set", "trace clear":
 		return names.Candidates
 	case "trace correspondence show", "trace correspondence remove":
 		records, err := repo.TraceCorrespondenceList()
@@ -166,6 +168,8 @@ func repositoryCompletionValues(workDir, path string) []string {
 			}
 		}
 		return keys
+	case "review show":
+		return reviewSubjectCompletion(names.REFs, names.Candidates)
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
 	case "recover", "recover show":
@@ -173,4 +177,17 @@ func repositoryCompletionValues(workDir, path string) []string {
 	default:
 		return names.REFs
 	}
+}
+
+func reviewSubjectCompletion(refs, candidates []string) []string {
+	seen := make(map[string]bool)
+	values := []string{}
+	for _, name := range append(append([]string{}, refs...), candidates...) {
+		if !seen[name] {
+			seen[name] = true
+			values = append(values, name)
+		}
+	}
+	sort.Strings(values)
+	return values
 }

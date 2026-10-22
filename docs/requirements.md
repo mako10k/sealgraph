@@ -208,6 +208,9 @@ canonical and is not committed to an outer Git repository.
 
 ## 4. Seal admissibility
 
+Issue #22 and [ADR 0043](adr/0043-reviewed-historical-cause-publication.md)
+add the explicit reviewed-historical path below; default admission remains strict.
+
 A normal non-draft seal MUST reject a candidate unless every direct and
 reachable Cause target is a non-draft active revision leaf in one coherent
 current-head observation.
@@ -228,6 +231,40 @@ Seal parent. A previous revision may be active, detached, historical, or
 draft, but the target selected as the normal non-draft Cause must satisfy the
 normal active-leaf rule. There is no generic ignore-validation escape hatch.
 
+### 4.1 Explicit reviewed historical reliance (Issue #22)
+
+The operator MUST be able to publish a non-draft dependent against individually
+reviewed exact historical/non-leaf non-draft Cause targets. `seal REF
+--review-historical` MUST require a Candidate-bound historical-review record
+covering every distinct direct and transitive Cause target. Each record commits
+the dependent subject, exact target/comparison IDs, differences, impact and
+retention reason, and the other REF heads in one coherent observation. It MUST
+NOT admit a draft Cause, missing coverage, unreviewed decision, changed subject,
+or changed observation. All structural, typed-content, origin, writer-guard and
+expected-old publication validation remains in force.
+
+`review prepare REF` emits facts only. `review set REF --file PATH|-` stores one
+explicit record on an existing Candidate, preserving unreviewed entries as
+unreviewed. `review clear REF` removes only this record. Neither operation
+changes Causes, publishes a Seal, or creates review judgments. `review show
+SELECTOR` and `review show REF --candidate` MUST distinguish the recorded claim
+from its applicability to the current observation. Current applicability is
+not publication success or semantic approval.
+
+The record is ordinary contained evidence in the dedicated Material attachment
+specified by ADR 0043. This is a narrow exception to the no-attachment-authoring
+clause of §5/ADR 0021, not arbitrary attachment mutation. Native typed object
+schemas and historical bytes do not change. The subject is the prospective
+SealID with only that dedicated attachment removed, binding content, other
+attachments, full Cause records, root/draft, generation, and OriginMap. The
+recorded head set excludes only the destination REF; publication independently
+validates that REF's expected-old head and the complete captured observation.
+
+Historical reliance MUST NOT suppress STALE_DIRECT/STALE_TRANSITIVE or report
+latest consistency. A review record is an executor claim, not proof of truth,
+correctness, approval, or understanding. Pending impact remains pending. No
+bulk approval, automatic relink/reseal/stale repair, or generic force is added.
+
 ## 5. Attachment preservation
 
 Format-5 Material and Candidates may contain zero or more named attachments.
@@ -242,8 +279,8 @@ An attachment is contained evidence/artifact data. A link is an external
 provenance relation. The two remain semantically distinct and MUST
 NOT be silently converted into one another.
 
-As accepted by ADR 0021, the product MUST NOT add attachment mutation commands
-for format 5. It MUST continue to decode, validate, inspect, compare, preserve,
+Except for the dedicated review record in §4.1/ADR 0043, the ADR 0021
+prohibition on attachment mutation commands remains in force for format 5. It MUST continue to decode, validate, inspect, compare, preserve,
 dump/load, and include existing attachments in canonical identity. New related
 material should use primary content, an independently sealed content result
 plus an exact Link, or explicit manifest content according to its semantics.

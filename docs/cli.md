@@ -448,7 +448,7 @@ baseline. It does not infer a revision predecessor. Discard removes exactly
 one Candidate, including a corrupt Candidate through the explicit bounded
 discard path; it removes no REF, Blob, source binding, or descendant state.
 
-### `sealgraph seal REF`
+### `sealgraph seal REF [--review-historical]`
 
 Seal publishes at most one new Seal for exactly one REF. Under the repository
 writer guard it reloads the exact Candidate version, validates content,
@@ -706,3 +706,58 @@ Blobs and opaque orphans, but not local bindings or correspondence. Load
 publishes only to an absent target. Migration from format 5/6 is the explicit
 config-only operation in §2, not part of dump/load. The command registry and
 read-only Bash completion expose these same operations and option values.
+
+## 10. Individual historical-Cause reviews (Issue #22)
+
+```sh
+sealgraph review prepare REF [--format human|json]
+sealgraph review set REF --file PATH|- [--format human|json]
+sealgraph review clear REF [--format human|json]
+sealgraph review show SELECTOR [--format human|json]
+sealgraph review show REF --candidate [--format human|json]
+sealgraph seal REF --review-historical
+```
+
+[ADR 0043](adr/0043-reviewed-historical-cause-publication.md) governs these
+operations. Preparation emits `sealgraph/historical-review-prepare/v1` with
+`schema,ref,subject_seal,other_heads,targets`. Each target has
+`target_seal,compared_seals,revision_state,draft`. Targets cover the complete
+Link-only Cause closure, sorted by ID. Compared Seals are all observed active
+revision leaf descendants, sorted by ID, including the target itself if it is
+an active leaf. Sibling descendants are all retained; no preferred/latest leaf
+is inferred. A detached target with no observed lineage has an empty set; the
+operator must explain its relevant comparison using the fixed other-head
+observation and original material. Preparation never emits a completed decision.
+
+Individually inspect original content, dependent Candidate, exact selected
+premises, comparison versions, differences and impact. Supply the complete
+`historical-review/v1` record specified in storage-format §15. `review set`
+validates exact subject, observation, targets and comparison sets and attaches
+one immutable record to one existing Candidate using expected-old replacement.
+Named input must be a regular file with no symlink path components; stdin is
+explicit `-`. Both input and output records are bounded to 1 MiB. Set never
+fills reasons or replaces an unreviewed decision. Clear removes only the
+reserved record; other attachments, content and Causes remain unchanged.
+
+Set/clear emit `sealgraph/historical-review-mutation/v1` with
+`schema,ref,operation`. Show emits `sealgraph/historical-review-show/v1` with
+`schema,selected_seal,candidate,record,current,applicable,limitation`; `selected_seal` is the full immutable or prospective Candidate SealID,
+`candidate` distinguishes that choice, and `current` has the preparation shape. `applicable` means this recorded claim covers current versions, all
+entries say retain, and no Cause is draft; it is not a full publication
+preflight or semantic validation. The exact Candidate/immutable selection is
+explicit; a missing Candidate never falls back to HEAD. A recorded judgment
+remains visible after it becomes inapplicable. Show revalidates observation
+and selected Candidate before output.
+
+Default `seal REF` remains strict. Explicit historical publication additionally
+requires a non-root, non-draft Candidate with a matching complete review and no
+draft Cause anywhere in the closure. Candidate content, other attachments,
+OriginMap, root/draft, Cause records or generation changes invalidate subject
+binding. Any other REF/head change invalidates current applicability. The
+subject REF is excluded only from recorded other-head pairs so its own
+publication does not invalidate the record; expected-old CAS and complete
+observation revalidation still apply. `STALE_DIRECT`, `STALE_TRANSITIVE`, draft,
+and revision observations retain their existing meanings. A successful Seal
+is not proof of correctness, approval or understanding. Do not automate review
+judgments, Cause updates or Seal issuance in scripts/loops. Copy this individual
+review rule into repository AGENTS.md when adopting SealGraph.
