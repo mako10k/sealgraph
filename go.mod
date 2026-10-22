@@ -1,3 +1,3 @@
 module github.com/mako10k/sealgraph
 
-go 1.26
+go 1.26.0
