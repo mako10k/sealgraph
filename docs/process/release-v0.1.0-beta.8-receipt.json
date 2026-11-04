@@ -1,0 +1,51 @@
+{
+  "release_url": "https://github.com/mako10k/sealgraph/releases/tag/v0.1.0-beta.8",
+  "published_at": "2026-11-04T07:24:45Z",
+  "tag": "v0.1.0-beta.8",
+  "tag_commit": "f75b43ef3a38ca1eb8f73a7220251db8a487a2b4",
+  "is_draft": false,
+  "is_prerelease": true,
+  "public_notes_sha256": "b1965525d84952fe4f168b9677b8f6bb8908afc023c17fa07e73368f062d3121",
+  "assets": [
+    {
+      "name": "sealgraph_0.1.0-beta.8_linux_amd64.tar.gz",
+      "bytes": 2205801,
+      "sha256": "7ef439d354081a6b327b57defcff3664cf475be8c8c53a4de5704c26cf4a214c",
+      "same_as_accepted_candidate": true
+    },
+    {
+      "name": "sealgraph_0.1.0-beta.8_checksums.txt",
+      "bytes": 108,
+      "sha256": "dc5383731034a21d20e22f9b79222bac2d0d402d41c1c7e085ef312dd4fc9ead",
+      "same_as_accepted_candidate": true
+    }
+  ],
+  "download_checksum_verified": true,
+  "downloaded_binary_version": "sealgraph 0.1.0-beta.8",
+  "extracted_directory": "/tmp/sealgraph-beta8-public-readback-q1163cgw",
+  "installed": false,
+  "schema": "sealgraph/release-publication-receipt/v1",
+  "release_id": 433620465,
+  "release_assets": [
+    {
+      "id": 708634361,
+      "name": "sealgraph_0.1.0-beta.8_checksums.txt",
+      "size": 108,
+      "state": "uploaded",
+      "digest": "sha256:dc5383731034a21d20e22f9b79222bac2d0d402d41c1c7e085ef312dd4fc9ead",
+      "url": "https://github.com/mako10k/sealgraph/releases/download/v0.1.0-beta.8/sealgraph_0.1.0-beta.8_checksums.txt"
+    },
+    {
+      "id": 708634359,
+      "name": "sealgraph_0.1.0-beta.8_linux_amd64.tar.gz",
+      "size": 2205801,
+      "state": "uploaded",
+      "digest": "sha256:7ef439d354081a6b327b57defcff3664cf475be8c8c53a4de5704c26cf4a214c",
+      "url": "https://github.com/mako10k/sealgraph/releases/download/v0.1.0-beta.8/sealgraph_0.1.0-beta.8_linux_amd64.tar.gz"
+    }
+  ],
+  "candidate_manifest_sha256": "501e4c92ec5283ef2a8633a5bf226f1062120027933beb162f0cae7a194f4ea5",
+  "source_tree": "f7cf2647fd5892421bf8aaf4ddfbdd864e11c562",
+  "evidence_directory": "/home/katsumata-m/sealgraph/dist/release-v0.1.0-beta.8-publication-20261104",
+  "claim": "observed GitHub publication and downloaded bytes; not semantic truth, signature or installation"
+}
