@@ -761,3 +761,22 @@ and revision observations retain their existing meanings. A successful Seal
 is not proof of correctness, approval or understanding. Do not automate review
 judgments, Cause updates or Seal issuance in scripts/loops. Copy this individual
 review rule into repository AGENTS.md when adopting SealGraph.
+
+## 11. On-demand operator navigation (Accepted UX R1 / ADR0044)
+
+```sh
+sealgraph help workflows
+sealgraph inspect [REF] [--max-refs N] [--format human|json]
+sealgraph compare FROM_SELECTOR TO_SELECTOR --text [--format human]
+sealgraph trace read (--ref REF --baseline candidate|head | --seal SELECTOR) \
+  --run-index N --view snapshot|current [--context-lines N] [--max-bytes N] \
+  [--raw-source] [--format human|json]
+```
+
+[ADR0044](adr/0044-read-only-operator-navigation.md) and the [operations guide](operations.md) define the additive read-only boundary. Existing schemas/raw protocols and format5/6/7 storage are unchanged. On-demand output is the only notification; no watcher/service/message delivery is installed.
+
+`inspect` emits `sealgraph/inspect/v1`: schema, repository_format, inventory_complete, omitted_refs, entries, limitation. Each entry has sealed_state (existing status record shape), nullable candidate_digest, workfile (state, baseline, nullable workfile_blob_id), trace_state, trace_baselines (existing local Trace result shape), historical_reviews and next_read_actions. Historical entries select a head/candidate baseline, exact selected_seal, NONE or RECORDED state, nullable applicable and nullable full historical-review inspection. NONE is absence of a recorded claim, not unreviewed/approved. Trace can be UNSUPPORTED_FORMAT or NO_BASELINE; observed baselines distinguish NO_TRACE/NO_EXTERNAL_RANGES/unconfirmed/present/absence. No overall clean/approved result is inferred. Inventory defaults to 100 visible REFs (1..10000); omitted entries are explicit, and complete graph integrity checks still run. It reads only local registered source/bindings, revalidates selected facts and heads before output, and does not promise a cross-file simultaneous snapshot. Directional Trace investigation remains `trace compare` and `impact`.
+
+`compare --text` forces escaped human output even on a pipe, and conflicts with explicit JSON. Each input preview and displayed-difference-line budget is 65536 bytes, with at most 1048576 LCS cells. Complexity fallback and omitted text are labelled; binary input is not printed as unsafe raw bytes. Repository content is still fully read/validated. Exact immutable raw-extraction and Cause-rationale inspection commands are included. Without --text existing compare behavior is unchanged.
+
+`trace read` emits `sealgraph/trace-read/v1`, using existing occurrence selection/run/observation identities plus view, state, reason, source_byte_length, selected_start, excerpt_start, excerpt_bytes, truncated, quote_truncated, max_bytes, limitation. excerpt_bytes uses JSON base64 for exact binary-safe bytes. State is SAVED_RANGE for snapshot, PRESENT/ABSENT_EXACT for completed current search, or INCOMPLETE with reason for missing/unconfirmed source. Unobserved source_byte_length is null. A match is representative and never proof of historical movement. Context defaults to 3 lines (0..1000); excerpt limit defaults to 65536 bytes (1..1048576). Omission is explicit, including a quote exceeding the display limit. Underlying validated source reads load the full source. --raw-source explicitly emits the complete selected source as bytes-only stdout, conflicts with explicit JSON and fails if the source cannot be confirmed. Baselines and views never fall back; format7 is required and migration is always explicit.

@@ -83,6 +83,9 @@ func completionForOption(prior []string) (string, []string, bool) {
 	case "--baseline":
 		return "plain", []string{"candidate", "head"}, true
 	case "--view":
+		if len(prior) > 1 && prior[0] == "trace" && prior[1] == "read" {
+			return "plain", []string{"snapshot", "current"}, true
+		}
 		return "plain", []string{"snapshot", "current", "both"}, true
 	case "--from":
 		if prior[0] == "migrate" {
@@ -112,7 +115,7 @@ func topLevelCompletionValues() []string {
 
 func helpCompletionValues(path []string) []string {
 	if len(path) == 0 {
-		values := append(topLevelCompletionValues(), "concepts", "selectors", "usecases")
+		values := append(topLevelCompletionValues(), "concepts", "selectors", "usecases", "workflows")
 		sort.Strings(values)
 		return values
 	}

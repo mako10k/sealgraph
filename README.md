@@ -8,6 +8,12 @@ The core question is not only “what changed?” but:
 
 > **Which exact generation of each upstream basis was reviewed when this content was sealed, and what became stale after an upstream supersession?**
 
+## Start here
+
+For daily use, run `sealgraph help workflows` and follow the [operator and LLM guide](docs/operations.md). `sealgraph inspect --format human` reports registered workfile changes, stale provenance, original-source presence and historical-review claims as separate facts. Notifications happen only when inspection runs; there is no background watcher.
+
+Read actual text differences with `sealgraph compare FROM TO --text`. For format-7 original-source context and explicit whole-source extraction, use `sealgraph trace read --help`. Unknown, unsupported, omitted or failed observations never mean everything was checked.
+
 ## Status
 
 The checked-in standalone runtime implements the format-5 native core, its

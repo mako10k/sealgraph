@@ -151,3 +151,9 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [`../PLAN.pert`](../PLAN.pert)
 
 - [ADR 0043: Reviewed historical Cause publication](adr/0043-reviewed-historical-cause-publication.md) — Issue #22: explicit individually recorded non-draft historical reliance; stale and pending review remain separate.
+
+## Accepted UX operation increment
+
+- [ADR0044: read-only operator navigation](adr/0044-read-only-operator-navigation.md)
+- [Accepted UX R1 receipt](process/usability-requirements-r1-acceptance-2026-11-04.md)
+- [UX basic/detailed design](process/usability-design-2026-11-04.md)

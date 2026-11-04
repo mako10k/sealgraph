@@ -27,6 +27,8 @@ type commandHelp struct {
 }
 
 var commandHelpRegistry = map[string]commandHelp{
+	"inspect":    {Path: "inspect", Summary: "Inspect workfiles, stale provenance, original-source presence and review claims separately.", Usage: []string{"sealgraph inspect [REF] [--max-refs N] [--format human|json]"}, Options: []helpOption{{"--max-refs N", "positive displayed REF limit, default 100, maximum 10000; omitted inventory is explicit"}, {"--format human|json", "terminal human, pipe/file JSON (inspect/v1)"}}, Details: []string{"On-demand only; no watcher, background notifications, automatic add, relink or Seal. Only registered local sources are opened. Workfile, provenance stale, local Trace and Candidate/HEAD historical claims remain distinct. No binding/Trace, unsupported format, failed or incomplete reads do not mean unchanged. Aggregate observations are revalidated but do not promise a simultaneous filesystem snapshot."}, Related: []string{"workflows", "status", "trace compare", "review show"}},
+	"trace read": {Path: "trace read", Summary: "Read exact saved or current original-source context for one External run.", Usage: []string{"sealgraph trace read (--ref REF --baseline candidate|head | --seal SELECTOR) --run-index N --view snapshot|current [--context-lines N] [--max-bytes N] [--raw-source] [--format human|json]"}, Options: []helpOption{{"--ref REF", "explicit REF; requires --baseline"}, {"--baseline candidate|head", "one exact REF baseline; no fallback"}, {"--seal SELECTOR", "immutable Seal selector; conflicts with --ref and --baseline"}, {"--run-index N", "required zero-based External run index"}, {"--view snapshot|current", "required source version"}, {"--context-lines N", "default 3; 0 through 1000"}, {"--max-bytes N", "default 65536; 1 through 1048576; bounds excerpt, not underlying Blob reads"}, {"--raw-source", "explicit exact whole-source bytes, not just quote; conflicts with explicit JSON"}, {"--format human|json", "trace-read/v1 or escaped human context"}}, Details: []string{"Format 7 only, no implicit migration. Snapshot is immutable saved source; current is a stable read of the explicit local binding. Missing/failed observation is INCOMPLETE, not absence. Current match is representative, not proof of movement or historical identity. Context omission is explicit; raw extraction remains exact and may be large."}, Related: []string{"trace show", "trace occurrences", "trace source", "workflows"}},
 	"init": {
 		Path: "init", Summary: "Initialize or explicitly bootstrap one standalone repository.",
 		Usage:    []string{"sealgraph init"},
@@ -51,8 +53,8 @@ var commandHelpRegistry = map[string]commandHelp{
 	},
 	"trace": {
 		Path: "trace", Summary: "Author or inspect one content origin trace.",
-		Usage:       []string{"sealgraph trace <set|clear|show|compare|occurrences|source|correspondence> ..."},
-		Subcommands: []string{"set", "clear", "show", "compare", "occurrences", "source", "correspondence"},
+		Usage:       []string{"sealgraph trace <set|clear|show|compare|occurrences|read|source|correspondence> ..."},
+		Subcommands: []string{"set", "clear", "show", "compare", "occurrences", "read", "source", "correspondence"},
 		Details:     []string{"Origin authoring is available only in repository format 7. Trace operations never create an implicit Candidate or Seal."},
 		Related:     []string{"trace set", "trace clear", "trace show", "trace compare", "trace occurrences", "trace source", "trace correspondence", "add", "seal"},
 	},
@@ -227,7 +229,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"show":    inspectionHelp("show", "Inspect one immutable Seal generation and its exact material and Cause Links.", "sealgraph show SELECTOR [--raw-content] [--format human|json]", []helpOption{{"--raw-content", "optional; exact content bytes only; conflicts with explicit --format json"}}),
 	"log":     inspectionHelp("log", "Follow observed Cause-scoped revision assertions for one current REF.", "sealgraph log [--all-paths] [--max-paths N] REF [--format human|json]", []helpOption{{"--all-paths", "emit bounded complete leaf-terminated revision paths"}, {"--max-paths N", "positive bound; requires --all-paths; default 100"}}),
 	"linklog": inspectionHelp("linklog", "Show exact Cause-Link record changes across observed revision assertions.", "sealgraph linklog [--upstream TARGET_SELECTOR] REF [--format human|json]", []helpOption{{"--upstream TARGET_SELECTOR", "optional, once; retain changes for one resolved target Seal"}}),
-	"compare": inspectionHelp("compare", "Compare two explicit immutable Seal selections.", "sealgraph compare FROM_SELECTOR TO_SELECTOR [--format human|json]", nil),
+	"compare": inspectionHelp("compare", "Compare two explicit immutable Seal selections.", "sealgraph compare FROM_SELECTOR TO_SELECTOR [--text] [--format human|json]", []helpOption{{"--text", "human-only escaped text differences (also on pipes); conflicts with explicit JSON; 64KiB/side input preview, 64KiB difference-line budget and 1048576 LCS cells; omission and exact extraction routes are explicit"}}),
 	"status":  inspectionHelp("status", "Report separate candidate/HEAD, local workfile/baseline, draft, and stale facts.", "sealgraph status [REF] [--format human|json]", nil),
 	"stale": {
 		Path: "stale", Summary: "List stale current REF heads or the upstream-first review frontier.", Usage: []string{"sealgraph stale [--frontier] [--refs-only] [--scan] [--format human|json]"},
@@ -272,7 +274,7 @@ func inspectionHelp(path, summary, usage string, extra []helpOption) commandHelp
 }
 
 func printRootHelp(w io.Writer) {
-	fmt.Fprint(w, "sealgraph — standalone provenance sealing CLI\n\nUsage:\n  sealgraph <command> [options]\n  sealgraph help [COMMAND [SUBCOMMAND]]\n  sealgraph help <concepts|selectors|usecases>\n\nCommands:\n")
+	fmt.Fprint(w, "sealgraph — standalone provenance sealing CLI\n\nUsage:\n  sealgraph <command> [options]\n  sealgraph help [COMMAND [SUBCOMMAND]]\n  sealgraph help <concepts|selectors|usecases|workflows>\n\nCommands:\n")
 	paths := make([]string, 0, len(commandHelpRegistry))
 	for path := range commandHelpRegistry {
 		if !strings.Contains(path, " ") {
@@ -284,7 +286,7 @@ func printRootHelp(w io.Writer) {
 		entry := commandHelpRegistry[path]
 		fmt.Fprintf(w, "  %-10s %s\n", path, entry.Summary)
 	}
-	fmt.Fprint(w, "\nTopics:\n  selectors  exact selector grammar and resolution\n  concepts   provenance concepts and common distinctions\n  usecases   copyable explicit review workflows\n\nHelp routes:\n  sealgraph --help\n  sealgraph help <command>\n  sealgraph <command> --help\n  sealgraph help candidate show\n\nEach seal operation advances exactly one REF. Navigation explains explicit next actions; it never repairs, relinks, reseals, or selects a REF automatically. Standalone operation uses only explicit inputs and .sealgraph; it does not discover or inspect Git.\n")
+	fmt.Fprint(w, "\nTopics:\n  selectors  exact selector grammar and resolution\n  concepts   provenance concepts and common distinctions\n  usecases   copyable explicit review workflows\n  workflows  start here: daily checks, individual review, audit and LLM guidance\n\nHelp routes:\n  sealgraph --help\n  sealgraph help <command>\n  sealgraph <command> --help\n  sealgraph help candidate show\n\nEach seal operation advances exactly one REF. Navigation explains explicit next actions; it never repairs, relinks, reseals, or selects a REF automatically. Standalone operation uses only explicit inputs and .sealgraph; it does not discover or inspect Git.\n")
 	fmt.Fprint(w, "\nOutput:\n  terminal: aligned human display with abbreviated IDs\n  pipe/file: versioned JSON where supported\n  override: --format human|json\n\nSemantic legend:\n  status separates CANDIDATE_TO_HEAD from WORKFILE_TO_BASELINE.\n  local source binding is not Git tracked membership.\n  REF is a movable logical identity, not a branch or checkout target.\n  STRUCTURAL_IMPACT is Cause reachability; stale is current review state.\n  root marks a provenance boundary, not truth or trust.\n  log/linklog are Seal revision/Cause histories, not Git histories.\n")
 }
 
@@ -418,10 +420,12 @@ Review a candidate explicitly:
 
 Review stale provenance upstream-first:
   sealgraph stale --frontier
-  sealgraph status design/api
+  sealgraph inspect design/api --format human
   sealgraph show requirements/api
-  sealgraph candidate compare design/api
-  sealgraph seal design/api
+  sealgraph help workflows
+  # Read exact old/new premises and the dependent original first.
+  # If no Candidate exists, prepare one using its explicit file or source binding.
+  # Choose update, reviewed historical retain, or pending; never seal to clear stale.
 
 Inspect structural impact:
   sealgraph impact requirements/api
@@ -451,6 +455,11 @@ func printHelpTopic(w io.Writer, path []string) bool {
 	case "selectors":
 		if len(path) == 1 {
 			printSelectorsHelp(w)
+			return true
+		}
+	case "workflows":
+		if len(path) == 1 {
+			printWorkflowsHelp(w)
 			return true
 		}
 	case "usecases":

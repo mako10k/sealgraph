@@ -34,6 +34,8 @@ func runTrace(ctx context.Context, workDir string, args []string, stdin io.Reade
 		return runTraceShow(ctx, workDir, args[1:], stdout, stderr)
 	case "compare":
 		return runTraceCompare(ctx, workDir, args[1:], stdout, stderr)
+	case "read":
+		return runTraceRead(ctx, workDir, args[1:], stdout, stderr)
 	case "occurrences":
 		return runTraceOccurrences(ctx, workDir, args[1:], stdout, stderr)
 	case "source":

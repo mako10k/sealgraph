@@ -766,3 +766,7 @@ Sealgraph validates structural consistency but does not audit semantic claims,
 content contradictions, or the usefulness of a Cause. The format-7 migration
 and transport contract is in [storage-format.md](storage-format.md) §14; the
 public operations and schemas are in [cli.md](cli.md) §9.
+
+## 18. Accepted operator-navigation increment
+
+[UX R1 receipt](process/usability-requirements-r1-acceptance-2026-11-04.md) accepts the exact versioned requirement for light users, LLM operators and original-source auditors. [ADR0044](adr/0044-read-only-operator-navigation.md) adds on-demand inspect, bounded human text comparison, selected original-source reading and common workflows. Existing canonical formats, Cause/revision/stale semantics, original Trace limitations and individual judgment/publication rules remain authoritative. Notification means inspection output only. Existing status/compare/Trace schemas are unchanged; new commands own separate schemas. Read-only observations cannot certify correctness, semantic support, understanding or approval.

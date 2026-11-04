@@ -88,3 +88,7 @@ Optional project tools are documented in `docs/integrations.md`. Their absence m
 - Keep generated artifacts out of commits unless explicitly documented as canonical.
 - Explain any invariant or storage-format change in the PR/commit description.
 - Do not rewrite existing history merely to make tests pass.
+
+## Operator and LLM navigation
+
+Use `sealgraph help workflows` and [docs/operations.md](docs/operations.md) for the complete registration, on-demand inspection, review and original-audit paths. Keep workfile, stale, Trace and recorded historical claims separate. Inspect explicitly omitted/unknown scope. Follow Accepted UX R1 and ADR0044 for the additive read-only surfaces; a recorded claim or observation is not approval.

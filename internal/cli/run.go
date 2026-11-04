@@ -378,6 +378,8 @@ func printSources(stdout io.Writer, bindings []repository.SourceBinding) {
 
 func runStandaloneInspection(ctx context.Context, workDir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
+	case "inspect":
+		return runInspect(ctx, workDir, args[1:], stdout, stderr)
 	case "manifest":
 		return runManifest(workDir, args[1:], stdout, stderr)
 	case "show":
@@ -1499,6 +1501,13 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	if err != nil {
 		return usageError(stderr, "%v", err)
 	}
+	args, text, err := extractCompareText(args)
+	if err != nil {
+		return usageError(stderr, "%v", err)
+	}
+	if text && output.Explicit && output.JSON {
+		return usageError(stderr, "compare --text and --format json are mutually exclusive")
+	}
 	if len(args) != 2 {
 		return usageError(stderr, "SECOND_SELECTOR_REQUIRED: compare requires exactly two explicit Seal selectors")
 	}
@@ -1514,6 +1523,13 @@ func runCompare(ctx context.Context, workDir string, args []string, stdout, stde
 	result, err := repo.DiffSelectors(ctx, args[0], args[1])
 	if err != nil {
 		return commandError(stderr, "compare", err)
+	}
+	if text {
+		data, err := renderTextComparison(ctx, repo, result, args[0], args[1])
+		if err != nil {
+			return commandError(stderr, "compare --text", err)
+		}
+		return writeOperatorOutput(stdout, stderr, "compare --text", data)
 	}
 	if output.JSON {
 		return writeInspectionJSON(stdout, stderr, "compare", formatAwareJSONV4(repo.Format(), compareJSON(result), compareJSONV3(result), compareJSONV4(result)))
