@@ -731,7 +731,7 @@ observation and original material. Preparation never emits a completed decision.
 
 Individually inspect original content, dependent Candidate, exact selected
 premises, comparison versions, differences and impact. Supply the complete
-`historical-review/v1` record specified in storage-format §15. `review set`
+`historical-review/v1` record specified in [storage-format §15](storage-format.md#15-contained-historical-review-evidence). [The manual writing guide](review-record.md) maps preparation fields into the record; `sealgraph help review set` also contains a complete blank layout. Its empty decision and ID placeholders intentionally fail validation and supply no judgment. `review set`
 validates exact subject, observation, targets and comparison sets and attaches
 one immutable record to one existing Candidate using expected-old replacement.
 Named input must be a regular file with no symlink path components; stdin is
