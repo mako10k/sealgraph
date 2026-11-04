@@ -46,8 +46,8 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered TAG_READY
   grandfathered USABLE
 work UX_REVIEW_RECORD_GUIDANCE:
-  title "旧版保持review JSONの記入導線改善（完了）"
-  description "2026-11-04ユーザー指示で実行完了。先行ローカル成果は受入記録含む7da307aまでorigin同名branchへpush/readback後に着手。改善commit34a8cb0: help review prepare/setに全欄mapping・仕様リンク・意図的無効のblank layout、docs/review-record.md/operations/index/CLI導線。判断欄は空、retain理由/判断を生成しない。schema/flags/writer/admission/Seal条件は不変。必須Go/npm/clone/complexity/deadcode/completion検査成功。同じ独立Agentが文書→helpで手書きunreviewedを登録・全文読戻し、REVIEW_UNCONFIRMEDとstaleを保持、Sealなし。追加storage-format本文参照不要。rootがbinary metadata34a8cb0 modified=falseとreadbackを確認。前回経験あり、help単独初見/人間試験ではない。報告docs/process/review-record-guidance-agent-check-2026-11-04.md、検証docs/process/review-record-guidance-verification-2026-11-04.md。改善成果のowner受入/導入/main統合/後続pushは未実施。effort/velocityの推測値は採用しない。"
+  title "旧版保持review JSONの記入導線改善（owner受入済み）"
+  description "2026-11-04ユーザー指示で実行完了。先行ローカル成果は受入記録含む7da307aまでorigin同名branchへpush/readback後に着手。改善commit34a8cb0: help review prepare/setに全欄mapping・仕様リンク・意図的無効のblank layout、docs/review-record.md/operations/index/CLI導線。判断欄は空、retain理由/判断を生成しない。schema/flags/writer/admission/Seal条件は不変。必須Go/npm/clone/complexity/deadcode/completion検査成功。同じ独立Agentが文書→helpで手書きunreviewedを登録・全文読戻し、REVIEW_UNCONFIRMEDとstaleを保持、Sealなし。追加storage-format本文参照不要。rootがbinary metadata34a8cb0 modified=falseとreadbackを確認。前回経験あり、help単独初見/人間試験ではない。報告docs/process/review-record-guidance-agent-check-2026-11-04.md、検証docs/process/review-record-guidance-verification-2026-11-04.md。2026-11-04、ownerは「では、それらをお願いします」と成果受入・push・次の独立試験を指示。受入receipt docs/process/review-record-guidance-acceptance-2026-11-04.md。45d5528までorigin同名branchへpush/readback済。導入/main統合は未実施。effort/velocityの推測値は採用しない。"
 
 work UX_HUMAN_TRIAL:
   title "独立Agentによる六場面の運用試験（完了・実利用者試験と区別）"
