@@ -46,8 +46,8 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered TAG_READY
   grandfathered USABLE
 work UX_BRANCHING_DEEP_TRIAL:
-  title "複数leaf・多段Causeの独立Agent操作試験（完了）"
-  description "2026-11-04ユーザー依頼で独立Agent試験を完了。先行改善のowner受入記録とPERT受入682373dまでorigin同名branchへpush/readback済。試験binaryは45d5528 buildmetadata modified=false、runtimeは受入aa0fa30と同じ。専用format5 fixture9Seals/8REF: 同旧targetの2 sibling active leaves/exact観測、4 Cause hopsのACTIVE_NON_LEAF理由、prepare全4targetと比較2leaves、共有targetの2経路とmax-paths1の省略/target集合保持、手書きreview set/readback一致を確認。旧premiseはunreviewedとしてapplicable=falseを維持、normal/historical各1回exit1拒否、HEAD/Candidate/stale保持。rootは保存binary/観測/record/拒否logs/構造検査を読取り照合。限定範囲で新たな必須改善候補なし。報告docs/process/branching-deep-agent-trial-2026-11-04.md。深いOUTSIDE_ACTIVE/全retain公開/formats6-7/競合破損/規模性能/人間試験は未実施。原本等の個別判断・個別Cause/Seal操作、実repoコード/Seal/remote変更なし。開始14:20頃・主要操作終了14:24:54・報告終了14:26:30 JST、effort/velocityへ換算しない。既存成果受入とproject.finishを保持、試験結果の新たなowner受入は別判断。"
+  title "複数leaf・多段Causeの独立Agent操作試験（owner受入済み）"
+  description "2026-11-04ユーザー依頼で独立Agent試験を完了。先行改善のowner受入記録とPERT受入682373dまでorigin同名branchへpush/readback済。試験binaryは45d5528 buildmetadata modified=false、runtimeは受入aa0fa30と同じ。専用format5 fixture9Seals/8REF: 同旧targetの2 sibling active leaves/exact観測、4 Cause hopsのACTIVE_NON_LEAF理由、prepare全4targetと比較2leaves、共有targetの2経路とmax-paths1の省略/target集合保持、手書きreview set/readback一致を確認。旧premiseはunreviewedとしてapplicable=falseを維持、normal/historical各1回exit1拒否、HEAD/Candidate/stale保持。rootは保存binary/観測/record/拒否logs/構造検査を読取り照合。限定範囲で新たな必須改善候補なし。報告docs/process/branching-deep-agent-trial-2026-11-04.md。深いOUTSIDE_ACTIVE/全retain公開/formats6-7/競合破損/規模性能/人間試験は未実施。原本等の個別判断・個別Cause/Seal操作、実repoコード/Seal/remote変更なし。開始14:20頃・主要操作終了14:24:54・報告終了14:26:30 JST、effort/velocityへ換算しない。既存成果受入とproject.finishを保持、2026-11-04ユーザーが追加試験結果を明示受入。receipt docs/process/branching-deep-agent-trial-acceptance-2026-11-04.md。既存の未試験範囲を保持し、local同期後に次タスクを確認する。"
 
 work UX_REVIEW_RECORD_GUIDANCE:
   title "旧版保持review JSONの記入導線改善（owner受入済み）"
