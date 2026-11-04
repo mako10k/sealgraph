@@ -1,11 +1,11 @@
-# UX要件R1 独立レビュー入力（所有者ルート指定待ち）
+# UX要件R1 独立レビュー入力（REVIEW_THEN_DECIDE）
 
 対象原本: `docs/process/usability-requirements-r1-2026-11-04.md`
 SHA-256: `2a26ef6abac792f74ec4c6508a78b30e2c323b589af92563f3fc8c2796d06e8d`
 作者自己レビュー: `docs/process/usability-requirements-r1-self-review-2026-11-04.md`
 自己レビューSHA-256: `5109990f05839087e2b9cc0899a84f728845f2bbe7316042488faebf35f9643b`
 
-Stage: first-owner-review待ち。所有者のルート: 未選択。owner-added review questions: まだない。独立レビュー未開始。レビュー後の経路: 所有者がREVIEW/REVIEW_THEN_DECIDEならsecond-owner-review、REVIEW_THEN_REVISEならR2作成。REVISEならレビューを始めずR2へ戻る。
+Stage: independent-review。2026-11-04、所有者が「R1を独立レビュー後に判断する（REVIEW_THEN_DECIDE）」を選択。追加のレビュー質問はない。レビュー後は本文を変更せずsecond-owner-reviewへ戻す。これはR1/N1の採用ではなく、当該候補をレビューする経路の選択である。
 
 ## 権威と対象範囲
 
@@ -26,3 +26,7 @@ Stage: first-owner-review待ち。所有者のルート: 未選択。owner-added
 対象の本文を変更せず、exact digestを再確認してレビューする。各指摘は上位根拠/対象との矛盾、証拠不足/未知、任意/将来候補、範囲外に分類する。重大度を理由に任意提案をブロッカーへ変えない。フェーズ内外の帰属と、その根拠を示す。レビュー結果はcompletedまたはnot-reviewableで、要件を自己承認しない。所有者の指定ルートに戻す。
 
 不明点: N1/N2の所有者判断、独立レビュー担当/実利用者の予定。これらを成立済みとは主張しない。R1本文変更は新しい版を必要とし、古いレビュー結果を引き継がない。
+
+## フェーズ境界の例
+
+現フェーズ内: N1が無操作時の通知を提供しないことと、その採否の意味が明瞭か。後続設計: 点検コマンドの綴りや表示上限の数値。後者を要件レビューの追加ブロッカーにしない。

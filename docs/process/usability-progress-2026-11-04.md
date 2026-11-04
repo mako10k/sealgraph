@@ -21,3 +21,13 @@ R1本文SHA-256: 2a26ef6abac792f74ec4c6508a78b30e2c323b589af92563f3fc8c2796d06e8
 次のcheckpointは所有者のR1レビュー経路/通知範囲回答時。UX_REQUIREMENTSが実際に完了した時に実測区間とeffortを記録してvelocityを再観測する。現在のperttool履歴解析はGrammar9/history incompleteのため採用可能な速度を返していない。完了日を捏造しない。
 
 計画Sealは実績開始前の採用スナップショットを保持する。今回のstart/suspendは進捗観測だけで採用目的/依存/完了条件を変更しないため、Cause更新や再Sealはしない。進捗更新後のPLAN.pertはそのSeal本文と同一ではない。
+
+## 最初の所有者レビュー後の経路
+
+2026-11-04、ユーザーが固定R1に対してREVIEW_THEN_DECIDEを選択した。R1本文は変更せず、review inputに経路と追加質問なしを記録し、別エージェントへ独立レビューを依頼した。これは要件の受入ではない。UX_REQUIREMENTSは 2026-11-04T09:50:10+09:00 にresumeし、レビュー後はsecond-owner-reviewへ戻す。
+
+## 独立レビュー完了 / second-owner-review待ち
+
+別のレビュー担当エージェントが固定R1と上位Accepted原本をレビューし、completedを返した。対象SHA-256は2a26ef6abac792f74ec4c6508a78b30e2c323b589af92563f3fc8c2796d06e8dのまま、報告SHA-256は73d8554ece341a0ff85ffb2bf906df8f7b759e6f488df83d41b08b6666179dd8。必須改訂となる確定した矛盾は検出なし。IR-01 N1採否は所有者判断、IR-02 実利用者試験の未実施を残し、IR-03〜05は後続設計/案内または任意候補として受け取る。これらを要件本文へ追記して新しい義務に変えていない。
+
+所有者が選択したREVIEW_THEN_DECIDEに従い、変更しないR1と報告をsecond-owner-reviewに提示する。次はACCEPT/REVISE/REREVIEWの判断。UX_REQUIREMENTSは未完了のままで 2026-11-04T09:52:32+09:00 に入力待ちsuspendした。レビュー待ちの経過時間を作者の投入工数へ加算せず、独立エージェントの正確なeffortは未記録。実装/設計/受入receipt/追加Sealは実施していない。全体41p・暫定21–62時間（低信頼度、外部待ち除く）の初期推定は未校正のままで、今回の経過時間を控除した残見積もりではない。次のcheckpointは所有者の要件採否回答時。

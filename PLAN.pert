@@ -692,3 +692,16 @@ work_event WE-683b27fe96db8a24aa833a76c3d3d620c7c3b256bde8a87346e635958d26eb22:
   kind suspend
   occurred_at 2026-11-04T09:40:56+09:00
   reason "R1 candidate authored/self-reviewed; first owner review route and notification scope N1/N2 pending; no requirement acceptance or implementation assumed"
+
+work_event WE-0f7d8537d3a9a79dcab3bb4a766c6e10e356637206793dd2ec069232dc29caab:
+  model 1
+  task UX_REQUIREMENTS
+  kind resume
+  occurred_at 2026-11-04T09:50:10+09:00
+
+work_event WE-787d1cbe8124b721c8bf7fbb5cda29a8146734f7c6997db2c876db0b1818ba50:
+  model 1
+  task UX_REQUIREMENTS
+  kind suspend
+  occurred_at 2026-11-04T09:52:32+09:00
+  reason "Independent R1 review completed with no mandatory revision; second owner ACCEPT/REVISE/REREVIEW pending; N1 adoption not inferred"
