@@ -45,6 +45,9 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered START
   grandfathered TAG_READY
   grandfathered USABLE
+work UX_REVIEW_RECORD_GUIDANCE:
+  title "旧版保持review JSONの記入導線を分かりやすくする候補"
+  description "2026-11-04独立Agent六場面操作試験S5からの改善候補。help review setだけではrecord全構造が分からず、operations S4→storage-format §15の仕様参照と手書きを要した。目的: 利用者/LLMが対象版と未記入判断を明確に保って記入できる案内。案: helpから正確な仕様へのリンク、判断欄を空にした非実行schema例。自動retain理由/判断/Seal発行を提案しない。既存review prepareや記入義務/JSON schemaは変えない。状態: backlogのみ、方式/具体要件/実装は未採択・未着手。完了条件案: 案内から候補を手書きし、正確な対象/根拠/空欄/実行者判断を区別できることを独立試験で確認。根拠docs/process/usability-independent-agent-trial-2026-11-04.md。文書のみの案なら内部0.25–1hの低信頼度概算（検証含む、実績でない）。実利用者検証や公開は別。"
 work UX_HUMAN_TRIAL:
   title "独立Agentによる六場面の運用試験（完了・実利用者試験と区別）"
   description "2026-11-04ユーザーの「独立Agentで対応させてください」に従い完了。報告docs/process/usability-independent-agent-trial-2026-11-04.md。runtimeはHEAD2467d3aからcode差分なし。Agentはコード/テスト/過去結果を事前参照せず通常案内で初回登録/点検/Revision-active/新版採用/旧版保持と保留/原文監査へ実操作で到達。解法の援助なし、S5ではoperationsからstorage-format §15を追加参照。独立試験でblocking defect未観測（一般保証ではない）。操作時刻12:48:35–12:51:34 JST約179秒、場面別時間未測定、報告作成は別であり人間の所要時間/実測effort/velocityにしない。rootはbinary SHAと保存観測4REF/6Seals/SourceReadFailedを読取り照合。改善候補UX_REVIEW_RECORD_GUIDANCEへschema記入導線を記録。実利用者・複数leaf・深いclosure・paging/budget/巨大binary等は未試験。既存成果の受入/正本finishを維持。製品コード/実repo Seal/Cause/外部連絡/公開変更なし。"
@@ -98,6 +101,7 @@ work_order:
   UX_HISTORICAL_STATUS
   ISSUE18_OBSERVATION_REVIEW
   UX_HUMAN_TRIAL
+  UX_REVIEW_RECORD_GUIDANCE
 
 milestone START:
   title "Architecture scaffold exists"
