@@ -1,5 +1,7 @@
 package cli
 
+// R: dispatch explicit Origin Trace authoring and inspection operations.
+
 import (
 	"bytes"
 	"context"

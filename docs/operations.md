@@ -95,7 +95,7 @@ sealgraph help review set
 
 Only then individually attach it with `review set design --file REVIEW_FILE`, read it back with `review show design --candidate --format human` and decide whether to issue `seal design --review-historical`. Unreviewed or draft Causes cannot be admitted that way. The normal strict publication path remains strict.
 
-`inspect design` shows Candidate and HEAD claims separately. A recorded claim can remain visible while `applicable=false` after another REF changes. It is not deleted and stale is not erased. Use the displayed `review show` command to read differences, impact and reasons. Applicable is not complete preflight or approval.
+`inspect design` shows Candidate and HEAD claims separately. A recorded claim can remain visible while `applicable=false` after another REF changes. It is not deleted and stale is not erased. Use the displayed `review show` command to read differences, impact and reasons. Applicable is not complete preflight or approval. Human output may clip long reasons to the terminal width; use `review show design --candidate --format json` (or `review show @SUBJECT --format json`) for the complete recorded difference/impact/reason fields.
 
 ## S5: leave uncertainty pending
 
