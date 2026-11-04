@@ -407,7 +407,7 @@ task UX_REQUIREMENTS FORMAT6_METADATA_READY -> UX_CONTRACT:
     optimistic 2p
     most_likely 3p
     pessimistic 5p
-  status planned
+  status suspended
   requires:
     UX_DELIVERY 1
   source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
@@ -678,3 +678,17 @@ milestone_criterion_set UX_READY_R1:
   commitment sha256:fe3f174c6083bf7bab20b773450e023c3462f3ed2181c75cbc1e31d63eb5b093
   criterion COVERAGE required owner "6 Work全件と要件の完了証拠が対応し未達条件が隠されていない"
   criterion ACCEPTED required owner "所有者の受入判断が記録され通知の決定または明示的保留が説明されている"
+
+work_event WE-404740b999ceaa3d9f5ee6d5d61e7d839672bcc005b58a2fe549330529909a9a:
+  model 1
+  task UX_REQUIREMENTS
+  kind start
+  occurred_at 2026-11-04T09:37:30+09:00
+  planned_value 19/6p
+
+work_event WE-683b27fe96db8a24aa833a76c3d3d620c7c3b256bde8a87346e635958d26eb22:
+  model 1
+  task UX_REQUIREMENTS
+  kind suspend
+  occurred_at 2026-11-04T09:40:56+09:00
+  reason "R1 candidate authored/self-reviewed; first owner review route and notification scope N1/N2 pending; no requirement acceptance or implementation assumed"
