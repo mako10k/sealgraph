@@ -115,6 +115,9 @@ func TestObserveCLIHelpCompletionAndOutputFailure(t *testing.T) {
 func assertObserveBaselineAxes(t *testing.T, doc repository.ObservationResult) {
 	t.Helper()
 	ref := doc.REFs[0]
+	if !strings.Contains(doc.MembershipLimitation, "historical from detached") {
+		t.Fatal("missing membership limitation")
+	}
 	if doc.Schema != "sealgraph/observation/v1" || doc.Scope != "SELECTED_REF" || ref.Candidate == nil || ref.Candidate.CurrentHeadComparison != "SAME" || ref.HeadDraft == nil || *ref.HeadDraft || ref.Candidate.Draft || ref.Source == nil || ref.Source.Baseline != "CANDIDATE" {
 		t.Fatalf("mixed baselines: %+v", ref)
 	}

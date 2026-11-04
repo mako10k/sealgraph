@@ -19,10 +19,11 @@ type ObservationOptions struct {
 	MaxPaths  int
 }
 type ObservationResult struct {
-	Schema string            `json:"schema"`
-	Scope  string            `json:"scope"`
-	REFs   []ObservationREF  `json:"refs"`
-	Seals  []ObservationSeal `json:"seals"`
+	Schema               string            `json:"schema"`
+	Scope                string            `json:"scope"`
+	MembershipLimitation string            `json:"membership_limitation"`
+	REFs                 []ObservationREF  `json:"refs"`
+	Seals                []ObservationSeal `json:"seals"`
 }
 type ObservationREF struct {
 	REF       string                `json:"ref"`
@@ -80,7 +81,7 @@ func (r *Repository) Observe(ctx context.Context, options ObservationOptions) (O
 	if err != nil {
 		return ObservationResult{}, err
 	}
-	result := ObservationResult{Schema: "sealgraph/observation/v1", Scope: "CURRENT", REFs: []ObservationREF{}, Seals: []ObservationSeal{}}
+	result := ObservationResult{Schema: "sealgraph/observation/v1", Scope: "CURRENT", MembershipLimitation: "Outside-active membership does not distinguish historical from detached with current observation evidence; no observed successor is not proof of nonexistence.", REFs: []ObservationREF{}, Seals: []ObservationSeal{}}
 	names, selected, err := r.observationSelection(ctx, options, &observation, graph)
 	if err != nil {
 		return result, err

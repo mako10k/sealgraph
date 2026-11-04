@@ -14,6 +14,7 @@ import (
 
 func printObserveHuman(out io.Writer, doc repository.ObservationResult) {
 	fmt.Fprintf(out, "OBSERVATION %s scope=%s\n", doc.Schema, doc.Scope)
+	fmt.Fprintf(out, "Membership limitation: %s\n", doc.MembershipLimitation)
 	fmt.Fprintln(out, "Recorded evidence only: no observed successor does not prove nonexistence. Cause reachability does not confer active membership.")
 	fmt.Fprintln(out, "Reasons explain review targets; they do not change legacy stale membership or publication conditions.")
 	for _, ref := range doc.REFs {

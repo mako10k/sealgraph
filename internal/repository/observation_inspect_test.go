@@ -268,3 +268,27 @@ func TestObserveBranchSuccessorsKeepSiblingLeaves(t *testing.T) {
 		}
 	}
 }
+
+func TestObserveCurrentComparisonKeepsExpectedPublicationBaseline(t *testing.T) {
+	ctx := context.Background()
+	repo := newV5TestRepository(t)
+	old := sealRootV5(t, repo, "root", "old")
+	next := sealRootV5(t, repo, "other", "new")
+	if _, err := repo.Add(ctx, AddOptions{REF: "root", Content: []byte("pending")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.refs.Update(ctx, "root", &old.ID, &next.ID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.Observe(ctx, ObservationOptions{Selector: "root"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := result.REFs[0]
+	if !ref.Head.Equal(next.ID) || ref.Candidate.ExpectedREFHead == nil || !ref.Candidate.ExpectedREFHead.Equal(old.ID) || ref.Candidate.ExpectedHeadState != CandidateHeadAdvanced || ref.Candidate.CurrentHeadComparison != "DIFFERENT" {
+		t.Fatalf("publication/current mixed: %+v", ref)
+	}
+	if _, err := repo.Seal(ctx, "root"); err == nil {
+		t.Fatal("observe bypassed publication expectation")
+	}
+}
