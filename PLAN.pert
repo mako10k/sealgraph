@@ -46,8 +46,8 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered TAG_READY
   grandfathered USABLE
 work UX_HUMAN_TRIAL:
-  title "独立Agentによる六場面の運用試験（実利用者試験と区別）"
-  description "2026-11-04、ユーザーが「独立Agentで対応させてください」と選択。準備済み六場面を独立Agentが実操作する範囲を採用。初回登録/点検/Revisionとactive観測/新版採用/旧版保持と保留/原文監査。対象runtimeは受入済みIssue18 R1、Git2467d3a。案内はoperations/README/CLI help、source/tests/過去結果を先に見ない。専用一時repoで個別判断・個別Cause/Seal操作。結果/IDs/baseline/援助/困惑/未実施/改善案をdocs/process/usability-independent-agent-trial-2026-11-04.mdへ記録する。状態: independent_operator_trialへ委任し実行中、開始2026-11-04T03:48Z頃（checkpoint）。既存成果の受入と正本finishを維持。Agent試験を実利用者試験の代替実証と称さない。実利用者募集/日程/導入/コード改善/公開はこの試験では行わない。準備時見積もりは人間試験向けであり流用しない。Agent実行＋整理の暫定残10–30分、低信頼度、実測速度未校正。"
+  title "独立Agentによる六場面の運用試験（完了・実利用者試験と区別）"
+  description "2026-11-04ユーザーの「独立Agentで対応させてください」に従い完了。報告docs/process/usability-independent-agent-trial-2026-11-04.md。runtimeはHEAD2467d3aからcode差分なし。Agentはコード/テスト/過去結果を事前参照せず通常案内で初回登録/点検/Revision-active/新版採用/旧版保持と保留/原文監査へ実操作で到達。解法の援助なし、S5ではoperationsからstorage-format §15を追加参照。独立試験でblocking defect未観測（一般保証ではない）。操作時刻12:48:35–12:51:34 JST約179秒、場面別時間未測定、報告作成は別であり人間の所要時間/実測effort/velocityにしない。rootはbinary SHAと保存観測4REF/6Seals/SourceReadFailedを読取り照合。改善候補UX_REVIEW_RECORD_GUIDANCEへschema記入導線を記録。実利用者・複数leaf・深いclosure・paging/budget/巨大binary等は未試験。既存成果の受入/正本finishを維持。製品コード/実repo Seal/Cause/外部連絡/公開変更なし。"
 
 work ISSUE18_OBSERVATION_REVIEW:
   title "Issue18 観測区分R1の独立レビューと所有者判断"
