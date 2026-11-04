@@ -616,7 +616,7 @@ task OBS_OWNER_ACCEPTANCE OBS_REVIEWED -> OBS_READY:
     optimistic 1p
     most_likely 1p
     pessimistic 2p
-  status planned
+  status done
   requires:
     UX_DELIVERY 1
   source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
