@@ -45,6 +45,9 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered START
   grandfathered TAG_READY
   grandfathered USABLE
+work UX_BRANCHING_DEEP_TRIAL:
+  title "複数leaf・多段Causeの独立Agent操作試験"
+  description "2026-11-04ユーザーが成果受入/push後に次の独立試験を依頼。対象は受入済みruntime aa0fa30/HEAD45d5528からcode不変。専用fixtureで同一旧targetの複数sibling leaves、少なくとも4 Cause hops、可能なら共有targetの複数経路とmax-paths1を確認。exact evidence、全comparison leaves、全closure/未確認記録、legacy staleとの分離を操作/読戻しする。4hopsは限定試験条件で一般性能閾値ではない。状態: branching_deep_operator_trialへ委任し実行中。報告docs/process/branching-deep-agent-trial-2026-11-04.md。各Cause/Sealは原本/Candidate/exact版/差分影響の個別判断を記録し個別操作。製品コード/実repo Seal/remote変更なし、人間試験・一般性能保証と区別。暫定残10–30分、低信頼度、測定effort/velocityにはしない。既存成果受入とproject.finishは維持。"
 work UX_REVIEW_RECORD_GUIDANCE:
   title "旧版保持review JSONの記入導線改善（owner受入済み）"
   description "2026-11-04ユーザー指示で実行完了。先行ローカル成果は受入記録含む7da307aまでorigin同名branchへpush/readback後に着手。改善commit34a8cb0: help review prepare/setに全欄mapping・仕様リンク・意図的無効のblank layout、docs/review-record.md/operations/index/CLI導線。判断欄は空、retain理由/判断を生成しない。schema/flags/writer/admission/Seal条件は不変。必須Go/npm/clone/complexity/deadcode/completion検査成功。同じ独立Agentが文書→helpで手書きunreviewedを登録・全文読戻し、REVIEW_UNCONFIRMEDとstaleを保持、Sealなし。追加storage-format本文参照不要。rootがbinary metadata34a8cb0 modified=falseとreadbackを確認。前回経験あり、help単独初見/人間試験ではない。報告docs/process/review-record-guidance-agent-check-2026-11-04.md、検証docs/process/review-record-guidance-verification-2026-11-04.md。2026-11-04、ownerは「では、それらをお願いします」と成果受入・push・次の独立試験を指示。受入receipt docs/process/review-record-guidance-acceptance-2026-11-04.md。45d5528までorigin同名branchへpush/readback済。導入/main統合は未実施。effort/velocityの推測値は採用しない。"
@@ -103,6 +106,7 @@ work_order:
   ISSUE18_OBSERVATION_REVIEW
   UX_HUMAN_TRIAL
   UX_REVIEW_RECORD_GUIDANCE
+  UX_BRANCHING_DEEP_TRIAL
 
 milestone START:
   title "Architecture scaffold exists"
