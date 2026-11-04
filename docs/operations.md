@@ -91,7 +91,7 @@ sealgraph review prepare design --format json
 sealgraph help review set
 ```
 
-`review prepare` returns exact subject, other heads, complete targets and comparison leaves. It does not write a review or invent reasons. Read the dependent original/Candidate, each exact Cause, comparison versions and differences/impact, including transitive Causes. Author the bounded [historical-review/v1 record](storage-format.md#15-contained-historical-review-evidence) yourself, with retain or unreviewed and actual reasons.
+`review prepare` returns exact subject, other heads, complete targets and comparison leaves. It does not write a review or invent reasons. Read the dependent original/Candidate, each exact Cause, comparison versions and differences/impact, including transitive Causes. Use the [manual field mapping and blank record example](review-record.md), also available in `sealgraph help review set`. The blank decision/placeholders deliberately fail validation; the example supplies no judgment. Author the bounded [historical-review/v1 record](storage-format.md#15-contained-historical-review-evidence) yourself, with retain or unreviewed and actual reasons.
 
 Only then individually attach it with `review set design --file REVIEW_FILE`, read it back with `review show design --candidate --format human` and decide whether to issue `seal design --review-historical`. Unreviewed or draft Causes cannot be admitted that way. The normal strict publication path remains strict.
 

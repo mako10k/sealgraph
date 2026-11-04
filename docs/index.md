@@ -158,3 +158,5 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [Accepted UX R1 receipt](process/usability-requirements-r1-acceptance-2026-11-04.md)
 - [UX basic/detailed design](process/usability-design-2026-11-04.md)
 - [ADR0045: read-only observation evidence, reasons and baselines](adr/0045-read-only-observation-reasons.md)
+
+- [旧版保持レビューJSONの記入](review-record.md) — prepareとの対応・未記入例・判断と保留
