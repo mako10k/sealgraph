@@ -2,7 +2,7 @@
 
 対象: `docs/process/issue-18-observation-requirements-r1-2026-11-04.md`
 SHA-256: `96e4aba15517472049c5134b5720ef6c4689fafb01ca2d3477fe4fcc45aa1df4`
-Stage: author candidate/self-review completed; first-owner-review待ち。現正本の新タスクへの採択は未実施。
+Stage: independent-review。2026-11-04、所有者がIssue18観測区分R1についてREVIEW_THEN_DECIDEを明示選択した。追加の所有者質問はない。候補の要件採択/実装採択はまだ行わない。
 
 ## 出所と権威の処置
 
@@ -29,10 +29,14 @@ Stage: author candidate/self-review completed; first-owner-review待ち。現正
 
 ## 最初の所有者ルート
 
-未選択。推奨は、上記方針が意図と合うならREVIEW_THEN_DECIDE。REVISEなら新しいR2へ戻る。REVIEW_THEN_REVISEなら質問を追加し独立レビュー後にR2へ、REVIEWなら質問追加なしで独立レビュー後second-owner-reviewへ進む。候補本文は所有者の経路選択を受けるまで変更せず、レビューを自動開始しない。
+選択済み: REVIEW_THEN_DECIDE。所有者指示「Issue #18の観測区分の要件案R1を、独立レビュー後に判断（REVIEW_THEN_DECIDE）で進めてください。」に基づき、本文を変更せず独立レビューを行い、その報告と同じR1をsecond-owner-reviewへ返す。経路選択を要件のACCEPTへ読み替えない。
 
 レビュー後は矛盾/証拠不足未知/任意将来/範囲外とフェーズ内外を区別して報告する。独立レビューから自己承認へ遷移しない。本文変更は新revisionで最初に戻る。
 
 ## 数値見積もり（提案・低信頼度）
 
 候補の所有者レビュー後の独立レビュー/改訂/要件受入まで、内部1〜3時間を暫定仮定とする。実装全体の見積もりではなく、所有者応答待ちは不明。既存PERTはUX R1完了で、この候補はまだ実行DAGに投影していない。正式採択時に下位タスク/資源/Pointと実績計測を計画化する。計画未算出の期間をゼロ扱いしない。
+
+## 境界例
+
+現段階の対象: no observed successorとactive集合外の意味を区別すること、既存membership保持を選ぶこと。後続基本・詳細設計: 具体的CLIの綴り、短縮表示、API/アルゴリズム、追加出力スキーマの具体形。後者の未作成を理由に要件を際限なく改訂しない。

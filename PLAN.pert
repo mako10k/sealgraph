@@ -45,6 +45,9 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered START
   grandfathered TAG_READY
   grandfathered USABLE
+work ISSUE18_OBSERVATION_REVIEW:
+  title "Issue18 観測区分R1の独立レビューと所有者判断"
+  description "2026-11-04にユーザーがexact要件候補96e4aba15517472049c5134b5720ef6c4689fafb01ca2d3477fe4fcc45aa1df4のREVIEW_THEN_DECIDEを選択。対象: docs/process/issue-18-observation-requirements-r1-2026-11-04.md。現在はindependent-review、報告後は同本文のsecond-owner-reviewへ返す。完了条件: 独立レビュー報告と所有者のREVISE/REREVIEW/ACCEPTを記録。要件は未ACCEPTで、実装/STALE membership変更/draft pointer/cascadeは未採択。CLI/API/短縮表示は後続設計。現正本UX R1のfinish/履歴は保持し、Workの存在を実装採択やgoal達成と扱わない。内部要件レビュー/改訂の初期概算1–3hは低信頼度・未校正、所有者応答待ち不明、実装見積もり未算出。追加レビューの自動反復やSeal操作はしない。"
 work UX_CONTENT_REVIEW:
   title "正確な2版の本文差分と根拠を読めるレビュー表示"
   description "2026-11-04 計画組込み候補: UX_CONTENT_REVIEW_IMPL と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘3。compareは主にContent Blob変更有無/ID、showは256バイトpreviewで、長文の差分/影響判断が煩雑。完了条件案: 固定した2版の本文差分・Cause差分・理由へ読み取り専用で到達し、原本取得先/正確なIDと省略/サイズ上限/バイナリ/表示不能を明示する。表示方式は設計時に判断。根拠: internal/cli/human_output.go のprintSealDiffHuman/printHumanContent。"
@@ -88,6 +91,7 @@ work_order:
   UX_ORIGINAL_AUDIT
   UX_LLM_GUIDANCE
   UX_HISTORICAL_STATUS
+  ISSUE18_OBSERVATION_REVIEW
 
 milestone START:
   title "Architecture scaffold exists"
