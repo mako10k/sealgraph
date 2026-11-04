@@ -1,10 +1,56 @@
 project SEALGRAPH:
-  version 6
+  version 9
   title "Sealgraph initial implementation"
   as_of 2026-09-10
   duration_unit point
   velocity 1p/1d
   finish FORMAT6_METADATA_READY
+
+
+milestone_acceptance_migration GRAMMAR_7_BASELINE:
+  model 1
+  repository git:sha1:81892f8b948cd1ed30458804bfa6257f22e1ccae:index:07f54589d5342067bd60066e558f60b4d1841841
+  path "PLAN.pert"
+  object_format sha1
+  head 81892f8b948cd1ed30458804bfa6257f22e1ccae
+  blob 07f54589d5342067bd60066e558f60b4d1841841
+  source_digest sha256:13035ece3306a1ecbf310ebba81387b99ef986f19ddfa1d34d3ac290f39f1c54
+  candidate_digest sha256:08cbc86d29dcdda0701ea994e05fd361217ad16c2ce8f1a96fd5428b7bdc147f
+  grandfathered CAUSE_REVISION_DESIGN
+  grandfathered CAUSE_REVISION_FORMAT
+  grandfathered CAUSE_REVISION_READY
+  grandfathered CAUSE_REVISION_RUNTIME
+  grandfathered CONSISTENCY
+  grandfathered DOGFOOD_R0
+  grandfathered DOGFOOD_R1
+  grandfathered DOGFOOD_R2
+  grandfathered FORMAT
+  grandfathered FORMAT3_DUMP
+  grandfathered FORMAT4_DESIGN
+  grandfathered FORMAT4_DOGFOOD
+  grandfathered FORMAT4_RUNTIME
+  grandfathered GRAPH
+  grandfathered HISTORY_READY
+  grandfathered LINK_METADATA_DESIGN
+  grandfathered MATERIAL_IDENTITY
+  grandfathered NATIVE
+  grandfathered NATIVE_V2
+  grandfathered READY
+  grandfathered RECOVERY_DESIGN
+  grandfathered RECOVERY_JOURNAL
+  grandfathered RECOVERY_READY
+  grandfathered RECOVERY_RUNTIME
+  grandfathered REVISION_DAG
+  grandfathered RUNTIME
+  grandfathered START
+  grandfathered TAG_READY
+  grandfathered USABLE
+work UX_DAILY_INSPECTION:
+  title "変更の種類を区別できる読み取り専用の日常点検入口"
+  description "2026-11-04 利用者観点の独立レビュー指摘1。ライトユーザが、登録ファイルと保存内容の相違・上流Seal更新によるstale・引用原文の残存/不一致/未確認を区別し、次の確認先へ進めるようにする改善候補。完了条件案: 3種類の観測と対象外/失敗/不完全を区別して表示し、個別レビューへ案内する。通知は監視対象・契機・通知先を別途判断し、この項目では実装採用しない。状態: バックログ登録のみ、方式/要件/実装/公開は未承認・未着手。根拠: README.md のwatcherなしの境界、docs/cli.md のstatus/source compare/stale/trace compare、レビュー対象Git 81892f8。自動Cause更新・自動Seal発行・Git自動検出を導入しない。"
+
+work_order:
+  UX_DAILY_INSPECTION
 
 milestone START:
   title "Architecture scaffold exists"
