@@ -515,7 +515,7 @@ task UX_PERSONA_REVIEW UX_VERIFIED -> UX_SCENARIOS:
     optimistic 2p
     most_likely 3p
     pessimistic 6p
-  status active
+  status done
   requires:
     UX_DELIVERY 1
   source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
@@ -527,7 +527,7 @@ task UX_OWNER_ACCEPTANCE UX_SCENARIOS -> UX_READY:
     optimistic 1p
     most_likely 1p
     pessimistic 2p
-  status planned
+  status suspended
   requires:
     UX_DELIVERY 1
   source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
@@ -841,3 +841,23 @@ work_event WE-d8d77e095b022e5801b7d662186fc5b4d1f754ad21d6da1a773637430d85857b:
   kind start
   occurred_at 2026-11-04T10:15:34+09:00
   planned_value 10/3p
+
+work_event WE-03d834f86797450432b7dcb181e66466c80e1551fc08f2206e3221c8f1f17656:
+  model 1
+  task UX_PERSONA_REVIEW
+  kind finish
+  occurred_at 2026-11-04T10:40:32+09:00
+
+work_event WE-6e1fa179acb7afbb882653fe90e7281198840a98b3663691480a0756f03721e3:
+  model 1
+  task UX_OWNER_ACCEPTANCE
+  kind start
+  occurred_at 2026-11-04T10:40:35+09:00
+  planned_value 7/6p
+
+work_event WE-e445bc1ecc2cb40370ea55e8b911a8b3accd8349260b0aab05d6c4b49696f8de:
+  model 1
+  task UX_OWNER_ACCEPTANCE
+  kind suspend
+  occurred_at 2026-11-04T10:41:37+09:00
+  reason "Implementation and checks complete; independent LLM S1-S6 trial recorded; owner product acceptance pending; no real-human usability proof claimed"
