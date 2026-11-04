@@ -1,10 +1,10 @@
 project SEALGRAPH:
   version 9
   title "Sealgraph provenance core and usable review operations"
-  description "上位目的: ライトユーザ・LLM・監査者が、登録・変更確認・見直し・原文照合を迷わず行える運用。既存FORMAT6_METADATA_READYの完了履歴を保持し、その先にUX改善6件の要件/設計/整備/検証/受入を追加。実行計画への組込みは2026-11-04のユーザー指示に基づく。方式/要件の詳細承認・実装着手・リリースは別。既存velocity 1p/1dは履歴上の宣言値で、今回の予測に利用不可のため解除。Point推定は低信頼度、0.5–1.5 active hours/pは暫定仮定、外部判断待ちは未算出。"
+  description "既存UX R1はowner受入済み。追加のAccepted Issue18観測区分R1（96e4aba...）を、既存membership/admission/安定出力を維持するread-only観測増分として設計・実装・検証する。ユーザーが2026-11-04に明示ACCEPTし設計実装を依頼。観測理由と版baselineを分け、normal出力を変更しない。実利用者試験/成果受入/公開は別。初期Pointは相対難易度の低信頼度概算、速度未校正。旧完了条件・実績は保持する。"
   as_of 2026-11-04
   duration_unit point
-  finish UX_READY
+  finish OBS_READY
 
 
 milestone_acceptance_migration GRAMMAR_7_BASELINE:
@@ -47,7 +47,7 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered USABLE
 work ISSUE18_OBSERVATION_REVIEW:
   title "Issue18 観測区分R1の独立レビューと所有者判断"
-  description "2026-11-04にユーザーがexact要件候補96e4aba15517472049c5134b5720ef6c4689fafb01ca2d3477fe4fcc45aa1df4のREVIEW_THEN_DECIDEを選択。対象: docs/process/issue-18-observation-requirements-r1-2026-11-04.md。独立レビューcompleted（報告SHA-256 55f54610088b45c248128802a0d365f66cb5be207e7bce8a56234af1e157f91f）。必須修正となる確定矛盾なし。現在は同じ本文でsecond-owner-review待ち。完了条件: 独立レビュー報告と所有者のREVISE/REREVIEW/ACCEPTを記録。要件は未ACCEPTで、実装/STALE membership変更/draft pointer/cascadeは未採択。CLI/API/短縮表示は後続設計。現正本UX R1のfinish/履歴は保持し、Workの存在を実装採択やgoal達成と扱わない。内部要件レビュー/改訂の初期概算1–3hは低信頼度・未校正、所有者応答待ち不明、実装見積もり未算出。追加レビューの自動反復やSeal操作はしない。 初期概算1–3hはレビュー開始前の仮定であり、レビュー後の残見積もりではない。現在の内部残作業は所有者判断の記録/要件の次工程整理0.25–1h（低信頼度、実測ではない）＋所有者応答待ち不明。REVISEなら範囲確定後に再見積もりする。"
+  description "2026-11-04、exact R1（96e4aba15517472049c5134b5720ef6c4689fafb01ca2d3477fe4fcc45aa1df4）は独立レビュー後にユーザーがACCEPT。受入記録: docs/process/issue-18-observation-r1-acceptance-2026-11-04.md。要件レビューと所有者判断は完了。新しい実行タスクOBS_DESIGN_CONTRACT/OBS_REPOSITORY_API/OBS_CLI/OBS_DOCS/OBS_VERIFY/OBS_INDEPENDENT_REVIEW/OBS_OWNER_ACCEPTANCEへ範囲内の設計実装を分解した。旧stale集合/frontier/refs-only/Seal条件/安定出力を維持するread-only増分。draft pointer/cascade/軽量status置換は対象外。実装成果受入は要件受入と別。Point初期概算は低信頼度、速度未校正。公開/実利用者試験は未実施。"
 
 work UX_CONTENT_REVIEW:
   title "正確な2版の本文差分と根拠を読めるレビュー表示"
@@ -537,6 +537,90 @@ task UX_OWNER_ACCEPTANCE UX_SCENARIOS -> UX_READY:
     UX_DELIVERY 1
   source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
 
+task OBS_DESIGN_CONTRACT UX_READY -> OBS_DESIGN:
+  title "観測API・加算的CLI・限界を設計"
+  description "既存4 inspection出力をそのまま保ち、新observeを追加する。current canonical observationとCandidate/prospectiveを混ぜず、Revision証拠/active所属/原因経路とbaseline比較を定義する。JSON/上限/再検証と受入fixtureを対応づける。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 2p
+    most_likely 3p
+    pessimistic 5p
+  status done
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_REPOSITORY_API OBS_DESIGN -> OBS_RUNTIME:
+  title "整合した観測と理由を返すread-only repository API"
+  description "heads/対象/Candidate/sourceの再検証、successor assertionの証拠、active/nonleaf/outside区分、bounded pathsと未完了表示、expected/publicationとcurrentHEAD比較の分離、inventoryを実装する。既存algorithmsは変更せず再利用する。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 3p
+    most_likely 5p
+    pessimistic 8p
+  status done
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_CLI OBS_DESIGN -> OBS_RUNTIME:
+  title "新しいobserve入口と人/機械の表示"
+  description "選択/上限/明示inventory/新スキーマ/安全な表示/失敗時nonzero/help/completionを実装する。既存status/stale/graph/fsck/inspect JSONは変更しない。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 2p
+    most_likely 3p
+    pessimistic 5p
+  status done
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_DOCS OBS_RUNTIME -> OBS_DOCUMENTED:
+  title "観測区分の操作案内と契約を整備"
+  description "旧入口を保持し、observed/no evidence、active/outside、legacy staleと診断経路、版ごとのdraft/比較基準を読む案内を追加する。新しいスキーマと既存経路を明示する。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 3p
+  status planned
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_VERIFY OBS_DOCUMENTED -> OBS_CHECKED:
+  title "fixture・互換性・全必須検査"
+  description "successor有無/detached/branching/Candidate同一差分HEADなし/draft各組合せ/source/review/旧集合・frontier・refs-only・admission保持を検証。gofmt/vet/test/npmci/clone/complexity/deadcode/completionを実行する。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 2p
+    most_likely 3p
+    pessimistic 5p
+  status planned
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_INDEPENDENT_REVIEW OBS_CHECKED -> OBS_REVIEWED:
+  title "独立担当の実装レビューと修正再確認"
+  description "exact要件/設計/実装snapshotを固定し、既存契約維持と未確認の表示/版混在/経路上限を独立確認する。未実施実利用者試験を成功と称さない。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 1p
+    most_likely 2p
+    pessimistic 4p
+  status planned
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
+task OBS_OWNER_ACCEPTANCE OBS_REVIEWED -> OBS_READY:
+  title "観測区分成果の所有者受入"
+  description "証拠/差分/未知/未実施を日本語で提示し、実際のowner判断を記録する。応答待ち期間不明。成果受入をrelease/install/push許可へ読み替えない。 Pointは作業分解の初期概算で低信頼度。実績時間/投入工数へ推測換算しない。"
+  estimate:
+    optimistic 1p
+    most_likely 1p
+    pessimistic 2p
+  status planned
+  requires:
+    UX_DELIVERY 1
+  source "Owner ACCEPT exact Issue18 R1 and direction to design/implement, 2026-11-04; docs/process/issue-18-observation-r1-acceptance-2026-11-04.md"
+
 work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
   model 1
   task DOGFOOD_RECURRING
@@ -969,3 +1053,27 @@ work_event WE-444f15f7c2bc5a7ca63b435031303afe164c07a71982e6581d25e723c2f21192:
   task UX_OWNER_ACCEPTANCE
   kind finish
   occurred_at 2026-11-04T11:06:05+09:00
+
+milestone OBS_DESIGN:
+  title "観測区分の加算的出力と内部契約を設計"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"
+
+milestone OBS_RUNTIME:
+  title "repository APIとCLIの観測増分が動く"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"
+
+milestone OBS_DOCUMENTED:
+  title "操作案内と公開出力契約が整合"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"
+
+milestone OBS_CHECKED:
+  title "互換性と観測意味の回帰検証を完了"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"
+
+milestone OBS_REVIEWED:
+  title "独立実装レビューを完了"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"
+
+milestone OBS_READY:
+  title "Issue18観測区分の成果を所有者が受入"
+  description "Accepted Issue18観測区分R1を満たす段階成果。旧UX R1の成果受入/規範を保持する。closureとowner成果受入は別。"

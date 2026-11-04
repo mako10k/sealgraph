@@ -380,6 +380,8 @@ func runStandaloneInspection(ctx context.Context, workDir string, args []string,
 	switch args[0] {
 	case "inspect":
 		return runInspect(ctx, workDir, args[1:], stdout, stderr)
+	case "observe":
+		return runObserve(ctx, workDir, args[1:], stdout, stderr)
 	case "manifest":
 		return runManifest(workDir, args[1:], stdout, stderr)
 	case "show":

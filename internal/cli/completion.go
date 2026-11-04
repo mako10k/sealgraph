@@ -173,6 +173,8 @@ func repositoryCompletionValues(workDir, path string) []string {
 		return keys
 	case "review show":
 		return reviewSubjectCompletion(names.REFs, names.Candidates)
+	case "observe":
+		return reviewSubjectCompletion(reviewSubjectCompletion(names.REFs, names.Candidates), names.Sources)
 	case "source show", "source compare", "source rebind", "source unbind":
 		return names.Sources
 	case "recover", "recover show":

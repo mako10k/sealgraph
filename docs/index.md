@@ -157,3 +157,4 @@ The `docs/` tree is the system of record for design knowledge. `AGENTS.md` is on
 - [ADR0044: read-only operator navigation](adr/0044-read-only-operator-navigation.md)
 - [Accepted UX R1 receipt](process/usability-requirements-r1-acceptance-2026-11-04.md)
 - [UX basic/detailed design](process/usability-design-2026-11-04.md)
+- [ADR0045: read-only observation evidence, reasons and baselines](adr/0045-read-only-observation-reasons.md)

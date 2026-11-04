@@ -434,3 +434,7 @@ introduced. Graph stale derivation remains unchanged.
 ## 11. Read-only operator navigation
 
 ADR0044 adds CLI-only composition in inspect.go/inspect_review.go/inspect_human.go, bounded text rendering in compare_text.go and explicit source context/extraction in trace_read.go. They reuse repository validation and revalidation APIs without canonical storage or writer changes. Inventory, workfile, stale, Trace and historical judgments remain separate facts. Workflow help and docs/operations.md connect those facts to explicit individual actions; they do not perform authoring or approval.
+
+## Read-only observation dimensions
+
+[ADR0045](adr/0045-read-only-observation-reasons.md) adds `repository.Observe` in observation modules and a CLI-only `observe` renderer. It derives evidence and diagnostic paths from the current canonical observation, without importing assertions from Candidates or detached Seals. Physical inventory is an explicit scope, not additional observation authority. Candidate/prospective identity, expected publication baseline, current HEAD and workfile baseline are independently named. Existing readers and admission algorithms are reused; no canonical schema or writer changes are made.

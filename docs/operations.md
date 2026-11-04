@@ -126,3 +126,9 @@ Use the same six paths and explain the beneficiary, exact subject, observed scop
 Ask the owner only for unresolved material choices or missing authority. Use existing instructions and already accepted decisions without repetitive confirmation. A help topic, plan task, claim, tag, passing test or Seal does not itself authorize a later effect. Local guidance is `AGENTS.md`; no user-private Skill is needed to follow this guide.
 
 This implementation's automated tests and agent role review do not establish how a first-time human user will behave. Actual novice trials and owner product acceptance remain separately reported evidence.
+
+### 観測理由と比較基準を分けて読む
+
+日常の入口は引き続き `sealgraph inspect`。理由を追う場合は `sealgraph observe REF --format human` を使う。`Observed successors` は登録済みの観測証拠であり、空でも「後継が実在しない」とは断定しない。`active` はHEADからRevision辺で到達する所属で、Causeで参照されるだけではactiveにならない。ACTIVE_NON_LEAFとOUTSIDE_ACTIVEの理由から、対象の特定版を `sealgraph show @ID` で読む。`paths_complete=false` なら表示経路の一部が省略されている。上限を上げても、診断を自動修復の指示に読み替えない。
+
+Candidate=PRESENTは変更ありとは限らない。prospective/current HEADのSAME/DIFFERENT/NO_HEAD、公開時のexpected_ref_head、workfileのCandidate/HEAD content baselineを別々に読む。`candidate compare REF` は従来どおりexpected_ref_headとの比較である。HEADとCandidateのdraftも別の版の属性で、欠落をfalseにしない。Trace原文や履歴レビューは `inspect` / `trace read` / `review show` へ進む。`observe --inventory` は保管中の履歴・切離しSealも見る明示操作で、その存在だけでは現在の観測証拠にならない。
