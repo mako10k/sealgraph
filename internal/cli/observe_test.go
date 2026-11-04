@@ -44,9 +44,7 @@ func TestObserveCLISeparatesBaselinesAndPreservesOldOutputs(t *testing.T) {
 	}
 	doc := observeCLI(t, dir, "s")
 	ref := doc.REFs[0]
-	if doc.Schema != "sealgraph/observation/v1" || doc.Scope != "SELECTED_REF" || ref.Candidate == nil || ref.Candidate.CurrentHeadComparison != "SAME" || ref.HeadDraft == nil || *ref.HeadDraft || ref.Candidate.Draft || ref.Source == nil || ref.Source.Baseline != "CANDIDATE" {
-		t.Fatalf("mixed baselines: %+v", ref)
-	}
+	assertObserveBaselineAxes(t, doc)
 	for i, args := range commands {
 		if got := mustRunCLI(t, dir, args...); got != before[i] {
 			t.Fatalf("%v changed\nbefore %s\nafter %s", args, before[i], got)
@@ -111,5 +109,13 @@ func TestObserveCLIHelpCompletionAndOutputFailure(t *testing.T) {
 		if code := runObserve(t.Context(), dir, []string{"--format", format}, errorWriter{}, &stderr); code == 0 || stderr.Len() == 0 {
 			t.Fatal("output failure hidden")
 		}
+	}
+}
+
+func assertObserveBaselineAxes(t *testing.T, doc repository.ObservationResult) {
+	t.Helper()
+	ref := doc.REFs[0]
+	if doc.Schema != "sealgraph/observation/v1" || doc.Scope != "SELECTED_REF" || ref.Candidate == nil || ref.Candidate.CurrentHeadComparison != "SAME" || ref.HeadDraft == nil || *ref.HeadDraft || ref.Candidate.Draft || ref.Source == nil || ref.Source.Baseline != "CANDIDATE" {
+		t.Fatalf("mixed baselines: %+v", ref)
 	}
 }
