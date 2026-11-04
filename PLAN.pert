@@ -45,6 +45,9 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered START
   grandfathered TAG_READY
   grandfathered USABLE
+work UX_HUMAN_TRIAL:
+  title "初見利用者による運用試験の準備と実施判断"
+  description "Issue18成果受入後の次候補。docs/process/usability-human-trial-preparation-2026-11-04.mdに六場面の試験案・記録票・権限境界を準備済み。実施/募集/日程/導入/合否閾値は未採択・未実施。既存Accepted UX/Issue18成果を再び未完了扱いにしない。初期概算: 内部準備整理0.5–1.5h、利用者参加45–90分、低信頼度、日程待ち未定。正本finishはOBS_READYのまま。新規scope判断前に実装/外部連絡を行わない。"
 work ISSUE18_OBSERVATION_REVIEW:
   title "Issue18 観測区分R1の独立レビューと所有者判断"
   description "2026-11-04、exact R1（96e4aba15517472049c5134b5720ef6c4689fafb01ca2d3477fe4fcc45aa1df4）は独立レビュー後にユーザーがACCEPT。受入記録: docs/process/issue-18-observation-r1-acceptance-2026-11-04.md。要件レビューと所有者判断は完了。新しい実行タスクOBS_DESIGN_CONTRACT/OBS_REPOSITORY_API/OBS_CLI/OBS_DOCS/OBS_VERIFY/OBS_INDEPENDENT_REVIEW/OBS_OWNER_ACCEPTANCEへ範囲内の設計実装を分解した。旧stale集合/frontier/refs-only/Seal条件/安定出力を維持するread-only増分。draft pointer/cascade/軽量status置換は対象外。実装成果受入は要件受入と別。Point初期概算は低信頼度、速度未校正。公開/実利用者試験は未実施。"
@@ -93,6 +96,7 @@ work_order:
   UX_LLM_GUIDANCE
   UX_HISTORICAL_STATUS
   ISSUE18_OBSERVATION_REVIEW
+  UX_HUMAN_TRIAL
 
 milestone START:
   title "Architecture scaffold exists"
