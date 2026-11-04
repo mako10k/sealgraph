@@ -45,12 +45,36 @@ milestone_acceptance_migration GRAMMAR_7_BASELINE:
   grandfathered START
   grandfathered TAG_READY
   grandfathered USABLE
+work UX_CONTENT_REVIEW:
+  title "正確な2版の本文差分と根拠を読めるレビュー表示"
+  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘3。compareは主にContent Blob変更有無/ID、showは256バイトpreviewで、長文の差分/影響判断が煩雑。完了条件案: 固定した2版の本文差分・Cause差分・理由へ読み取り専用で到達し、原本取得先/正確なIDと省略/サイズ上限/バイナリ/表示不能を明示する。表示方式は設計時に判断。根拠: internal/cli/human_output.go のprintSealDiffHuman/printHumanContent。"
+
+work UX_HISTORICAL_STATUS:
+  title "staleを残したまま歴史版維持の判断と適用可否を示す"
+  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘6。review済みの旧版依存もstaleを維持するため、未確認と確認済み維持を日常表示で区別しづらい。完了条件案: staleと別軸で記録された判断・現在の版への適用可否・未確認範囲/理由を表示またはreview showへ案内する。無関係な他REF更新による適用失効と過去判断の消失を区別し、適用可を完全なpublication preflight/意味的正しさ/承認と扱わない。根拠: ADR0043、docs/cli.md §10、internal/cli/historical_review.go。"
+
+work UX_LLM_GUIDANCE:
+  title "フィロソフィーから通常操作へつながるLLM運用ガイド"
+  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘5。concepts/selectors/各コマンドから、原文確認・正確な版固定・差分/影響判断・個別操作・読み戻しまでの共通導線をrepository-localにまとめる。完了条件案: 人とLLMが同じ入口から通常操作と例外時の停止/保留へ辿れる。読み取り専用の自動準備と、担当者による対象ごとの判断/個別Cause更新/個別Seal発行を具体例で区別する。Sealや記録されたclaimは真実/承認/理解の証明でなく、staleは自動修復対象でないことを通常シナリオに結びつける。既存AGENTS.md/CLI/helpと矛盾しない。根拠: AGENTS.md、internal/cli/help.go。"
+
+work UX_ORIGINAL_AUDIT:
+  title "保存原文と引用文脈を並べて確認できる監査入口"
+  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘4。trace showのhuman表示はID/件数中心で、保存全文原文・引用箇所と前後文脈の導線が弱い。完了条件案: 特定Sealの記述・正確なCause版・保存原文と該当箇所/前後文脈・比較差分・判断/理由を照合できる。Candidate/HEAD、snapshot/current、引用位置の曖昧さ、未記録/未確認/不完全を区別する。構造整合・原文一致・意味的妥当性を別に評価し、fsck成功を意味的監査完了と扱わない。根拠: internal/cli/trace.go のprintTraceShowHuman、docs/requirements.md のTrace意味境界。"
+
+work UX_REVIEW_RUNBOOK:
+  title "初見利用者が完結できる登録・見直し手順と操作例"
+  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘2。Candidateのない封印済み状態からの準備、対象/旧根拠/比較版の原文確認、差分と影響の判断、新版採用・旧版維持(historical review)・保留の分岐、個別Cause操作/Seal発行、読み戻しまでを一続きに案内する。完了条件案: 初回登録・変更発見・新版採用・旧版維持・保留・第三者監査の6シナリオを初見利用者または独立レビュー者が案内だけで辿り、正確な版と未確認範囲を説明できる。help usecases のstale手順のCandidate準備欠落を解消し、未確認を残せる。根拠: internal/cli/help.go のprintUseCasesHelp。"
 work UX_DAILY_INSPECTION:
   title "変更の種類を区別できる読み取り専用の日常点検入口"
   description "2026-11-04 利用者観点の独立レビュー指摘1。ライトユーザが、登録ファイルと保存内容の相違・上流Seal更新によるstale・引用原文の残存/不一致/未確認を区別し、次の確認先へ進めるようにする改善候補。完了条件案: 3種類の観測と対象外/失敗/不完全を区別して表示し、個別レビューへ案内する。通知は監視対象・契機・通知先を別途判断し、この項目では実装採用しない。状態: バックログ登録のみ、方式/要件/実装/公開は未承認・未着手。根拠: README.md のwatcherなしの境界、docs/cli.md のstatus/source compare/stale/trace compare、レビュー対象Git 81892f8。自動Cause更新・自動Seal発行・Git自動検出を導入しない。"
 
 work_order:
   UX_DAILY_INSPECTION
+  UX_REVIEW_RUNBOOK
+  UX_CONTENT_REVIEW
+  UX_ORIGINAL_AUDIT
+  UX_LLM_GUIDANCE
+  UX_HISTORICAL_STATUS
 
 milestone START:
   title "Architecture scaffold exists"
