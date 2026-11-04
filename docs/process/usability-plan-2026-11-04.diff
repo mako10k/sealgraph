@@ -1,0 +1,282 @@
+--- PLAN.pert
++++ PLAN.pert (candidate)
+@@ -1,10 +1,10 @@
+ project SEALGRAPH:
+   version 9
+-  title "Sealgraph initial implementation"
+-  as_of 2026-09-10
++  title "Sealgraph provenance core and usable review operations"
++  description "上位目的: ライトユーザ・LLM・監査者が、登録・変更確認・見直し・原文照合を迷わず行える運用。既存FORMAT6_METADATA_READYの完了履歴を保持し、その先にUX改善6件の要件/設計/整備/検証/受入を追加。実行計画への組込みは2026-11-04のユーザー指示に基づく。方式/要件の詳細承認・実装着手・リリースは別。既存velocity 1p/1dは履歴上の宣言値で、今回の予測に利用不可のため解除。Point推定は低信頼度、0.5–1.5 active hours/pは暫定仮定、外部判断待ちは未算出。"
++  as_of 2026-11-04
+   duration_unit point
+-  velocity 1p/1d
+-  finish FORMAT6_METADATA_READY
++  finish UX_READY
+ 
+ 
+ milestone_acceptance_migration GRAMMAR_7_BASELINE:
+@@ -47,26 +47,39 @@
+   grandfathered USABLE
+ work UX_CONTENT_REVIEW:
+   title "正確な2版の本文差分と根拠を読めるレビュー表示"
+-  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘3。compareは主にContent Blob変更有無/ID、showは256バイトpreviewで、長文の差分/影響判断が煩雑。完了条件案: 固定した2版の本文差分・Cause差分・理由へ読み取り専用で到達し、原本取得先/正確なIDと省略/サイズ上限/バイナリ/表示不能を明示する。表示方式は設計時に判断。根拠: internal/cli/human_output.go のprintSealDiffHuman/printHumanContent。"
++  description "2026-11-04 計画組込み候補: UX_CONTENT_REVIEW_IMPL と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘3。compareは主にContent Blob変更有無/ID、showは256バイトpreviewで、長文の差分/影響判断が煩雑。完了条件案: 固定した2版の本文差分・Cause差分・理由へ読み取り専用で到達し、原本取得先/正確なIDと省略/サイズ上限/バイナリ/表示不能を明示する。表示方式は設計時に判断。根拠: internal/cli/human_output.go のprintSealDiffHuman/printHumanContent。"
++  task_links:
++    UX_CONTENT_REVIEW_IMPL
+ 
+ work UX_HISTORICAL_STATUS:
+   title "staleを残したまま歴史版維持の判断と適用可否を示す"
+-  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘6。review済みの旧版依存もstaleを維持するため、未確認と確認済み維持を日常表示で区別しづらい。完了条件案: staleと別軸で記録された判断・現在の版への適用可否・未確認範囲/理由を表示またはreview showへ案内する。無関係な他REF更新による適用失効と過去判断の消失を区別し、適用可を完全なpublication preflight/意味的正しさ/承認と扱わない。根拠: ADR0043、docs/cli.md §10、internal/cli/historical_review.go。"
++  description "2026-11-04 計画組込み候補: UX_HISTORICAL_STATUS_IMPL と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘6。review済みの旧版依存もstaleを維持するため、未確認と確認済み維持を日常表示で区別しづらい。完了条件案: staleと別軸で記録された判断・現在の版への適用可否・未確認範囲/理由を表示またはreview showへ案内する。無関係な他REF更新による適用失効と過去判断の消失を区別し、適用可を完全なpublication preflight/意味的正しさ/承認と扱わない。根拠: ADR0043、docs/cli.md §10、internal/cli/historical_review.go。"
++  task_links:
++    UX_HISTORICAL_STATUS_IMPL
+ 
+ work UX_LLM_GUIDANCE:
+   title "フィロソフィーから通常操作へつながるLLM運用ガイド"
+-  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘5。concepts/selectors/各コマンドから、原文確認・正確な版固定・差分/影響判断・個別操作・読み戻しまでの共通導線をrepository-localにまとめる。完了条件案: 人とLLMが同じ入口から通常操作と例外時の停止/保留へ辿れる。読み取り専用の自動準備と、担当者による対象ごとの判断/個別Cause更新/個別Seal発行を具体例で区別する。Sealや記録されたclaimは真実/承認/理解の証明でなく、staleは自動修復対象でないことを通常シナリオに結びつける。既存AGENTS.md/CLI/helpと矛盾しない。根拠: AGENTS.md、internal/cli/help.go。"
++  description "2026-11-04 計画組込み候補: UX_LLM_GUIDANCE_DOCS と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘5。concepts/selectors/各コマンドから、原文確認・正確な版固定・差分/影響判断・個別操作・読み戻しまでの共通導線をrepository-localにまとめる。完了条件案: 人とLLMが同じ入口から通常操作と例外時の停止/保留へ辿れる。読み取り専用の自動準備と、担当者による対象ごとの判断/個別Cause更新/個別Seal発行を具体例で区別する。Sealや記録されたclaimは真実/承認/理解の証明でなく、staleは自動修復対象でないことを通常シナリオに結びつける。既存AGENTS.md/CLI/helpと矛盾しない。根拠: AGENTS.md、internal/cli/help.go。"
++  task_links:
++    UX_LLM_GUIDANCE_DOCS
+ 
+ work UX_ORIGINAL_AUDIT:
+   title "保存原文と引用文脈を並べて確認できる監査入口"
+-  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘4。trace showのhuman表示はID/件数中心で、保存全文原文・引用箇所と前後文脈の導線が弱い。完了条件案: 特定Sealの記述・正確なCause版・保存原文と該当箇所/前後文脈・比較差分・判断/理由を照合できる。Candidate/HEAD、snapshot/current、引用位置の曖昧さ、未記録/未確認/不完全を区別する。構造整合・原文一致・意味的妥当性を別に評価し、fsck成功を意味的監査完了と扱わない。根拠: internal/cli/trace.go のprintTraceShowHuman、docs/requirements.md のTrace意味境界。"
++  description "2026-11-04 計画組込み候補: UX_ORIGINAL_AUDIT_IMPL と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘4。trace showのhuman表示はID/件数中心で、保存全文原文・引用箇所と前後文脈の導線が弱い。完了条件案: 特定Sealの記述・正確なCause版・保存原文と該当箇所/前後文脈・比較差分・判断/理由を照合できる。Candidate/HEAD、snapshot/current、引用位置の曖昧さ、未記録/未確認/不完全を区別する。構造整合・原文一致・意味的妥当性を別に評価し、fsck成功を意味的監査完了と扱わない。根拠: internal/cli/trace.go のprintTraceShowHuman、docs/requirements.md のTrace意味境界。"
++  task_links:
++    UX_ORIGINAL_AUDIT_IMPL
+ 
+ work UX_REVIEW_RUNBOOK:
+   title "初見利用者が完結できる登録・見直し手順と操作例"
+-  description "2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘2。Candidateのない封印済み状態からの準備、対象/旧根拠/比較版の原文確認、差分と影響の判断、新版採用・旧版維持(historical review)・保留の分岐、個別Cause操作/Seal発行、読み戻しまでを一続きに案内する。完了条件案: 初回登録・変更発見・新版採用・旧版維持・保留・第三者監査の6シナリオを初見利用者または独立レビュー者が案内だけで辿り、正確な版と未確認範囲を説明できる。help usecases のstale手順のCandidate準備欠落を解消し、未確認を残せる。根拠: internal/cli/help.go のprintUseCasesHelp。"
++  description "2026-11-04 計画組込み候補: UX_REVIEW_RUNBOOK_DOCS と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー（対象Git 81892f8）に基づく改善候補。目的: ライトユーザ・LLM・監査者が迷わず登録/変更確認/見直し/原文照合できる運用。状態: バックログ登録のみ。方式・要件・実装・公開は未承認/未着手。自動Cause更新/自動Seal発行/Git自動検出を導入しない。工数・納期・実行依存は採択/分解前につき未確定。 指摘2。Candidateのない封印済み状態からの準備、対象/旧根拠/比較版の原文確認、差分と影響の判断、新版採用・旧版維持(historical review)・保留の分岐、個別Cause操作/Seal発行、読み戻しまでを一続きに案内する。完了条件案: 初回登録・変更発見・新版採用・旧版維持・保留・第三者監査の6シナリオを初見利用者または独立レビュー者が案内だけで辿り、正確な版と未確認範囲を説明できる。help usecases のstale手順のCandidate準備欠落を解消し、未確認を残せる。根拠: internal/cli/help.go のprintUseCasesHelp。"
++  task_links:
++    UX_REVIEW_RUNBOOK_DOCS
++
+ work UX_DAILY_INSPECTION:
+   title "変更の種類を区別できる読み取り専用の日常点検入口"
+-  description "2026-11-04 利用者観点の独立レビュー指摘1。ライトユーザが、登録ファイルと保存内容の相違・上流Seal更新によるstale・引用原文の残存/不一致/未確認を区別し、次の確認先へ進めるようにする改善候補。完了条件案: 3種類の観測と対象外/失敗/不完全を区別して表示し、個別レビューへ案内する。通知は監視対象・契機・通知先を別途判断し、この項目では実装採用しない。状態: バックログ登録のみ、方式/要件/実装/公開は未承認・未着手。根拠: README.md のwatcherなしの境界、docs/cli.md のstatus/source compare/stale/trace compare、レビュー対象Git 81892f8。自動Cause更新・自動Seal発行・Git自動検出を導入しない。"
++  description "2026-11-04 計画組込み候補: UX_DAILY_INSPECTION_IMPL と共通UX_REQUIREMENTS/UX_DESIGN_CONTRACT/UX_INTEGRATION_VERIFY/UX_PERSONA_REVIEW/UX_OWNER_ACCEPTANCEに対応。以下の「バックログ登録のみ・未承認」は初回登録時の履歴であり、この候補の計画状態ではない。新しい実行計画への組込みと詳細要件/設計の承認・実装着手・公開は区別する。残る方式と通知判断はUX_REQUIREMENTSで整理する。\n登録時の観察・完了条件案: 2026-11-04 利用者観点の独立レビュー指摘1。ライトユーザが、登録ファイルと保存内容の相違・上流Seal更新によるstale・引用原文の残存/不一致/未確認を区別し、次の確認先へ進めるようにする改善候補。完了条件案: 3種類の観測と対象外/失敗/不完全を区別して表示し、個別レビューへ案内する。通知は監視対象・契機・通知先を別途判断し、この項目では実装採用しない。状態: バックログ登録のみ、方式/要件/実装/公開は未承認・未着手。根拠: README.md のwatcherなしの境界、docs/cli.md のstatus/source compare/stale/trace compare、レビュー対象Git 81892f8。自動Cause更新・自動Seal発行・Git自動検出を導入しない。"
++  task_links:
++    UX_DAILY_INSPECTION_IMPL
+ 
+ work_order:
+   UX_DAILY_INSPECTION
+@@ -387,6 +400,138 @@
+   status done
+   source "Accepted ADRs 0029 through 0031 normative synchronization gate"
+ 
++task UX_REQUIREMENTS FORMAT6_METADATA_READY -> UX_CONTRACT:
++  title "3者の運用要件・完了条件と通知境界を確定"
++  description "6 Work共通。現行の原本/ヘルプ/仕様と6場面を照合し、対象・観測範囲・未確認の扱い・初見利用者レビューの手順と受入閾値を所有者と確定する。通知の対象/契機/通知先の選択肢を提示し、採用または明示的保留と後続の扱いを記録する。未承認の方式を実装へ渡さない。Accepted要件/ADRと矛盾する場合は所有者判断に戻す。開始時からactive time/effortを実測し、終了時にvelocityを再観測する。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 3p
++    pessimistic 5p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_DESIGN_CONTRACT UX_CONTRACT -> UX_DESIGN:
++  title "運用導線・読み取り専用CLI・監査表示を設計"
++  description "6 Work共通。要件からコンポーネント/CLI/出力契約、正確な版選択、原文取得、本文差分、部分観測/失敗/バイナリ/サイズ上限、版の競合を基本設計・詳細設計に落とし、検証方法を対応づける。公開契約変更は必要なADR/要件レビューを経る。保存形式変更は既定としない。これらが承認されるまで後続実装へ進まない。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 4p
++    pessimistic 6p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_DAILY_INSPECTION_IMPL UX_DESIGN -> UX_RUNTIME:
++  title "日常点検で3種類の変更と未確認範囲を区別"
++  description "UX_DAILY_INSPECTION: workfile/baseline・上流Seal stale・引用原文残存を別の観測として示し、対象外/失敗/不完全を隠さず、個別レビューの確認先へ案内する。新しい表示に必要な最小の読取り機能とテストを含む。通知実装は要件段階の決定が必要。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 3p
++    most_likely 5p
++    pessimistic 8p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_CONTENT_REVIEW_IMPL UX_DESIGN -> UX_RUNTIME:
++  title "固定2版の本文差分と根拠を読める表示を整備"
++  description "UX_CONTENT_REVIEW: 正確な2版の本文/Cause差分と理由への導線、完全な原本取得、長文/バイナリ/省略の明示を実装・検証する。意味的正しさを自動判定しない。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 3p
++    most_likely 5p
++    pessimistic 8p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_ORIGINAL_AUDIT_IMPL UX_DESIGN -> UX_RUNTIME:
++  title "保存原文・引用箇所・文脈を照合できる監査表示を整備"
++  description "UX_ORIGINAL_AUDIT: 特定Seal/根拠版/保存全文/引用位置/前後文脈/判断理由を読む導線を実装し、Candidate/HEAD・snapshot/current・複数出現・不完全を区別して検証する。構造整合/原文一致/意味的妥当性を分ける。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 4p
++    most_likely 6p
++    pessimistic 10p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_HISTORICAL_STATUS_IMPL UX_DESIGN -> UX_RUNTIME:
++  title "歴史版維持の記録と適用可否をstaleと別軸で表示"
++  description "UX_HISTORICAL_STATUS: recorded claim/適用可否/未確認/失効理由をstaleと独立に示し、review showに案内する。無関係な他HEAD更新も検証し、承認や真実を暗示しない。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 3p
++    pessimistic 5p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_REVIEW_RUNBOOK_DOCS UX_RUNTIME -> UX_GUIDED:
++  title "初見利用者向けの登録・変更確認・見直し手順を完成"
++  description "UX_REVIEW_RUNBOOK: 実装された操作を使い、初回登録・変更発見・新版採用・旧版維持・保留・第三者監査を開始状態から読み戻しまで完結する案内へまとめる。Candidateなしの状態と、正確な旧/新根拠を読む手順、個別判断の分岐、失敗時の案内を含む。README/help/usecasesと整合させる。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 3p
++    pessimistic 5p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_LLM_GUIDANCE_DOCS UX_RUNTIME -> UX_GUIDED:
++  title "LLM向けにフィロソフィーから通常操作までの入口を整備"
++  description "UX_LLM_GUIDANCE: repository-localガイドとAGENTS/CLIの案内をつなぎ、人とLLMが同じ原文確認・版固定・差分/影響判断・個別操作・読み戻しを辿れるようにする。自動準備可能な読取りと個別判断/操作を区別し、未確認を保留できる例を含む。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 1p
++    most_likely 2p
++    pessimistic 4p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_INTEGRATION_VERIFY UX_GUIDED -> UX_VERIFIED:
++  title "結合・回帰検証と規範文書の整合を確認"
++  description "6 Work共通。format5/6/7、current/historical、candidate有無、未束縛/欠落/破損/途中失敗/ページ継続/競合を設計で定めた範囲で検証する。gofmt, go vet, go test, npm ci, clone-check, complexity-check, deadcode-checkを実施。Git統合変更時だけ一時repo結合試験を追加する。説明が出力と一致することと、読取りがCause/Sealを変更しないことを確認し、未確認を残す。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 4p
++    pessimistic 7p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_PERSONA_REVIEW UX_VERIFIED -> UX_SCENARIOS:
++  title "ライトユーザ・LLM・監査者の6場面を独立操作レビュー"
++  description "独立したレビュー担当が、要件段階で合意した6場面と受入閾値で実物と原文を照合する。迷った地点・誤解・必要コマンド・確認できない範囲を記録し、指摘を解消して再確認する。担当者未確保なら外部待ちを明示し、開発者の自己確認を独立レビューと扱わない。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 2p
++    most_likely 3p
++    pessimistic 6p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
++task UX_OWNER_ACCEPTANCE UX_SCENARIOS -> UX_READY:
++  title "6件の完了証拠を提示し所有者の受入判断を記録"
++  description "6 Workと全要件の対応・操作レビュー・原文照合の証拠・未解決事項・通知の決定/保留を日本語で提示し、所有者の受入判断を記録する。受入待ちの経過時間は不明であり、このPointは資料準備/応答整理の内部作業のみ。受入はrelease/install/push/Seal発行の許可ではない。 状態は未着手。完了は成果と検証の記録による。見積もりは作業分解に基づくエージェント暫定値（低信頼度）、実績ではない。"
++  estimate:
++    optimistic 1p
++    most_likely 1p
++    pessimistic 2p
++  status planned
++  requires:
++    UX_DELIVERY 1
++  source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
++
+ work_event WE-3d7342a966cec20f263d37d0fcbaf03f1be34678841320028c35470918780a1d:
+   model 1
+   task DOGFOOD_RECURRING
+@@ -457,3 +602,79 @@
+   task FORMAT6_METADATA_NORMATIVE_SYNC
+   kind finish
+   occurred_at 2026-09-11T20:42:18+09:00
++
++resource UX_DELIVERY:
++  title "UX delivery single execution lane"
++  description "新規UX作業の暫定共有資源。単独実行レーンを仮定し、依存が独立でも同時投入を仮定しない。独立レビュー者・ユーザーの予定確保を意味しない。"
++  capacity 1
++
++milestone UX_CONTRACT:
++  title "利用者別の運用要件と受入シナリオが確定"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_DESIGN:
++  title "表示・案内・原文照合の設計が確定"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_RUNTIME:
++  title "4つの読み取り専用表示改善が検証済み"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_GUIDED:
++  title "人とLLMの通常操作導線が整備済み"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_VERIFIED:
++  title "結合・回帰検証を完了"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_SCENARIOS:
++  title "3者による操作レビューの証拠が揃う"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone UX_READY:
++  title "6件の改善について所有者が受入判断できる成果を受入済み"
++  description "UX全体目的への中間成果。詳しい完了条件とWork対応はdocs/process/usability-delivery-plan-2026-11-04.md。既存の完了条件を変更しない。closureと所有者による受入は別。"
++
++milestone_criterion_set UX_CONTRACT_R1:
++  milestone UX_CONTRACT
++  revision R1
++  commitment sha256:f31013673ec674ca7d0488cc594408cafc3fde0965182572ad2f67871c05f3dd
++  criterion SCOPE required owner "6件の対象と6場面の受入条件及び通知の採否または保留範囲が所有者と確定している"
++
++milestone_criterion_set UX_DESIGN_R1:
++  milestone UX_DESIGN
++  revision R1
++  commitment sha256:8ab55e607626a1a888600b1b875e7abb454984990b962d22a606fc3d4826f5f9
++  criterion DESIGN required owner "要件に対応したCLI原文照合失敗境界と検証設計が確認されている"
++
++milestone_criterion_set UX_RUNTIME_R1:
++  milestone UX_RUNTIME
++  revision R1
++  commitment sha256:015ad3437cb42864c3b4a4fdefe3baa31d9cb3499b6e8124ace5f61b495c382a
++  criterion FEATURES required owner "4表示の原文と特定版を用いた検証証拠が揃い未確認範囲が明示されている"
++
++milestone_criterion_set UX_GUIDED_R1:
++  milestone UX_GUIDED
++  revision R1
++  commitment sha256:d005b471f5ccd875100417b02ff3bf764ce2ba76a188c56dd163124c62b71d2c
++  criterion GUIDES required owner "ライトユーザとLLMの登録から見直しまでの操作例が実装と一致する"
++
++milestone_criterion_set UX_VERIFIED_R1:
++  milestone UX_VERIFIED
++  revision R1
++  commitment sha256:62c79b2bc37f3bac04a271b9574abc98b9429e63fd17ce9d47b2bbec626df780
++  criterion REGRESSION required owner "必須検査と承認された結合検証が完了し未解決事項が明示されている"
++
++milestone_criterion_set UX_SCENARIOS_R1:
++  milestone UX_SCENARIOS
++  revision R1
++  commitment sha256:34b25a2c6dd33e6bf973c00740e0b97f93f1e3b9af611a8380c8d670e7bad984
++  criterion PERSONAS required owner "独立担当による3者6場面の操作レビューが合意閾値を満たしている"
++
++milestone_criterion_set UX_READY_R1:
++  milestone UX_READY
++  revision R1
++  commitment sha256:fe3f174c6083bf7bab20b773450e023c3462f3ed2181c75cbc1e31d63eb5b093
++  criterion COVERAGE required owner "6 Work全件と要件の完了証拠が対応し未達条件が隠されていない"
++  criterion ACCEPTED required owner "所有者の受入判断が記録され通知の決定または明示的保留が説明されている"
