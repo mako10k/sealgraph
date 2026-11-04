@@ -527,7 +527,7 @@ task UX_OWNER_ACCEPTANCE UX_SCENARIOS -> UX_READY:
     optimistic 1p
     most_likely 1p
     pessimistic 2p
-  status suspended
+  status done
   requires:
     UX_DELIVERY 1
   source "2026-11-04 owner: 計画に組み込んでください / docs/process/usability-delivery-plan-2026-11-04.md"
@@ -861,3 +861,106 @@ work_event WE-e445bc1ecc2cb40370ea55e8b911a8b3accd8349260b0aab05d6c4b49696f8de:
   kind suspend
   occurred_at 2026-11-04T10:41:37+09:00
   reason "Implementation and checks complete; independent LLM S1-S6 trial recorded; owner product acceptance pending; no real-human usability proof claimed"
+
+work_event WE-d1cdb2559eb2b39acd66a305060e1bf4219910e9620c2ca5e4544f595f67f50f:
+  model 1
+  task UX_OWNER_ACCEPTANCE
+  kind resume
+  occurred_at 2026-11-04T11:05:42+09:00
+
+milestone_acceptance_receipt UX_PRODUCT_DESIGN:
+  model 1
+  set UX_DESIGN_R1
+  set_commitment sha256:8ab55e607626a1a888600b1b875e7abb454984990b962d22a606fc3d4826f5f9
+  criterion DESIGN
+  criterion_commitment sha256:bc6da92ad76a7024e062a3ffa7de9cb97a978302824b1a17bf89992b799b6b95
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:45Z
+
+milestone_acceptance_receipt UX_PRODUCT_FEATURES:
+  model 1
+  set UX_RUNTIME_R1
+  set_commitment sha256:015ad3437cb42864c3b4a4fdefe3baa31d9cb3499b6e8124ace5f61b495c382a
+  criterion FEATURES
+  criterion_commitment sha256:c3ccf7d311b33cc25ad4e8dc0c345ab19b4c68e3430c8a9d572494fb343d0de6
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:48Z
+
+milestone_acceptance_receipt UX_PRODUCT_GUIDES:
+  model 1
+  set UX_GUIDED_R1
+  set_commitment sha256:d005b471f5ccd875100417b02ff3bf764ce2ba76a188c56dd163124c62b71d2c
+  criterion GUIDES
+  criterion_commitment sha256:47d090006e230a0c49a90395bde4aa31997e2b0c9a4987f0b59b0979e7c8f1db
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:51Z
+
+milestone_acceptance_receipt UX_PRODUCT_REGRESSION:
+  model 1
+  set UX_VERIFIED_R1
+  set_commitment sha256:62c79b2bc37f3bac04a271b9574abc98b9429e63fd17ce9d47b2bbec626df780
+  criterion REGRESSION
+  criterion_commitment sha256:a3d28a6c9486835c0d606e846781e2cf94373d161c4404857c55bd3765d5d3b4
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:54Z
+
+milestone_acceptance_receipt UX_PRODUCT_PERSONAS:
+  model 1
+  set UX_SCENARIOS_R1
+  set_commitment sha256:34b25a2c6dd33e6bf973c00740e0b97f93f1e3b9af611a8380c8d670e7bad984
+  criterion PERSONAS
+  criterion_commitment sha256:8cf239ffe2a9aca6c03dfbb4d8e988e062c960c829e8b4b44846f402f81cd509
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:56Z
+
+milestone_acceptance_receipt UX_PRODUCT_COVERAGE:
+  model 1
+  set UX_READY_R1
+  set_commitment sha256:fe3f174c6083bf7bab20b773450e023c3462f3ed2181c75cbc1e31d63eb5b093
+  criterion COVERAGE
+  criterion_commitment sha256:de7d5e4b7dbe264c9ae33cbd69fdf3c95d92f0d7913645547fea05eeb60f81d0
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:05:59Z
+
+milestone_acceptance_receipt UX_PRODUCT_ACCEPTED:
+  model 1
+  set UX_READY_R1
+  set_commitment sha256:fe3f174c6083bf7bab20b773450e023c3462f3ed2181c75cbc1e31d63eb5b093
+  criterion ACCEPTED
+  criterion_commitment sha256:a7f441f991854c8ea8da608009bb7f44678eed92fb8d256fb543e90b500644eb
+  action verify
+  evidence_kind owner
+  evidence_reference "docs/process/usability-product-acceptance-2026-11-04.md"
+  evidence_revision b5e3712f22658f8861c61ef86fa8f18c9d568b5e
+  verifier user
+  occurred_at 2026-11-04T02:06:02Z
+
+work_event WE-444f15f7c2bc5a7ca63b435031303afe164c07a71982e6581d25e723c2f21192:
+  model 1
+  task UX_OWNER_ACCEPTANCE
+  kind finish
+  occurred_at 2026-11-04T11:06:05+09:00

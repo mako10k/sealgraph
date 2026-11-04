@@ -1,0 +1,11 @@
+# UX R1 成果受入の個別Seal判断
+
+原本usability-product-acceptance-2026-11-04.mdを読み、push済みb5e3712に対する所有者の「この成果を受入（ACCEPT）」、対象機能、点検時通知、実利用者試験未実施の開示を確認した。リモートmain=b5e3712とCI41758084592 successも独立readbackした。
+
+依拠するのは最終検証のexact Seal `d11e7a4ec0a67dce2b55643a60973d4ec098ab61a6938d96d5508c5029bf694b`。原本文もverification-r2とbyte一致で読み戻した。これは対象commitの実装・検証・試験限界を示す根拠で、所有者本人の理解をSealが証明するという意味ではない。
+
+新規REF sealgraph/decision/usability-product-acceptance。旧版/Candidateなし、追加全体が差分。対象のpreviousを主張しない。既存計画・R1要件・実装・検証のSealsを再発行せず固定版のまま保持する。今回の変更は受入判断の追跡記録だけで、製品コード/仕様/新しいIssueの採択や公開許可を追加しない。
+
+以下は当該原本・exact Cause・Candidateの本文とroot/draft/expectationを確認して個別発行し、発行後に原文とCauseを読み戻す記録である。新しいIssue18の要件案は未採択で、このSealの承認対象ではない。
+
+発行結果: `3896e8b1f33a3dccb0c5e49f14c9e58ec348e4d6350db924c0ac5249c75d35ff`。Candidateのexpected_absent/root=false/draft=false/唯一のexact Causeとraw本文を確認して個別発行し、発行後のshowとraw原本文byte一致を確認した。

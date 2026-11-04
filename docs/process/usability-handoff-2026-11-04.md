@@ -1,5 +1,7 @@
 # UX R1 implementation handoff (2026-11-04)
 
+Closeout update: the owner subsequently accepted delivered commit b5e3712. See usability-product-acceptance-2026-11-04.md and current PLAN.pert: UX_READY is accepted, all UX tasks are done, remaining0p. References below to owner acceptance waiting describe the earlier pre-acceptance handoff state. Real novice-human trials remain unperformed.
+
 ## Achieved outcome
 
 The accepted light-user/LLM/auditor workflow is implemented locally. `./bin/sealgraph help workflows` is the entry. `inspect` separates workfiles, stale provenance, local original-source presence and historical claims. `compare --text` makes bounded exact-version text changes readable. `trace read` provides explicit snapshot/current original context and full raw-source extraction. README/help/completion and docs/operations.md connect registration, changes, update/retain/pending and audit paths. Notifications are on-demand only, as the owner accepted.
